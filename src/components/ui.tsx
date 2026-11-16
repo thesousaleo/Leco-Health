@@ -1,0 +1,411 @@
+import React, { useEffect, useState } from 'react';
+import { LuTrash2, LuX, LuStar } from 'react-icons/lu';
+
+/* ── Paleta: bege quente + laranja + preto ─────────────────────
+   As chaves de "accent" continuam existindo (treino, nutri…) para
+   permitir variações por módulo no futuro; hoje todas usam o laranja. */
+export type Accent = 'treino' | 'nutri' | 'habito' | 'bio' | 'neutral' | 'dark';
+
+export const ORANGE = '#F26B3A';
+export const PEACH = '#F59A74';
+export const BLUSH = '#FBCDB8';
+export const INK = '#1C1B1A';
+
+const O = { hex: ORANGE, text: 'text-orange', bg: 'bg-orange', soft: 'bg-blush', border: 'border-orange/30', glow: '' };
+export const ACCENT: Record<Accent, typeof O> = {
+  treino: O, nutri: O, habito: O, bio: O,
+  neutral: { hex: INK, text: 'text-ink', bg: 'bg-ink', soft: 'bg-cream', border: 'border-line', glow: '' },
+  dark: { hex: INK, text: 'text-ink', bg: 'bg-ink', soft: 'bg-cream', border: 'border-line', glow: '' },
+};
+
+export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
+
+/* ── Superfícies ───────────────────────────────────────────── */
+export function Card({ children, className, as: Tag = 'section', ...rest }: React.HTMLAttributes<HTMLElement> & { as?: any }) {
+  return (
+    <Tag className={cx('relative rounded-[28px] bg-white shadow-[0_1px_2px_rgba(28,27,26,.04),0_8px_24px_-16px_rgba(28,27,26,.12)]', className)} {...rest}>
+      {children}
+    </Tag>
+  );
+}
+
+export function Tile({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <div className={cx('rounded-[20px] bg-cream', className)}>{children}</div>;
+}
+
+export function CardHeader({ title, right, sub, icon }: {
+  icon?: React.ReactNode; title: string; accent?: Accent; right?: React.ReactNode; sub?: string;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 mb-5">
+      <div className="min-w-0 flex items-center gap-2.5">
+        {icon && <span className="text-orange shrink-0">{icon}</span>}
+        <div className="min-w-0">
+          <h3 className="text-[17px] font-medium tracking-[-0.01em] text-ink leading-snug">{title}</h3>
+          {sub && <p className="text-[13px] text-muted mt-0.5">{sub}</p>}
+        </div>
+      </div>
+      {right}
+    </div>
+  );
+}
+
+export function PageHeader({ title, sub, right }: { title: string; sub?: string; accent?: Accent; icon?: React.ReactNode; right?: React.ReactNode }) {
+  return (
+    <header className="flex items-end justify-between gap-4 mb-6 md:mb-8">
+      <div>
+        <h1 className="text-[32px] md:text-[40px] font-semibold tracking-[-0.035em] text-ink leading-none">{title}</h1>
+        {sub && <p className="text-[15px] text-muted mt-2">{sub}</p>}
+      </div>
+      {right}
+    </header>
+  );
+}
+
+/* ── Botões (pílulas) ──────────────────────────────────────── */
+type BtnProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: 'primary' | 'ghost' | 'soft' | 'danger' | 'dark' | 'outline';
+  accent?: Accent;
+  size?: 'sm' | 'md' | 'lg';
+};
+export function Button({ variant = 'soft', accent, size = 'md', className, children, ...rest }: BtnProps) {
+  const base = 'press inline-flex items-center justify-center gap-2 font-medium rounded-full transition-colors duration-150 disabled:opacity-40 disabled:pointer-events-none select-none whitespace-nowrap';
+  const sizes = size === 'sm' ? 'h-9 px-4 text-[13px]' : size === 'lg' ? 'h-14 px-7 text-[17px]' : 'h-11 px-5 text-[15px]';
+  const v =
+    variant === 'primary' ? (accent === 'neutral' || accent === 'dark' ? 'bg-ink text-white hover:bg-ink/90' : 'bg-orange text-white hover:bg-[#E85F2E]')
+      : variant === 'dark' ? 'bg-ink text-white hover:bg-ink/90'
+        : variant === 'ghost' ? 'text-ink/70 hover:text-ink hover:bg-cream'
+          : variant === 'outline' ? 'bg-white text-ink border border-line hover:bg-cream'
+            : variant === 'danger' ? 'bg-white text-orange border border-orange/40 hover:bg-blush/60'
+              : 'bg-cream text-ink hover:bg-[#ECE9E4]';
+  return <button type="button" className={cx(base, sizes, v, className)} {...rest}>{children}</button>;
+}
+
+export function IconButton({ className, label, children, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
+  return (
+    <button type="button" aria-label={label} title={label}
+      className={cx('press grid place-items-center size-9 rounded-full text-ink/45 hover:text-ink hover:bg-cream transition-colors', className)} {...rest}>
+      {children}
+    </button>
+  );
+}
+
+export function RoundButton({ className, label, children, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
+  return (
+    <button type="button" aria-label={label} title={label}
+      className={cx('press grid place-items-center size-12 rounded-full border border-line bg-white text-ink hover:bg-cream transition-colors shrink-0', className)} {...rest}>
+      {children}
+    </button>
+  );
+}
+
+export function DeleteButton({ onConfirm, label = 'Excluir', compact = true }: { onConfirm: () => void; label?: string; compact?: boolean }) {
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const t = setTimeout(() => setArmed(false), 2800);
+    return () => clearTimeout(t);
+  }, [armed]);
+  return armed ? (
+    <button type="button" onClick={(e) => { e.stopPropagation(); onConfirm(); setArmed(false); }}
+      className="press h-8 px-3 rounded-full text-xs font-medium bg-orange text-white animate-pop whitespace-nowrap">
+      Confirmar?
+    </button>
+  ) : compact ? (
+    <IconButton label={label} onClick={(e) => { e.stopPropagation(); setArmed(true); }} className="size-8 hover:text-orange">
+      <LuTrash2 size={15} />
+    </IconButton>
+  ) : (
+    <Button variant="danger" size="sm" onClick={() => setArmed(true)}><LuTrash2 size={14} /> {label}</Button>
+  );
+}
+
+/* ── Formulários ───────────────────────────────────────────── */
+export const inputCls =
+  'w-full h-12 md:h-11 rounded-2xl bg-cream border border-transparent px-4 text-base md:text-[15px] text-ink placeholder:text-ink/35 outline-none focus:border-ink/15 focus:bg-white transition-colors';
+
+export function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
+  return (
+    <label className={cx('flex flex-col gap-1.5 min-w-0', className)}>
+      <span className="text-[13px] text-muted">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
+  ({ className, ...p }, ref) => <input ref={ref} className={cx(inputCls, className)} {...p} />,
+);
+
+export function Select({ className, children, ...p }: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select className={cx(inputCls, 'appearance-none bg-[length:16px] bg-no-repeat bg-[right_14px_center] pr-10 select-chevron', className)} {...p}>
+      {children}
+    </select>
+  );
+}
+
+export function TextArea({ className, ...p }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea className={cx(inputCls, 'h-auto min-h-24 py-3 resize-y', className)} {...p} />;
+}
+
+export function NumInput({ value, onChange, step = 1, className, ...p }: {
+  value: number; onChange: (v: number) => void; step?: number; className?: string;
+} & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>) {
+  const [txt, setTxt] = useState(String(value ?? ''));
+  const parse = (t: string) => parseFloat(t.replace(',', '.'));
+  useEffect(() => { if (parse(txt) !== value) setTxt(String(value ?? '')); }, [value]);
+  return (
+    <input
+      inputMode="decimal"
+      className={cx(inputCls, 'text-center tabular-nums px-1', className)}
+      value={txt}
+      onChange={(e) => { setTxt(e.target.value); const v = parse(e.target.value); if (!isNaN(v)) onChange(v); }}
+      onFocus={(e) => e.target.select()}
+      onBlur={() => { if (isNaN(parse(txt))) setTxt(String(value)); }}
+      onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+      {...p}
+    />
+  );
+}
+
+/* ── Chips / tags ──────────────────────────────────────────── */
+export function Tag({ children, accent = 'treino', className }: { children: React.ReactNode; accent?: Accent; className?: string }) {
+  return (
+    <span className={cx('inline-flex items-center gap-1 h-6 px-2.5 rounded-full text-[12px] font-medium whitespace-nowrap',
+      accent === 'dark' ? 'bg-ink text-white' : accent === 'neutral' ? 'bg-cream text-ink/70' : 'bg-blush/70 text-[#D9541F]', className)}>
+      {children}
+    </span>
+  );
+}
+
+export function Delta({ value, suffix = '%', dark, goodWhenDown }: { value: number; suffix?: string; dark?: boolean; goodWhenDown?: boolean }) {
+  const up = value >= 0;
+  return (
+    <span className={cx('inline-flex items-center gap-1 h-7 px-3 rounded-full text-[13px] font-medium tabular-nums whitespace-nowrap',
+      dark ? 'bg-ink text-white' : 'bg-orange text-white')} title={goodWhenDown ? 'menor é melhor' : undefined}>
+      {up ? '+' : '−'}{Math.abs(value).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}{suffix}
+      <svg viewBox="0 0 12 12" className="size-3" style={{ transform: up ? undefined : 'rotate(90deg)' }}>
+        <path d="M3.5 8.5l5-5M4.5 3.5h4v4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </span>
+  );
+}
+
+export function Chip({ active, onClick, children }: { active?: boolean; onClick?: () => void; children: React.ReactNode; accent?: Accent }) {
+  return (
+    <button type="button" onClick={onClick}
+      className={cx('press h-11 px-5 rounded-full text-[15px] font-medium transition-colors whitespace-nowrap shrink-0',
+        active ? 'bg-ink text-white' : 'bg-white text-ink/70 hover:text-ink')}>
+      {children}
+    </button>
+  );
+}
+
+/* ── Progresso ─────────────────────────────────────────────── */
+export function ProgressRing({ value, size = 120, stroke = 10, color = ORANGE, track = '#F1EEEA', children }: {
+  value: number; size?: number; stroke?: number; color?: string; track?: string; children?: React.ReactNode;
+}) {
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const v = Math.max(0, Math.min(1, value));
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={track} strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round"
+          strokeDasharray={c} strokeDashoffset={c * (1 - v)} style={{ transition: 'stroke-dashoffset .8s cubic-bezier(.2,.8,.2,1)' }} />
+      </svg>
+      <div className="absolute inset-0 grid place-items-center text-center">{children}</div>
+    </div>
+  );
+}
+
+export function ProgressBar({ value, color = ORANGE, height = 8, className }: { value: number; color?: string; height?: number; className?: string }) {
+  const v = Math.max(0, Math.min(1, value));
+  return (
+    <div className={cx('w-full rounded-full bg-[#EFEBE6] overflow-hidden', className)} style={{ height }}>
+      <div className="h-full rounded-full" style={{ width: `${v * 100}%`, background: color, transition: 'width .7s cubic-bezier(.2,.8,.2,1)' }} />
+    </div>
+  );
+}
+
+export function Stars({ value, onChange, size = 22, color = ORANGE }: { value: number; onChange?: (v: number) => void; size?: number; color?: string }) {
+  return (
+    <div className="flex items-center gap-1" role="radiogroup" aria-label="Nível de energia">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button key={n} type="button" disabled={!onChange} onClick={() => onChange?.(n)} aria-label={`${n} de 5`}
+          className={cx('press transition', onChange && 'hover:scale-110')}>
+          <LuStar size={size} fill={n <= value ? color : 'transparent'} color={n <= value ? color : 'rgba(28,27,26,.2)'} strokeWidth={1.6} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ── Modal (bottom-sheet no mobile) ────────────────────────── */
+export function Modal({ open, onClose, title, children, footer }: {
+  open: boolean; onClose: () => void; title: string; children: React.ReactNode; accent?: Accent; footer?: React.ReactNode;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', k);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { window.removeEventListener('keydown', k); document.body.style.overflow = prev; };
+  }, [open, onClose]);
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end md:items-center justify-center" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="absolute inset-0 bg-ink/30 animate-fade" onClick={onClose} />
+      <div className="relative w-full md:max-w-lg max-h-[92dvh] flex flex-col rounded-t-[28px] md:rounded-[28px] bg-white shadow-2xl animate-sheet">
+        <div className="md:hidden mx-auto mt-3 h-1 w-10 rounded-full bg-ink/15" />
+        <div className="flex items-center justify-between px-6 pt-5 pb-3">
+          <h2 className="text-xl font-semibold tracking-[-0.02em] text-ink">{title}</h2>
+          <RoundButton label="Fechar" className="size-10" onClick={onClose}><LuX size={17} /></RoundButton>
+        </div>
+        <div className="px-6 pb-5 overflow-y-auto overscroll-contain">{children}</div>
+        {footer && <div className="px-6 py-4 border-t border-line flex gap-2 justify-end pb-[max(1rem,env(safe-area-inset-bottom))]">{footer}</div>}
+      </div>
+    </div>
+  );
+}
+
+export function Empty({ icon, title, text, action }: { icon: React.ReactNode; title: string; text?: string; action?: React.ReactNode }) {
+  return (
+    <div className="flex flex-col items-center text-center py-10 px-4 gap-2">
+      <div className="grid place-items-center size-12 rounded-full bg-cream text-ink/40 mb-1">{icon}</div>
+      <p className="text-[15px] font-medium text-ink">{title}</p>
+      {text && <p className="text-[13px] text-muted max-w-xs">{text}</p>}
+      {action && <div className="mt-3">{action}</div>}
+    </div>
+  );
+}
+
+export function Segmented<T extends string>({ value, onChange, options }: {
+  value: T; onChange: (v: T) => void; options: { value: T; label: React.ReactNode }[]; accent?: Accent;
+}) {
+  return (
+    <div className="inline-flex p-1 rounded-full bg-white gap-1 w-full md:w-auto">
+      {options.map((o) => (
+        <button key={o.value} type="button" onClick={() => onChange(o.value)}
+          className={cx('press flex-1 md:flex-none h-10 px-5 rounded-full text-[14px] font-medium transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap',
+            value === o.value ? 'bg-ink text-white' : 'text-ink/55 hover:text-ink')}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function Stat({ label, value, unit, className }: { label: string; value: React.ReactNode; unit?: string; className?: string }) {
+  return (
+    <div className={cx('min-w-0', className)}>
+      <p className="text-[13px] text-muted">{label}</p>
+      <p className="text-xl font-medium tracking-[-0.02em] text-ink tabular-nums">
+        {value}{unit && <span className="text-sm font-normal text-muted ml-1">{unit}</span>}
+      </p>
+    </div>
+  );
+}
+
+/* ── Visualizações no estilo da referência ─────────────────── */
+
+/** Gauge semicircular segmentado. */
+export function SegmentGauge({ value, segments = 15 }: { value: number; segments?: number }) {
+  const v = Math.max(0, Math.min(1, value));
+  const W = 460, H = 250;
+  const cx0 = W / 2, cy0 = H - 6;
+  const R = 222, r = 146;
+  const gap = 0.075;
+  const filled = v * segments;
+  const p = (rad: number, a: number) => `${cx0 + rad * Math.cos(a)},${cy0 + rad * Math.sin(a)}`;
+  return (
+    <svg viewBox={`-12 -12 ${W + 24} ${H + 16}`} className="w-full h-auto" aria-hidden>
+      {Array.from({ length: segments }, (_, i) => {
+        const a0 = Math.PI + (i / segments) * Math.PI + gap / 2;
+        const a1 = Math.PI + ((i + 1) / segments) * Math.PI - gap / 2;
+        const d = `M${p(R, a0)} A${R},${R} 0 0 1 ${p(R, a1)} L${p(r, a1)} A${r},${r} 0 0 0 ${p(r, a0)} Z`;
+        const fill = i + 1 <= filled ? ORANGE : i < filled ? PEACH : '#F1EEEA';
+        return <path key={i} d={d} fill={fill} stroke={fill} strokeWidth={9} strokeLinejoin="round" style={{ transition: 'fill .4s' }} />;
+      })}
+    </svg>
+  );
+}
+
+/** Disco escuro com arco e pontos. */
+export function DotDial({ value, label, sub, size = 240 }: { value: number; label: string; sub: string; size?: number }) {
+  const v = Math.max(0, Math.min(1, value));
+  const c = size / 2;
+  const R = size * 0.37;
+  const start = -Math.PI / 2;
+  const sweep = v * 2 * Math.PI;
+  const pt = (a: number) => [c + R * Math.cos(a), c + R * Math.sin(a)];
+  const [x0, y0] = pt(start);
+  const [x1, y1] = pt(start + Math.min(sweep, 2 * Math.PI - 0.001));
+  const arc = `M${x0},${y0} A${R},${R} 0 ${sweep > Math.PI ? 1 : 0} 1 ${x1},${y1}`;
+  const rest = 2 * Math.PI - sweep;
+  const n = Math.max(0, Math.round(rest / 0.5));
+  const dots = Array.from({ length: n }, (_, i) => start + sweep + 0.34 + i * ((rest - 0.68) / Math.max(1, n - 1)));
+  return (
+    <div className="relative rounded-full bg-ink shrink-0" style={{ width: size, height: size }}>
+      <svg viewBox={`0 0 ${size} ${size}`} className="absolute inset-0">
+        {v > 0.005 && <path d={arc} fill="none" stroke={ORANGE} strokeWidth={size * 0.05} strokeLinecap="round" />}
+        {rest > 0.7 && dots.map((a, i) => { const [x, y] = pt(a); return <circle key={i} cx={x} cy={y} r={size * 0.032} fill="#fff" />; })}
+      </svg>
+      <div className="absolute inset-0 grid place-items-center text-center">
+        <div>
+          <p className="text-white font-medium tracking-[-0.02em] tabular-nums leading-none" style={{ fontSize: size * 0.125 }}>{label}</p>
+          <p className="text-white/70 mt-1.5" style={{ fontSize: Math.max(12, size * 0.062) }}>{sub}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const HEAT = ['#FBEDE6', BLUSH, PEACH, '#F4895F', ORANGE];
+export const heatColor = (v: number | null) =>
+  v == null ? 'transparent' : v >= 0.85 ? HEAT[4] : v >= 0.6 ? HEAT[3] : v >= 0.4 ? HEAT[2] : v >= 0.15 ? HEAT[1] : HEAT[0];
+
+export function HeatLegend() {
+  return (
+    <div className="flex items-center gap-1.5 text-[11px] text-muted">
+      Menos {HEAT.map((c) => <span key={c} className="w-3 h-2 rounded-[2px]" style={{ background: c }} />)} Mais
+    </div>
+  );
+}
+
+/** Colunas com hachura + coluna em destaque. */
+export function HatchColumns({ items, height = 150 }: {
+  items: { label: string; value: number; display: string; pct?: string; up?: boolean }[]; height?: number;
+}) {
+  const top = items.reduce((b, x, i) => (x.value > items[b].value ? i : b), 0);
+  return (
+    <div className="grid gap-2 md:gap-2.5" style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0,1fr))` }}>
+      {items.map((it, i) => {
+        const hi = i === top;
+        const h = Math.max(0.18, Math.min(1, it.value));
+        return (
+          <div key={it.label} className="flex flex-col items-stretch min-w-0">
+            {it.pct && (
+              <p className={cx('text-[12px] md:text-[13px] mb-2 tabular-nums', hi ? 'text-ink font-semibold' : 'text-muted')}>
+                {it.pct} <span className="text-[10px]">{it.up ? '↗' : '↘'}</span>
+              </p>
+            )}
+            <div className="relative w-full rounded-[16px] bg-cream overflow-hidden" style={{ height }}>
+              <div className={cx('absolute inset-x-0 bottom-0 rounded-[16px]', !hi && 'hatch')}
+                style={{ height: `${h * 100}%`, background: hi ? `linear-gradient(180deg, ${ORANGE}, #EE5A28)` : undefined, transition: 'height .6s' }} />
+              <span className={cx('absolute left-1/2 -translate-x-1/2 px-2 h-6 rounded-full text-[11.5px] font-semibold grid place-items-center tabular-nums whitespace-nowrap',
+                hi ? 'bg-ink text-white top-3' : 'bg-white text-ink')}
+                style={hi ? undefined : { bottom: `min(calc(${h * 100}% + 8px), calc(100% - 32px))` }}>
+                {it.display}
+              </span>
+            </div>
+            <p className={cx('text-[12.5px] md:text-[13px] mt-2.5 text-center truncate', hi ? 'text-ink font-medium' : 'text-muted')}>{it.label}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
