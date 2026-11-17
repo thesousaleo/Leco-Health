@@ -33,9 +33,8 @@ export default function Settings() {
     }
   };
 
-  const kcalFromMacros = goals.protein * 4 + goals.carbs * 4 + goals.fat * 9;
   const counts = [
-    ['Sessões de treino', state.sessions.length], ['Alimentos', state.foods.length], ['Hábitos', state.habits.length],
+    ['Sessões de treino', state.sessions.length], ['Refeições', (state.meals || []).length], ['Hábitos', state.habits.length],
     ['Biometria', state.body.length], ['Sono', state.sleep.length], ['Notas', state.notes.length],
   ] as const;
 
@@ -56,19 +55,11 @@ export default function Settings() {
 
         <Card className="p-5">
           <CardHeader icon={<LuTarget size={16} />} accent="nutri" title="Metas diárias" />
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <Field label="Calorias (kcal)"><NumInput value={goals.kcal} onChange={(v) => setGoals({ ...goals, kcal: Math.round(v) })} /></Field>
-            <Field label="Proteínas (g)"><NumInput value={goals.protein} onChange={(v) => setGoals({ ...goals, protein: Math.round(v) })} /></Field>
-            <Field label="Carboidratos (g)"><NumInput value={goals.carbs} onChange={(v) => setGoals({ ...goals, carbs: Math.round(v) })} /></Field>
-            <Field label="Gorduras (g)"><NumInput value={goals.fat} onChange={(v) => setGoals({ ...goals, fat: Math.round(v) })} /></Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Refeições por dia"><NumInput value={goals.meals ?? 4} onChange={(v) => setGoals({ ...goals, meals: Math.max(1, Math.round(v)) })} /></Field>
             <Field label="Água (ml)"><NumInput value={goals.water} onChange={(v) => setGoals({ ...goals, water: Math.round(v) })} /></Field>
           </div>
-          <p className="text-[11px] text-ink/40 mt-3">
-            Macros somam {nf(kcalFromMacros)} kcal
-            {Math.abs(kcalFromMacros - goals.kcal) > 50 && (
-              <> · <button className="text-orange hover:underline" onClick={() => setGoals({ ...goals, kcal: kcalFromMacros })}>usar como meta</button></>
-            )}
-          </p>
+          <p className="text-[12.5px] text-muted mt-3">A meta de refeições entra no Score do dia.</p>
           <div className="flex justify-end mt-3">
             <Button variant="primary" accent="nutri" onClick={() => { actions.setGoals(goals); toast('Metas atualizadas'); }}><LuSave size={15} /> Salvar metas</Button>
           </div>

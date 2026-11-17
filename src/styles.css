@@ -26,6 +26,7 @@
     background: #E9E5DF;
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior-y: none;
+    overflow-x: clip;
     font-feature-settings: "cv11", "ss01";
   }
   button { cursor: pointer; -webkit-user-select: none; user-select: none; touch-action: manipulation; }

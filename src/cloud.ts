@@ -22,7 +22,9 @@ export interface ProgressStats {
   habitsToday: string; // "4/6"
   workouts7: number;
   lastWorkout?: { date: string; name: string; volume: number };
-  kcalAdherence7: number; // 0-100
+  kcalAdherence7?: number; // legado
+  meals7?: number; // refeições registradas nos últimos 7 dias
+  mealsToday?: number;
   waterToday: number; // 0-1
   body?: { weight?: number; weightDelta30?: number; bodyFat?: number };
   updatedAt: string;

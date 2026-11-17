@@ -208,7 +208,7 @@ function FriendCard({ f, onRemove }: { f: Friend; onRemove: () => void }) {
               <Tile className="px-3 py-2.5"><p className="text-[12px] text-muted">Sequência</p><p className="text-[20px] font-medium tracking-[-0.03em] text-ink tabular-nums">{s.streak}<span className="text-[12px] text-muted ml-1">dias</span></p></Tile>
               <Tile className="px-3 py-2.5"><p className="text-[12px] text-muted">Treinos 7d</p><p className="text-[20px] font-medium tracking-[-0.03em] text-ink tabular-nums">{s.workouts7}</p></Tile>
               <Tile className="px-3 py-2.5"><p className="text-[12px] text-muted">Hábitos hoje</p><p className="text-[20px] font-medium tracking-[-0.03em] text-ink tabular-nums">{s.habitsToday}</p></Tile>
-              <Tile className="px-3 py-2.5"><p className="text-[12px] text-muted">Dieta 7d</p><p className="text-[20px] font-medium tracking-[-0.03em] text-ink tabular-nums">{s.kcalAdherence7}%</p></Tile>
+              <Tile className="px-3 py-2.5"><p className="text-[12px] text-muted">Refeições hoje</p><p className="text-[20px] font-medium tracking-[-0.03em] text-ink tabular-nums">{s.mealsToday ?? '—'}</p></Tile>
             </div>
           </div>
           <div className="mt-5">

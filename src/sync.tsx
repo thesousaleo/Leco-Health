@@ -4,6 +4,7 @@ import type { Friend, Profile, Session } from './cloud';
 import { useStore } from './store';
 import { buildEmptyState } from './mock';
 import { buildProgress } from './utils';
+import { uploadPending } from './photos';
 import type { AppState } from './types';
 
 /* Sincronização: conta (Supabase Auth) + backup do estado + progresso para amigos. */
@@ -67,6 +68,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       setLastSync(new Date().toISOString());
       setStatus('idle');
       setError(null);
+      void uploadPending();
     } catch (e: any) {
       setStatus('error');
       setError(e.message);
@@ -100,6 +102,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       setLastSync(new Date().toISOString());
       setStatus('idle');
       setReady(true);
+      void uploadPending();
     } catch (e: any) {
       setStatus('error');
       setError(e.message);

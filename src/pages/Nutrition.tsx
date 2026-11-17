@@ -1,257 +1,366 @@
-import React, { useMemo, useState } from 'react';
-import { LuApple, LuChevronLeft, LuChevronRight, LuDroplets, LuMinus, LuPencil, LuPlus, LuSearch, LuUtensils } from 'react-icons/lu';
-import { useStore } from '../store';
-import type { FoodEntry, MealType } from '../types';
-import { addDays, fmtLong, lastNDays, MEALS, nf, relDay, sumMacros, todayKey, fmtWeekdayShort } from '../utils';
-import { FOOD_LIBRARY, macrosFor, type FoodRef } from '../mock';
+import React, { useMemo, useRef, useState } from 'react';
 import {
-  ACCENT, Button, Card, CardHeader, cx, DeleteButton, Field, IconButton, Input, Modal, NumInput, PageHeader, ProgressBar, ProgressRing, Select,
+  LuCamera, LuCheck, LuChevronLeft, LuChevronRight, LuImage, LuImageOff, LuImages, LuLoaderCircle, LuMinus, LuNotebookPen, LuPencil, LuPlus, LuX,
+} from 'react-icons/lu';
+import { useStore } from '../store';
+import type { MealKind, MealLog } from '../types';
+import { addDays, fmtLong, kindForHour, MEAL_KINDS, mealLabel, mealsOn, nf, relDay, todayKey, fmtDayMonth } from '../utils';
+import { deletePhoto, savePhoto, usePhoto } from '../photos';
+import {
+  Button, Card, cx, DeleteButton, DotDial, Empty, Field, IconButton, Input, Modal, PageHeader, Segmented, TextArea, Tile,
 } from '../components/ui';
-import { BarChart } from '../components/charts';
 
 export function WaterButtons({ onAdd, compact }: { onAdd: (ml: number) => void; compact?: boolean }) {
   return (
-    <div className={cx('flex gap-1.5', compact ? '' : 'flex-wrap')}>
+    <div className="flex flex-wrap gap-2">
       {[250, 500].map((ml) => (
         <button key={ml} type="button" onClick={(e) => { e.stopPropagation(); onAdd(ml); }}
-          className="press flex-1 h-9 px-3 rounded-xl text-xs font-semibold bg-ink text-white hover:bg-ink/85 transition whitespace-nowrap">
-          +{ml}ml
-        </button>
+          className="press h-10 px-4 rounded-full bg-white text-ink text-[14px] font-medium tabular-nums">+{ml} ml</button>
       ))}
       {!compact && (
-        <button type="button" onClick={() => onAdd(-250)} aria-label="Remover 250ml"
-          className="press h-9 w-10 rounded-xl grid place-items-center text-ink/50 border border-line hover:text-ink">
-          <LuMinus size={14} />
-        </button>
+        <button type="button" onClick={() => onAdd(-250)} aria-label="Remover 250 ml"
+          className="press size-10 rounded-full bg-white grid place-items-center text-ink/60"><LuMinus size={15} /></button>
       )}
     </div>
   );
 }
+
+const nowHHMM = () => new Date().toTimeString().slice(0, 5);
 
 export default function Nutrition() {
   const { state, actions, toast } = useStore();
   const [day, setDay] = useState(todayKey());
-  const [modal, setModal] = useState<{ meal: MealType; entry?: FoodEntry } | null>(null);
-  const items = state.foods.filter((f) => f.date === day);
-  const m = sumMacros(items);
-  const g = state.goals;
+  const [view, setView] = useState<'diario' | 'galeria'>('diario');
+  const [modal, setModal] = useState<{ meal?: MealLog } | null>(null);
+  const [viewer, setViewer] = useState<{ ids: string[]; i: number } | null>(null);
+  const meals = mealsOn(state, day);
+  const goal = state.goals.meals || 4;
   const water = state.water[day] || 0;
   const isToday = day === todayKey();
-  const week = lastNDays(7, day);
+  const done = new Set(meals.map((m) => m.kind));
 
   return (
     <div>
-      <PageHeader title="Alimentação" sub="Macros, refeições e hidratação" accent="nutri" icon={<LuApple size={20} />} />
+      <PageHeader title="Alimentação" sub="Registre o que comeu, com foto se quiser"
+        right={<div className="hidden md:block"><Button variant="primary" size="lg" onClick={() => setModal({})}><LuPlus size={18} /> Registrar refeição</Button></div>} />
 
-      {/* navegação de dia */}
-      <div className="flex items-center justify-between gap-2 mb-4">
-        <IconButton label="Dia anterior" onClick={() => setDay(addDays(day, -1))}><LuChevronLeft size={18} /></IconButton>
-        <button onClick={() => setDay(todayKey())} className="text-center">
-          <p className="font-display font-semibold text-ink">{relDay(day)}</p>
-          <p className="text-xs text-ink/45">{fmtLong(day)}</p>
-        </button>
-        <IconButton label="Próximo dia" disabled={isToday} className="disabled:opacity-20" onClick={() => setDay(addDays(day, 1))}><LuChevronRight size={18} /></IconButton>
+      <div className="mb-5">
+        <Segmented value={view} onChange={setView} options={[
+          { value: 'diario', label: <><LuNotebookPen size={15} /> Diário</> },
+          { value: 'galeria', label: <><LuImages size={15} /> Galeria</> },
+        ]} />
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-4 mb-4">
-        {/* painel de macros */}
-        <Card className="p-5 lg:col-span-2">
-          <div className="flex flex-col sm:flex-row items-center gap-6">
-            <ProgressRing value={m.kcal / g.kcal} size={150} stroke={12} color={m.kcal > g.kcal * 1.05 ? '#F87171' : ACCENT.nutri.hex}>
-              <div>
-                <p className="font-display text-3xl font-bold text-ink tabular-nums leading-none">{nf(m.kcal)}</p>
-                <p className="text-xs text-ink/45 mt-1">de {nf(g.kcal)} kcal</p>
-                <p className={cx('text-[11px] mt-1 font-medium', g.kcal - m.kcal >= 0 ? 'text-orange' : 'text-red-300')}>
-                  {g.kcal - m.kcal >= 0 ? `${nf(g.kcal - m.kcal)} restantes` : `${nf(m.kcal - g.kcal)} acima`}
-                </p>
-              </div>
-            </ProgressRing>
-            <div className="flex-1 w-full space-y-4">
-              {[
-                { l: 'Proteínas', v: m.protein, goal: g.protein, c: '#F26B3A', kc: 4 },
-                { l: 'Carboidratos', v: m.carbs, goal: g.carbs, c: '#F59A74', kc: 4 },
-                { l: 'Gorduras', v: m.fat, goal: g.fat, c: '#FBCDB8', kc: 9 },
-              ].map((x) => (
-                <div key={x.l}>
-                  <div className="flex items-baseline justify-between mb-1.5">
-                    <span className="text-sm text-ink/80">{x.l}</span>
-                    <span className="text-sm tabular-nums"><b className="text-ink">{nf(x.v)}</b><span className="text-ink/40"> / {x.goal} g</span></span>
-                  </div>
-                  <ProgressBar value={x.v / x.goal} color={x.c} height={9} />
-                  <p className="text-[11px] text-ink/35 mt-1 tabular-nums">
-                    {x.goal - x.v > 0 ? `faltam ${nf(x.goal - x.v)} g` : 'meta atingida ✓'} · {nf(x.v * x.kc)} kcal
-                  </p>
-                </div>
-              ))}
-            </div>
+      {view === 'galeria' ? (
+        <Gallery onOpen={(ids, i) => setViewer({ ids, i })} onEdit={(m) => setModal({ meal: m })} />
+      ) : (
+        <>
+          {/* navegação de dia */}
+          <div className="flex items-center justify-between gap-2 mb-4">
+            <button aria-label="Dia anterior" onClick={() => setDay(addDays(day, -1))} className="press size-11 rounded-full bg-white grid place-items-center text-ink"><LuChevronLeft size={19} /></button>
+            <button onClick={() => setDay(todayKey())} className="text-center">
+              <p className="text-[17px] font-medium text-ink">{relDay(day)}</p>
+              <p className="text-[13px] text-muted">{fmtLong(day)}</p>
+            </button>
+            <button aria-label="Próximo dia" disabled={isToday} onClick={() => setDay(addDays(day, 1))} className="press size-11 rounded-full bg-white grid place-items-center text-ink disabled:opacity-30"><LuChevronRight size={19} /></button>
           </div>
-        </Card>
 
-        {/* água */}
-        <Card className="p-5 flex flex-col">
-          <CardHeader icon={<LuDroplets size={16} />} accent="treino" title="Hidratação" sub={`Meta ${nf(g.water)} ml`} />
-          <div className="flex items-end gap-4 flex-1">
-            <div className="relative w-16 h-36 rounded-2xl border border-line bg-cream overflow-hidden shrink-0">
-              <div className="absolute inset-x-0 bottom-0 transition-all duration-700 ease-out"
-                style={{ height: `${Math.min(100, (water / g.water) * 100)}%`, background: 'linear-gradient(180deg,#F59A74,#F26B3A)' }}>
-                <div className="absolute -top-1.5 inset-x-0 h-3 bg-white/40 rounded-[50%] animate-wave-x" />
+          <div className="grid lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] gap-4 md:gap-5 mb-4 md:mb-5">
+            <Card className="p-5 md:p-7">
+              <p className="text-[17px] text-ink">Refeições {isToday ? 'de hoje' : 'do dia'}</p>
+              <p className="mt-4 flex items-baseline gap-2.5">
+                <span className="text-[52px] md:text-[60px] font-medium tracking-[-0.05em] leading-none text-ink tabular-nums">{meals.length}</span>
+                <span className="text-[15px] text-muted">de {goal} registradas</span>
+              </p>
+              <div className="flex flex-wrap gap-2 mt-5">
+                {MEAL_KINDS.filter((k) => k.id !== 'outro').map((k) => (
+                  <span key={k.id} className={cx('inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full text-[13.5px] font-medium',
+                    done.has(k.id) ? 'bg-orange text-white' : 'bg-cream text-ink/55')}>
+                    {done.has(k.id) && <LuCheck size={14} />}{k.label}
+                  </span>
+                ))}
               </div>
-              {[25, 50, 75].map((p) => <div key={p} className="absolute inset-x-0 border-t border-line" style={{ bottom: `${p}%` }} />)}
-            </div>
-            <div className="flex-1">
-              <p className="font-display text-3xl font-bold text-ink tabular-nums">{nf(water)}<span className="text-sm text-ink/45 ml-1">ml</span></p>
-              <p className="text-xs text-ink/45 mb-4">{Math.round((water / g.water) * 100)}% · faltam {nf(Math.max(0, g.water - water))} ml</p>
-              <WaterButtons onAdd={(ml) => actions.addWater(ml, day)} />
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      {/* diário de refeições */}
-      <div className="grid md:grid-cols-2 gap-3 md:gap-4 items-start">
-        {MEALS.map((meal) => {
-          const list = items.filter((f) => f.meal === meal.id);
-          const t = sumMacros(list);
-          return (
-            <Card key={meal.id} className="p-4 md:p-5">
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <div>
-                  <h3 className="font-display font-semibold text-ink">{meal.label}</h3>
-                  <p className="text-xs text-ink/45 tabular-nums">{nf(t.kcal)} kcal · P {nf(t.protein)} · C {nf(t.carbs)} · G {nf(t.fat)}</p>
-                </div>
-                <Button size="sm" accent="nutri" onClick={() => setModal({ meal: meal.id })}><LuPlus size={14} /> Adicionar</Button>
-              </div>
-              {list.length === 0 ? (
-                <p className="text-xs text-ink/30 py-3">Nada registrado.</p>
-              ) : (
-                <ul className="divide-y divide-line">
-                  {list.map((f) => (
-                    <li key={f.id} className="flex items-center gap-2 py-2.5">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-ink/90 truncate">{f.name}</p>
-                        <p className="text-[11px] text-ink/40 tabular-nums">{nf(f.qty)}{f.unit === 'un' ? ' un' : f.unit} · P {nf(f.protein, 1)} · C {nf(f.carbs, 1)} · G {nf(f.fat, 1)}</p>
-                      </div>
-                      <span className="text-sm font-semibold text-orange tabular-nums">{nf(f.kcal)}</span>
-                      <IconButton label="Editar" className="size-8" onClick={() => setModal({ meal: f.meal, entry: f })}><LuPencil size={14} /></IconButton>
-                      <DeleteButton onConfirm={() => { actions.deleteFood(f.id); toast('Alimento removido'); }} />
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <Button variant="primary" size="lg" className="w-full mt-6 md:hidden" onClick={() => setModal({})}>
+                <LuCamera size={18} /> Registrar refeição
+              </Button>
             </Card>
-          );
-        })}
 
-        <Card className="p-5">
-          <CardHeader icon={<LuUtensils size={16} />} accent="nutri" title="Calorias — 7 dias" sub="Linha tracejada = meta" />
-          <BarChart color={ACCENT.nutri.hex} goal={g.kcal}
-            data={week.map((d) => ({ label: fmtWeekdayShort(d), value: sumMacros(state.foods.filter((f) => f.date === d)).kcal }))} />
-        </Card>
-      </div>
+            <div className="rounded-[28px] p-5 md:p-6 flex items-center gap-4 md:gap-5 bg-ink min-w-0">
+              <DotDial value={water / state.goals.water} label={`${Math.round((water / state.goals.water) * 100)}%`}
+                sub={`${nf(water / 1000, 2)} L`} size={124} />
+              <div className="flex-1 min-w-0">
+                <p className="text-[17px] text-white">Hidratação</p>
+                <p className="text-[13px] text-white/60 mb-4">Meta {nf(state.goals.water / 1000, 1)} L</p>
+                <WaterButtons onAdd={(ml) => actions.addWater(ml, day)} />
+              </div>
+            </div>
+          </div>
 
-      <FoodModal open={!!modal} meal={modal?.meal ?? 'cafe'} entry={modal?.entry} onClose={() => setModal(null)}
-        onSave={(f) => {
-          if (modal?.entry) { actions.updateFood(modal.entry.id, f); toast('Alimento atualizado'); }
-          else { actions.addFood({ ...f, date: day }); toast(`${f.name} adicionado`); }
+          {meals.length === 0 ? (
+            <Card className="p-5">
+              <Empty icon={<LuCamera />} title={isToday ? 'Nada registrado ainda hoje' : 'Nenhuma refeição neste dia'}
+                text="Tire uma foto do prato e escreva em poucas palavras o que comeu."
+                action={<Button variant="primary" onClick={() => setModal({})}><LuPlus size={16} /> Registrar refeição</Button>} />
+            </Card>
+          ) : (
+            <ol className="relative space-y-3 md:space-y-4">
+              {meals.map((m) => (
+                <MealCard key={m.id} meal={m} onEdit={() => setModal({ meal: m })} onOpenPhoto={(i) => setViewer({ ids: m.photos, i })} />
+              ))}
+            </ol>
+          )}
+        </>
+      )}
+
+      <MealModal open={!!modal} meal={modal?.meal} day={day} onClose={() => setModal(null)}
+        onSave={(m) => {
+          if (modal?.meal) { actions.updateMeal(modal.meal.id, m); toast('Refeição atualizada'); }
+          else { actions.addMeal(m); toast(`${mealLabel(m.kind)} registrado`); if (m.date !== day) setDay(m.date); }
           setModal(null);
-        }} />
+        }}
+        onDelete={modal?.meal ? () => {
+          modal.meal!.photos.forEach((p) => void deletePhoto(p));
+          actions.deleteMeal(modal.meal!.id); setModal(null); toast('Refeição excluída');
+        } : undefined} />
+
+      {viewer && <PhotoViewer ids={viewer.ids} index={viewer.i} onClose={() => setViewer(null)} />}
     </div>
   );
 }
 
-type FoodDraft = Omit<FoodEntry, 'id' | 'date'>;
+/* ── card da refeição ─────────────────────────────────────── */
+function MealCard({ meal, onEdit, onOpenPhoto }: { meal: MealLog; onEdit: () => void; onOpenPhoto: (i: number) => void }) {
+  const first = meal.photos[0];
+  return (
+    <li>
+      <Card className="p-3 md:p-4 flex gap-3 md:gap-4">
+        {first ? (
+          <button onClick={() => onOpenPhoto(0)} className="press relative shrink-0" aria-label="Ver foto">
+            <Thumb id={first} className="size-24 md:size-28 rounded-[20px]" />
+            {meal.photos.length > 1 && (
+              <span className="absolute bottom-1.5 right-1.5 h-6 px-2 rounded-full bg-ink/80 text-white text-[11px] font-semibold grid place-items-center">+{meal.photos.length - 1}</span>
+            )}
+          </button>
+        ) : (
+          <button onClick={onEdit} className="press size-24 md:size-28 rounded-[20px] bg-cream grid place-items-center text-ink/30 shrink-0" aria-label="Adicionar foto">
+            <LuCamera size={22} />
+          </button>
+        )}
+        <div className="flex-1 min-w-0 py-1">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center h-6 px-2.5 rounded-full bg-blush/70 text-[#D9541F] text-[12px] font-medium">{mealLabel(meal.kind)}</span>
+            <span className="text-[13px] text-muted tabular-nums">{meal.time}</span>
+            <IconButton label="Editar" className="ml-auto size-8 -mr-1 -mt-1" onClick={onEdit}><LuPencil size={14} /></IconButton>
+          </div>
+          <p className="text-[15px] md:text-[16px] text-ink mt-2 leading-snug line-clamp-3">{meal.description || <span className="text-muted">Sem descrição</span>}</p>
+          {meal.note && <p className="text-[13px] text-muted mt-1.5 line-clamp-2">{meal.note}</p>}
+        </div>
+      </Card>
+    </li>
+  );
+}
 
-function FoodModal({ open, meal, entry, onClose, onSave }: {
-  open: boolean; meal: MealType; entry?: FoodEntry; onClose: () => void; onSave: (f: FoodDraft) => void;
+export function Thumb({ id, className }: { id: string; className?: string }) {
+  const { url, missing } = usePhoto(id);
+  return (
+    <div className={cx('bg-cream overflow-hidden grid place-items-center text-ink/30', className)}>
+      {url ? <img src={url} alt="Foto da refeição" className="size-full object-cover" draggable={false} />
+        : missing ? <LuImageOff size={20} /> : <LuLoaderCircle size={18} className="animate-spin" />}
+    </div>
+  );
+}
+
+/* ── galeria ──────────────────────────────────────────────── */
+function Gallery({ onOpen, onEdit }: { onOpen: (ids: string[], i: number) => void; onEdit: (m: MealLog) => void }) {
+  const { state } = useStore();
+  const withPhotos = useMemo(() => [...(state.meals || [])].filter((m) => m.photos.length)
+    .sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1)), [state.meals]);
+  const byDay = useMemo(() => {
+    const map = new Map<string, MealLog[]>();
+    withPhotos.forEach((m) => map.set(m.date, [...(map.get(m.date) || []), m]));
+    return [...map.entries()];
+  }, [withPhotos]);
+
+  if (!withPhotos.length)
+    return <Card className="p-5"><Empty icon={<LuImages />} title="Nenhuma foto ainda" text="As fotos que você tirar das refeições aparecem aqui, organizadas por dia." /></Card>;
+
+  return (
+    <div className="space-y-5">
+      {byDay.map(([date, list]) => {
+        const all = list.flatMap((m) => m.photos.map((p) => ({ p, m })));
+        const ids = all.map((x) => x.p);
+        return (
+          <section key={date}>
+            <p className="text-[15px] font-medium text-ink mb-2.5">{relDay(date)} <span className="text-muted font-normal">· {fmtDayMonth(date)}</span></p>
+            <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-2 md:gap-3">
+              {all.map(({ p, m }, i) => (
+                <button key={p} onClick={() => onOpen(ids, i)} onContextMenu={(e) => { e.preventDefault(); onEdit(m); }}
+                  className="press relative aspect-square">
+                  <Thumb id={p} className="size-full rounded-[18px]" />
+                  <span className="absolute left-1.5 bottom-1.5 h-5 px-2 rounded-full bg-white/90 text-ink text-[10.5px] font-medium grid place-items-center">
+                    {mealLabel(m.kind)} · {m.time}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── visualizador ─────────────────────────────────────────── */
+function PhotoViewer({ ids, index, onClose }: { ids: string[]; index: number; onClose: () => void }) {
+  const [i, setI] = useState(index);
+  const { url } = usePhoto(ids[i]);
+  const touch = useRef<number | null>(null);
+  const go = (d: number) => setI((x) => (x + d + ids.length) % ids.length);
+  return (
+    <div className="fixed inset-0 z-[80] bg-ink/95 flex items-center justify-center animate-fade" role="dialog" aria-label="Foto"
+      onClick={onClose}
+      onTouchStart={(e) => { touch.current = e.touches[0].clientX; }}
+      onTouchEnd={(e) => { if (touch.current == null) return; const dx = e.changedTouches[0].clientX - touch.current; if (Math.abs(dx) > 50) go(dx < 0 ? 1 : -1); touch.current = null; }}>
+      {url ? <img src={url} alt="Foto da refeição" className="max-w-full max-h-full object-contain" onClick={(e) => e.stopPropagation()} />
+        : <LuLoaderCircle size={28} className="animate-spin text-white/60" />}
+      <button aria-label="Fechar" onClick={onClose} className="press absolute top-[max(1rem,env(safe-area-inset-top))] right-4 size-11 rounded-full bg-white/15 text-white grid place-items-center"><LuX size={20} /></button>
+      {ids.length > 1 && (
+        <>
+          <button aria-label="Anterior" onClick={(e) => { e.stopPropagation(); go(-1); }} className="press absolute left-3 size-11 rounded-full bg-white/15 text-white grid place-items-center"><LuChevronLeft size={20} /></button>
+          <button aria-label="Próxima" onClick={(e) => { e.stopPropagation(); go(1); }} className="press absolute right-3 size-11 rounded-full bg-white/15 text-white grid place-items-center"><LuChevronRight size={20} /></button>
+          <span className="absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] text-white/70 text-[13px] tabular-nums">{i + 1} / {ids.length}</span>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ── formulário ───────────────────────────────────────────── */
+const MAX_PHOTOS = 4;
+
+function MealModal({ open, meal, day, onClose, onSave, onDelete }: {
+  open: boolean; meal?: MealLog; day: string; onClose: () => void; onSave: (m: Omit<MealLog, 'id'>) => void; onDelete?: () => void;
 }) {
-  const blank: FoodDraft = { meal, name: '', qty: 100, unit: 'g', kcal: 0, protein: 0, carbs: 0, fat: 0 };
-  const [f, setF] = useState<FoodDraft>(blank);
-  const [ref, setRef] = useState<FoodRef | null>(null);
-  const [q, setQ] = useState('');
+  const [f, setF] = useState<Omit<MealLog, 'id'>>({ date: day, time: nowHHMM(), kind: 'almoco', description: '', photos: [] });
+  const [added, setAdded] = useState<string[]>([]); // fotos novas desta edição (para descartar se cancelar)
+  const [removed, setRemoved] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const camRef = useRef<HTMLInputElement>(null);
+  const galRef = useRef<HTMLInputElement>(null);
 
-  // reinicia quando abre
-  const key = open ? (entry?.id ?? 'new-' + meal) : '';
-  const [lastKey, setLastKey] = useState('');
-  if (key !== lastKey) {
-    setLastKey(key);
+  const key = open ? meal?.id ?? 'new' : '';
+  const [last, setLast] = useState('');
+  if (key !== last) {
+    setLast(key);
     if (open) {
-      setF(entry ? { meal: entry.meal, name: entry.name, qty: entry.qty, unit: entry.unit, kcal: entry.kcal, protein: entry.protein, carbs: entry.carbs, fat: entry.fat } : { ...blank, meal });
-      setRef(entry ? FOOD_LIBRARY.find((x) => x.name === entry.name) ?? null : null);
-      setQ('');
+      const isTodayDay = day === todayKey();
+      setF(meal ? { date: meal.date, time: meal.time, kind: meal.kind, description: meal.description, photos: [...meal.photos], note: meal.note }
+        : { date: day, time: isTodayDay ? nowHHMM() : '12:00', kind: isTodayDay ? kindForHour(new Date().getHours()) : 'almoco', description: '', photos: [] });
+      setAdded([]); setRemoved([]); setErr('');
     }
   }
 
-  const results = useMemo(() => {
-    const s = q.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
-    if (!s) return FOOD_LIBRARY.slice(0, 8);
-    return FOOD_LIBRARY.filter((x) => x.name.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').includes(s)).slice(0, 8);
-  }, [q]);
-
-  const pick = (r: FoodRef) => {
-    const qty = r.unit === 'un' ? 1 : 100;
-    setRef(r);
-    setF({ ...f, name: r.name, unit: r.unit, qty, ...macrosFor(r, qty) });
+  const addFiles = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setBusy(true); setErr('');
+    try {
+      const room = MAX_PHOTOS - f.photos.length;
+      const ids: string[] = [];
+      for (const file of [...files].slice(0, room)) ids.push(await savePhoto(file));
+      setF((x) => ({ ...x, photos: [...x.photos, ...ids] }));
+      setAdded((a) => [...a, ...ids]);
+      if (files.length > room) setErr(`Máximo de ${MAX_PHOTOS} fotos por refeição.`);
+    } catch (e: any) {
+      setErr(e?.message || 'Não foi possível salvar a foto.');
+    } finally {
+      setBusy(false);
+    }
   };
-  const setQty = (qty: number) => setF(ref ? { ...f, qty, ...macrosFor(ref, qty) } : { ...f, qty });
+
+  const cancel = () => { added.forEach((p) => void deletePhoto(p)); onClose(); };
+  const save = () => {
+    removed.forEach((p) => void deletePhoto(p));
+    onSave({ ...f, description: f.description.trim(), note: f.note?.trim() || undefined });
+  };
+  const canSave = !busy && (f.description.trim() || f.photos.length);
 
   return (
-    <Modal open={open} onClose={onClose} accent="nutri" title={entry ? 'Editar alimento' : 'Adicionar alimento'}
+    <Modal open={open} onClose={cancel} title={meal ? 'Editar refeição' : 'Registrar refeição'}
       footer={<>
-        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-        <Button variant="primary" accent="nutri" disabled={!f.name.trim() || f.qty <= 0} onClick={() => onSave({ ...f, name: f.name.trim() })}>
-          {entry ? 'Salvar' : 'Adicionar'}
-        </Button>
+        {onDelete && <div className="mr-auto"><DeleteButton compact={false} onConfirm={onDelete} /></div>}
+        <Button variant="ghost" onClick={cancel}>Cancelar</Button>
+        <Button variant="primary" disabled={!canSave} onClick={save}>Salvar</Button>
       </>}>
-      {!entry && (
-        <div className="mb-4">
-          <div className="relative">
-            <LuSearch size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink/35" />
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar na base de alimentos…" className="pl-9" />
-          </div>
-          <div className="flex flex-wrap gap-1.5 mt-2.5">
-            {results.map((r) => (
-              <button key={r.name} type="button" onClick={() => pick(r)}
-                className={cx('press h-8 px-2.5 rounded-lg text-xs border transition',
-                  ref?.name === r.name ? 'bg-blush/70 text-orange border-orange/40' : 'border-line text-ink/65 hover:text-ink hover:bg-cream')}>
-                {r.name}
+      <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); if (canSave) save(); }}>
+        {/* fotos */}
+        <div>
+          <input ref={camRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
+          <input ref={galRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
+          {f.photos.length === 0 ? (
+            <div className="grid grid-cols-2 gap-2.5">
+              <button type="button" onClick={() => camRef.current?.click()} disabled={busy}
+                className="press h-32 rounded-[22px] bg-orange text-white flex flex-col items-center justify-center gap-2 text-[15px] font-medium">
+                {busy ? <LuLoaderCircle size={26} className="animate-spin" /> : <LuCamera size={26} />} Tirar foto
+              </button>
+              <button type="button" onClick={() => galRef.current?.click()} disabled={busy}
+                className="press h-32 rounded-[22px] bg-cream text-ink flex flex-col items-center justify-center gap-2 text-[15px] font-medium">
+                <LuImage size={26} /> Galeria
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-4 gap-2">
+              {f.photos.map((p) => (
+                <div key={p} className="relative aspect-square">
+                  <Thumb id={p} className="size-full rounded-[16px]" />
+                  <button type="button" aria-label="Remover foto"
+                    onClick={() => { setF((x) => ({ ...x, photos: x.photos.filter((y) => y !== p) })); setRemoved((r) => [...r, p]); }}
+                    className="press absolute -top-1.5 -right-1.5 size-7 rounded-full bg-ink text-white grid place-items-center shadow"><LuX size={14} /></button>
+                </div>
+              ))}
+              {f.photos.length < MAX_PHOTOS && (
+                <>
+                  <button type="button" aria-label="Tirar outra foto" onClick={() => camRef.current?.click()} disabled={busy}
+                    className="press aspect-square rounded-[16px] bg-orange text-white grid place-items-center">
+                    {busy ? <LuLoaderCircle size={20} className="animate-spin" /> : <LuCamera size={20} />}
+                  </button>
+                  {f.photos.length < MAX_PHOTOS - 1 && (
+                    <button type="button" aria-label="Escolher da galeria" onClick={() => galRef.current?.click()} disabled={busy}
+                      className="press aspect-square rounded-[16px] bg-cream text-ink grid place-items-center"><LuImage size={20} /></button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+          {err && <p className="text-[13px] text-[#D9541F] mt-2">{err}</p>}
+        </div>
+
+        {/* tipo */}
+        <div>
+          <p className="text-[13px] text-muted mb-2">Refeição</p>
+          <div className="flex flex-wrap gap-2">
+            {MEAL_KINDS.map((k) => (
+              <button key={k.id} type="button" onClick={() => setF({ ...f, kind: k.id as MealKind })}
+                className={cx('press h-10 px-4 rounded-full text-[14px] font-medium transition-colors',
+                  f.kind === k.id ? 'bg-ink text-white' : 'bg-cream text-ink/70')}>
+                {k.label}
               </button>
             ))}
-            {!results.length && <p className="text-xs text-ink/40">Não encontrado — preencha manualmente abaixo.</p>}
           </div>
         </div>
-      )}
-      <form className="grid grid-cols-2 gap-3" onSubmit={(e) => e.preventDefault()}>
-        <Field label="Alimento" className="col-span-2">
-          <Input value={f.name} onChange={(e) => { setF({ ...f, name: e.target.value }); if (ref && e.target.value !== ref.name) setRef(null); }} placeholder="Ex: Omelete de 3 ovos" />
-        </Field>
-        <Field label="Refeição" className="col-span-2">
-          <Select value={f.meal} onChange={(e) => setF({ ...f, meal: e.target.value as MealType })}>
-            {MEALS.map((m) => <option key={m.id} value={m.id} className="bg-white">{m.label}</option>)}
-          </Select>
-        </Field>
-        <Field label="Quantidade"><NumInput value={f.qty} onChange={setQty} /></Field>
-        <Field label="Unidade">
-          <Select value={f.unit} disabled={!!ref} onChange={(e) => setF({ ...f, unit: e.target.value as FoodDraft['unit'] })}>
-            <option value="g" className="bg-white">gramas (g)</option>
-            <option value="ml" className="bg-white">mililitros (ml)</option>
-            <option value="un" className="bg-white">unidade</option>
-          </Select>
-        </Field>
-        <div className="col-span-2 rounded-xl bg-blush/50 border border-orange/15 p-3">
-          <p className="text-[11px] text-ink/50 mb-2">{ref ? `Calculado automaticamente a partir de ${ref.name} (${ref.base}${ref.unit === 'un' ? ' un' : ref.unit}). Você pode ajustar.` : 'Informe os macros desta porção:'}</p>
-          <div className="grid grid-cols-4 gap-2">
-            <Field label="Kcal"><NumInput value={f.kcal} onChange={(v) => setF({ ...f, kcal: Math.round(v) })} /></Field>
-            <Field label="Prot (g)"><NumInput value={f.protein} onChange={(v) => setF({ ...f, protein: v })} /></Field>
-            <Field label="Carb (g)"><NumInput value={f.carbs} onChange={(v) => setF({ ...f, carbs: v })} /></Field>
-            <Field label="Gord (g)"><NumInput value={f.fat} onChange={(v) => setF({ ...f, fat: v })} /></Field>
-          </div>
-          {!ref && (
-            <button type="button" className="text-[11px] text-orange mt-2 hover:underline"
-              onClick={() => setF({ ...f, kcal: Math.round(f.protein * 4 + f.carbs * 4 + f.fat * 9) })}>
-              Calcular kcal pelos macros
-            </button>
-          )}
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Dia"><Input type="date" className="min-w-0 px-3" value={f.date} max={todayKey()} onChange={(e) => setF({ ...f, date: e.target.value || f.date })} /></Field>
+          <Field label="Horário"><Input type="time" className="min-w-0 px-3" value={f.time} onChange={(e) => setF({ ...f, time: e.target.value || f.time })} /></Field>
         </div>
+
+        <Field label="O que você comeu?">
+          <TextArea value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} rows={3}
+            placeholder="Ex: arroz, feijão, frango grelhado e salada" />
+        </Field>
+        <Field label="Observação (opcional)">
+          <Input value={f.note ?? ''} onChange={(e) => setF({ ...f, note: e.target.value })} placeholder="Ex: comi com pressa, fiquei com fome depois…" />
+        </Field>
       </form>
     </Modal>
   );

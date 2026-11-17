@@ -265,8 +265,8 @@ export function Modal({ open, onClose, title, children, footer }: {
           <h2 className="text-xl font-semibold tracking-[-0.02em] text-ink">{title}</h2>
           <RoundButton label="Fechar" className="size-10" onClick={onClose}><LuX size={17} /></RoundButton>
         </div>
-        <div className="px-6 pb-5 overflow-y-auto overscroll-contain">{children}</div>
-        {footer && <div className="px-6 py-4 border-t border-line flex gap-2 justify-end pb-[max(1rem,env(safe-area-inset-bottom))]">{footer}</div>}
+        <div className="px-6 pb-5 overflow-y-auto overscroll-contain min-h-0 flex-1">{children}</div>
+        {footer && <div className="shrink-0 px-6 py-4 border-t border-line flex gap-2 justify-end pb-[max(1rem,env(safe-area-inset-bottom))]">{footer}</div>}
       </div>
     </div>
   );

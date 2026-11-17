@@ -66,6 +66,14 @@ export const MEALS: { id: MealType; label: string }[] = [
   { id: 'jantar', label: 'Jantar' },
 ];
 
+export const MEAL_KINDS: { id: import('./types').MealKind; label: string }[] = [...MEALS, { id: 'outro', label: 'Outro' }];
+export const mealLabel = (k: string) => MEAL_KINDS.find((m) => m.id === k)?.label ?? 'Refeição';
+/** Sugere o tipo de refeição pela hora. */
+export const kindForHour = (h: number): import('./types').MealKind =>
+  h < 10 ? 'cafe' : h < 15 ? 'almoco' : h < 18 ? 'lanche' : h < 23 ? 'jantar' : 'outro';
+export const mealsOn = (state: AppState, day: DateKey) =>
+  (state.meals || []).filter((m) => m.date === day).sort((a, b) => (a.time < b.time ? -1 : 1));
+
 export const sumMacros = (items: FoodEntry[]) =>
   items.reduce(
     (a, f) => ({
@@ -144,13 +152,8 @@ export const dayScore = (state: AppState, day: DateKey = todayKey()) => {
   const session = state.sessions.find((s) => s.date === day);
   const workout = session ? sessionProgress(session) : splitId ? 0 : 1; // descanso = meta cumprida
 
-  // macros: média do quanto cada meta foi atingida; passar >15% das kcal penaliza
-  const m = sumMacros(state.foods.filter((f) => f.date === day));
-  const g = state.goals;
-  const ratio = (v: number, goal: number) => (goal ? clamp(v / goal) : 1);
-  const kcalR = g.kcal ? m.kcal / g.kcal : 1;
-  const kcalScore = kcalR > 1.15 ? clamp(1 - (kcalR - 1.15) * 2) : clamp(kcalR);
-  const nutrition = (kcalScore + ratio(m.protein, g.protein) + ratio(m.carbs, g.carbs) + ratio(m.fat, g.fat)) / 4;
+  // alimentação: refeições registradas no dia vs. meta
+  const nutrition = clamp(mealsOn(state, day).length / (state.goals.meals || 4));
 
   // hábitos
   const hs = activeHabits(state, day);
@@ -170,9 +173,7 @@ export const buildProgress = (state: AppState, name: string) => {
   const sessions7 = state.sessions.filter((s) => s.completed && week.includes(s.date));
   const last = [...state.sessions].filter((s) => s.completed).sort((a, b) => (a.date < b.date ? 1 : -1))[0];
   const lastSplit = last && state.splits.find((x) => x.id === last.splitId);
-  const kcalDays = week.filter((d) => d !== today).map((d) => sumMacros(state.foods.filter((f) => f.date === d)).kcal).filter((k) => k > 0);
-  const adherence = kcalDays.length && state.goals.kcal
-    ? Math.round((kcalDays.reduce((a, k) => a + clamp(1 - Math.abs(k - state.goals.kcal) / state.goals.kcal), 0) / kcalDays.length) * 100) : 0;
+  const meals7 = (state.meals || []).filter((m) => week.includes(m.date)).length;
   let body: { weight?: number; weightDelta30?: number; bodyFat?: number } | undefined;
   if (state.profile.shareBody) {
     const b = [...state.body].sort((x, y) => (x.date < y.date ? 1 : -1));
@@ -189,7 +190,8 @@ export const buildProgress = (state: AppState, name: string) => {
     habitsToday: `${done}/${hs.length}`,
     workouts7: sessions7.length,
     lastWorkout: last ? { date: last.date, name: lastSplit ? `Treino ${lastSplit.letter} · ${lastSplit.name}` : 'Treino', volume: Math.round(sessionVolume(last)) } : undefined,
-    kcalAdherence7: adherence,
+    meals7,
+    mealsToday: mealsOn(state, today).length,
     waterToday: state.goals.water ? clamp((state.water[today] || 0) / state.goals.water) : 0,
     body,
     updatedAt: new Date().toISOString(),

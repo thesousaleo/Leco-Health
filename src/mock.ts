@@ -1,4 +1,4 @@
-import type { AppState, BodyLog, FoodEntry, Habit, MealType, NoteEntry, SleepLog, Split, WorkoutSession } from './types';
+import type { AppState, BodyLog, FoodEntry, Habit, MealLog, NoteEntry, SleepLog, Split, WorkoutSession } from './types';
 import { addDays, round1, todayKey, uid, weekday } from './utils';
 
 /* Biblioteca de alimentos (valores por 100 g/ml, ou por unidade quando unit = 'un') */
@@ -159,38 +159,28 @@ export function buildMockState(): AppState {
     });
   }
 
-  /* ── alimentação ── */
-  const lib = (n: string) => FOOD_LIBRARY.find((f) => f.name === n)!;
-  const food = (date: string, meal: MealType, n: string, qty: number): FoodEntry => {
-    const ref = lib(n);
-    return { id: uid(), date, meal, name: ref.name, qty, unit: ref.unit, ...macrosFor(ref, qty) };
+  /* ── alimentação (registro simples) ── */
+  const MENU: Record<string, string[]> = {
+    cafe: ['3 ovos mexidos, cuscuz e café preto', 'Pão francês com ovo e mamão', 'Tapioca com queijo e café com leite', 'Iogurte com aveia e banana'],
+    almoco: ['Arroz, feijão, frango grelhado e salada', 'Arroz, feijão, carne moída e legumes', 'Macarrão com frango e salada verde', 'Arroz, feijão, peixe assado e farofa'],
+    lanche: ['Iogurte natural com aveia', 'Banana com pasta de amendoim', 'Sanduíche natural', 'Fruta e castanhas'],
+    treino: ['Whey com banana', 'Pão com ovo antes do treino'],
+    jantar: ['Tilápia com batata-doce e salada', 'Omelete com legumes', 'Frango, arroz e brócolis', 'Sopa de legumes com frango'],
   };
-  const foods: FoodEntry[] = [];
+  const pick = (k: string) => MENU[k][Math.floor(r() * MENU[k].length)];
+  const meals: MealLog[] = [];
   for (let d = 6; d >= 0; d--) {
     const date = addDays(today, -d);
-    const v = (q: number) => Math.round(q * (0.85 + r() * 0.3) / 5) * 5;
-    foods.push(
-      food(date, 'cafe', 'Ovo inteiro', 3),
-      food(date, 'cafe', r() > 0.5 ? 'Pão francês' : 'Cuscuz de milho', r() > 0.5 ? 1 : 150),
-      food(date, 'cafe', 'Mamão papaia', v(150)),
-      food(date, 'almoco', 'Arroz branco cozido', v(200)),
-      food(date, 'almoco', 'Feijão carioca cozido', v(140)),
-      food(date, 'almoco', r() > 0.5 ? 'Peito de frango grelhado' : 'Patinho moído', v(170)),
-      food(date, 'almoco', 'Salada verde', 80),
-      food(date, 'almoco', 'Azeite de oliva', 10),
-    );
-    if (d === 0) continue; // hoje: só café e almoço registrados
-    foods.push(
-      food(date, 'lanche', 'Iogurte natural', 170),
-      food(date, 'lanche', 'Aveia em flocos', v(40)),
-      food(date, 'treino', 'Whey protein', 30),
-      food(date, 'treino', 'Banana prata', 1),
-      food(date, 'jantar', r() > 0.4 ? 'Tilápia grelhada' : 'Peito de frango grelhado', v(160)),
-      food(date, 'jantar', 'Batata-doce cozida', v(220)),
-      food(date, 'jantar', 'Salada verde', 100),
-    );
-    if (r() > 0.6) foods.push(food(date, 'lanche', 'Pasta de amendoim', 20));
+    const plan: [MealLog['kind'], string][] = d === 0
+      ? [['cafe', '07:20'], ['almoco', '12:30']]
+      : [['cafe', '07:15'], ['almoco', '12:20'], ['lanche', '16:00'], ['treino', '18:10'], ['jantar', '20:30']];
+    for (const [kind, time] of plan) {
+      if (d > 0 && kind === 'lanche' && r() > 0.7) continue;
+      meals.push({ id: uid(), date, time, kind, description: pick(kind), photos: [],
+        note: kind === 'jantar' && r() > 0.8 ? 'Comi mais do que precisava 😅' : undefined });
+    }
   }
+  const foods: FoodEntry[] = [];
 
   const water: Record<string, number> = {};
   for (let d = 13; d >= 1; d--) water[addDays(today, -d)] = Math.round((2600 + r() * 1300) / 250) * 250;
@@ -268,11 +258,12 @@ export function buildMockState(): AppState {
   return {
     meta: { version: 1, createdAt: now, updatedAt: now },
     profile: { name: 'Leonardo' },
-    goals: { kcal: 2600, protein: 180, carbs: 300, fat: 75, water: 3500 },
+    goals: { kcal: 2600, protein: 180, carbs: 300, fat: 75, water: 3500, meals: 4 },
     splits,
     schedule,
     sessions,
     foods,
+    meals,
     water,
     habits,
     habitLogs,
@@ -287,11 +278,12 @@ export function buildEmptyState(): AppState {
   return {
     meta: { version: 1, createdAt: now, updatedAt: now },
     profile: { name: '' },
-    goals: { kcal: 2400, protein: 160, carbs: 280, fat: 70, water: 3000 },
+    goals: { kcal: 2400, protein: 160, carbs: 280, fat: 70, water: 3000, meals: 4 },
     splits: [],
     schedule: { 0: null, 1: null, 2: null, 3: null, 4: null, 5: null, 6: null },
     sessions: [],
     foods: [],
+    meals: [],
     water: {},
     habits: [],
     habitLogs: {},

@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type {
-  AppState, BodyLog, DateKey, Exercise, FoodEntry, Goals, Habit, ID, NoteEntry, SetLog, SleepLog, Split, WorkoutSession,
+  AppState, BodyLog, MealLog, DateKey, Exercise, FoodEntry, Goals, Habit, ID, NoteEntry, SetLog, SleepLog, Split, WorkoutSession,
 } from './types';
 import { buildEmptyState, buildMockState } from './mock';
 import { lastPerformance, todayKey, uid } from './utils';
@@ -34,9 +34,17 @@ export const localAdapter: StorageAdapter = {
   },
 };
 
+/** Completa campos que backups/versões antigas não tinham. */
+export function normalizeState(s: AppState): AppState {
+  if (!Array.isArray(s.meals)) s.meals = [];
+  if (!Array.isArray(s.foods)) s.foods = [];
+  if (!s.goals.meals) s.goals.meals = 4;
+  return s;
+}
+
 export function validateState(x: unknown): x is AppState {
   const s = x as AppState;
-  return !!s && typeof s === 'object' && Array.isArray(s.splits) && Array.isArray(s.foods) &&
+  return !!s && typeof s === 'object' && Array.isArray(s.splits) &&
     Array.isArray(s.habits) && typeof s.goals === 'object' && Array.isArray(s.sessions);
 }
 
@@ -137,6 +145,9 @@ function makeActions(mutate: (fn: (d: AppState) => void) => void, get: () => App
     addFood: (f: Omit<FoodEntry, 'id'>) => mutate((d) => { d.foods.push({ ...f, id: uid() }); }),
     updateFood: (id: ID, f: Partial<FoodEntry>) => mutate((d) => { Object.assign(d.foods.find((x) => x.id === id)!, f); }),
     deleteFood: (id: ID) => mutate((d) => { d.foods = d.foods.filter((x) => x.id !== id); }),
+    addMeal: (m: Omit<MealLog, 'id'>) => mutate((d) => { d.meals.push({ ...m, id: uid() }); }),
+    updateMeal: (id: ID, m: Partial<MealLog>) => mutate((d) => { Object.assign(d.meals.find((x) => x.id === id)!, m); }),
+    deleteMeal: (id: ID) => mutate((d) => { d.meals = d.meals.filter((x) => x.id !== id); }),
     addWater: (ml: number, date: DateKey = todayKey()) =>
       mutate((d) => { d.water[date] = Math.max(0, (d.water[date] || 0) + ml); }),
 
@@ -169,7 +180,7 @@ function makeActions(mutate: (fn: (d: AppState) => void) => void, get: () => App
     deleteNote: (id: ID) => mutate((d) => { d.notes = d.notes.filter((x) => x.id !== id); }),
 
     // backup
-    replaceAll: (s: AppState) => mutate((d) => { Object.assign(d, s); }),
+    replaceAll: (s: AppState) => mutate((d) => { Object.assign(d, normalizeState(structuredClone(s))); }),
     resetDemo: () => mutate((d) => { Object.assign(d, buildMockState()); }),
     clearAll: () => mutate((d) => { Object.assign(d, buildEmptyState()); }),
   };
@@ -190,7 +201,7 @@ const StoreCtx = createContext<Ctx | null>(null);
 export function StoreProvider({ children, adapter = localAdapter }: { children: React.ReactNode; adapter?: StorageAdapter }) {
   const [state, setState] = useState<AppState>(() => {
     const loaded = adapter.load();
-    if (loaded && validateState(loaded)) return loaded;
+    if (loaded && validateState(loaded)) return normalizeState(loaded);
     return buildMockState();
   });
   const ref = useRef(state);

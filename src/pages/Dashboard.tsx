@@ -4,18 +4,21 @@ import { useStore } from '../store';
 import type { TabId } from '../types';
 import {
   activeHabits, dayScore, fmtLong, greeting, isHabitDone, lastNDays, nf, overallStreak, sessionProgress,
-  sumMacros, todayKey, weekday, lastPerformance, addDays, relDay,
+  todayKey, weekday, lastPerformance, addDays, relDay, mealsOn, mealLabel, MEALS,
 } from '../utils';
-import { Card, DotDial, HatchColumns, heatColor, HeatLegend, RoundButton, SegmentGauge, Tile } from '../components/ui';
+import { Card, DotDial, heatColor, HeatLegend, RoundButton, SegmentGauge, Tile } from '../components/ui';
 import { useRestTimer } from '../components/RestTimer';
+import { Thumb } from './Nutrition';
+import { LuCamera } from 'react-icons/lu';
 
 export default function Dashboard({ go }: { go: (t: TabId) => void }) {
   const { state, actions, toast } = useStore();
   const today = todayKey();
   const score = dayScore(state, today);
-  const macros = sumMacros(state.foods.filter((f) => f.date === today));
   const g = state.goals;
-  const remaining = g.kcal - macros.kcal;
+  const todayMeals = mealsOn(state, today);
+  const mealGoal = g.meals || 4;
+  const lastMeal = todayMeals[todayMeals.length - 1];
   const split = state.splits.find((s) => s.id === state.schedule[weekday(today)]);
   const session = state.sessions.find((s) => s.date === today);
   const habits = activeHabits(state);
@@ -28,27 +31,12 @@ export default function Dashboard({ go }: { go: (t: TabId) => void }) {
   const prev7 = prev7Days.map((d) => dayScore(state, d).total);
   const prevAvg = prev7.reduce((a, b) => a + b, 0) / 7;
   const beaten = prev7.filter((s) => score.total > s).length;
-  const metas = [score.workout >= 1, score.nutrition >= 0.9, score.habits >= 0.8].filter(Boolean).length;
-  const kcalAvg = prev7Days.map((d) => sumMacros(state.foods.filter((f) => f.date === d)).kcal).reduce((a, b) => a + b, 0) / 7 || 1;
+  const metas = [score.workout >= 1, score.nutrition >= 1, score.habits >= 0.8].filter(Boolean).length;
   const consistency7 = Math.round((lastNDays(7).reduce((a, d) => {
     const hs = activeHabits(state, d);
     return a + (hs.length ? hs.filter((h) => isHabitDone(state, h.id, d)).length / hs.length : 0);
   }, 0) / 7) * 100);
   const days21 = lastNDays(21);
-
-  const ratio = (v: number, goal: number) => (goal ? v / goal : 0);
-  const cols = [
-    { label: 'Proteína', v: macros.protein, goal: g.protein, unit: 'g' },
-    { label: 'Carbo', v: macros.carbs, goal: g.carbs, unit: 'g' },
-    { label: 'Gordura', v: macros.fat, goal: g.fat, unit: 'g' },
-    { label: 'Água', v: water / 1000, goal: g.water / 1000, unit: 'L' },
-  ].map((c) => ({
-    label: c.label,
-    value: ratio(c.v, c.goal),
-    display: c.unit === 'L' ? `${nf(c.v, 1)}L` : `${nf(c.v)}g`,
-    pct: `${Math.round(ratio(c.v, c.goal) * 100)}%`,
-    up: ratio(c.v, c.goal) >= 0.5,
-  }));
 
   const startOrGo = () => {
     if (split && !session) { actions.startSession(split.id); toast(`Treino ${split.letter} iniciado`); }
@@ -121,11 +109,11 @@ export default function Dashboard({ go }: { go: (t: TabId) => void }) {
           <div className="grid grid-cols-2 gap-3 md:gap-4 mt-6 md:mt-8">
             <Tile className="p-4 md:p-5">
               <div className="flex flex-wrap items-start justify-between gap-2">
-                <p className="text-[15px] md:text-[16px] text-ink/80 leading-tight">Calorias<br />restantes</p>
-                <span className="inline-flex items-center h-7 px-3 rounded-full bg-orange text-white text-[13px] font-medium tabular-nums">{Math.round((macros.kcal / g.kcal) * 100)}% ↗</span>
+                <p className="text-[15px] md:text-[16px] text-ink/80 leading-tight">Refeições<br />de hoje</p>
+                <span className="inline-flex items-center h-7 px-3 rounded-full bg-orange text-white text-[13px] font-medium tabular-nums">{Math.round((todayMeals.length / mealGoal) * 100)}% ↗</span>
               </div>
-              <p className="text-[34px] md:text-[42px] font-medium tracking-[-0.04em] text-ink mt-4 md:mt-6 tabular-nums leading-none">{nf(Math.abs(remaining))}</p>
-              <p className="text-[12.5px] text-muted mt-1.5">{remaining >= 0 ? 'kcal' : 'kcal acima'} · {nf(macros.kcal)} / {nf(g.kcal)}</p>
+              <p className="text-[34px] md:text-[42px] font-medium tracking-[-0.04em] text-ink mt-4 md:mt-6 tabular-nums leading-none">{todayMeals.length}<span className="text-[18px] text-muted tracking-normal">/{mealGoal}</span></p>
+              <p className="text-[12.5px] text-muted mt-1.5 truncate">{lastMeal ? `última: ${mealLabel(lastMeal.kind).toLowerCase()} às ${lastMeal.time}` : 'nenhuma ainda'}</p>
             </Tile>
             <Tile className="p-4 md:p-5">
               <div className="flex flex-wrap items-start justify-between gap-2">
@@ -183,14 +171,33 @@ export default function Dashboard({ go }: { go: (t: TabId) => void }) {
 
           <Card className="p-5 md:p-6">
             <div className="flex items-start justify-between gap-3">
-              <p className="text-[17px] md:text-[19px] text-ink leading-tight">Macros<br />de hoje</p>
-              <RoundButton label="Abrir nutrição" onClick={() => go('nutricao')}><LuEllipsis size={20} /></RoundButton>
+              <p className="text-[17px] md:text-[19px] text-ink leading-tight">Refeições<br />de hoje</p>
+              <RoundButton label="Registrar refeição" onClick={() => go('nutricao')}><LuCamera size={19} /></RoundButton>
             </div>
             <p className="mt-4 mb-5 flex items-baseline gap-2.5">
-              <span className="text-[36px] md:text-[40px] font-medium tracking-[-0.045em] leading-none text-ink tabular-nums">{nf(macros.kcal)} kcal</span>
+              <span className="text-[36px] md:text-[40px] font-medium tracking-[-0.045em] leading-none text-ink tabular-nums">{todayMeals.length} {todayMeals.length === 1 ? 'refeição' : 'refeições'}</span>
               <span className="text-[13px] text-muted">hoje</span>
             </p>
-            <HatchColumns items={cols} height={130} />
+            <div className="grid grid-cols-4 gap-2 md:gap-2.5">
+              {MEALS.filter((k) => k.id !== 'treino').map((k) => {
+                const same = todayMeals.filter((x) => x.kind === k.id);
+                const m = same.find((x) => x.photos.length) ?? same[same.length - 1];
+                return (
+                  <button key={k.id} onClick={() => go('nutricao')} className="press flex flex-col items-stretch min-w-0">
+                    {m?.photos[0] ? (
+                      <Thumb id={m.photos[0]} className="w-full aspect-[3/4] rounded-[16px]" />
+                    ) : m ? (
+                      <div className="w-full aspect-[3/4] rounded-[16px] bg-gradient-to-b from-orange to-[#EE5A28] text-white grid place-items-center">
+                        <span className="h-6 px-2 rounded-full bg-ink text-[11.5px] font-semibold grid place-items-center tabular-nums">{m.time}</span>
+                      </div>
+                    ) : (
+                      <div className="w-full aspect-[3/4] rounded-[16px] bg-cream hatch opacity-60 grid place-items-center text-ink/50 text-[20px]">+</div>
+                    )}
+                    <p className={m ? 'text-[12.5px] mt-2 text-center truncate text-ink font-medium' : 'text-[12.5px] mt-2 text-center truncate text-muted'}>{k.label.replace(' da Manhã', '')}</p>
+                  </button>
+                );
+              })}
+            </div>
           </Card>
           </div>
         </div>

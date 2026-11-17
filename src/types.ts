@@ -69,12 +69,25 @@ export interface FoodEntry {
   fat: number;
 }
 
+/** Registro simples de refeição (sem macros). */
+export type MealKind = MealType | 'outro';
+export interface MealLog {
+  id: ID;
+  date: DateKey;
+  time: string; // 'HH:MM'
+  kind: MealKind;
+  description: string;
+  photos: ID[]; // ids das fotos (IndexedDB local + Supabase Storage)
+  note?: string;
+}
+
 export interface Goals {
   kcal: number;
   protein: number;
   carbs: number;
   fat: number;
   water: number; // ml
+  meals?: number; // refeições registradas por dia (meta)
 }
 
 /* ── Hábitos ───────────────────────────────────────────────── */
@@ -126,7 +139,8 @@ export interface AppState {
   splits: Split[];
   schedule: WeekSchedule;
   sessions: WorkoutSession[];
-  foods: FoodEntry[];
+  foods: FoodEntry[]; // legado (contagem de macros) — mantido para backups antigos
+  meals: MealLog[];
   water: Record<DateKey, number>;
   habits: Habit[];
   habitLogs: Record<DateKey, ID[]>;
