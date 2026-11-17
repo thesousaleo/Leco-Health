@@ -101,3 +101,6 @@
 
 @keyframes confetti { 0% { transform: translate3d(0,-10vh,0) rotate(0); opacity: 1; } 100% { transform: translate3d(var(--dx), 105vh, 0) rotate(var(--rot)); opacity: .9; } }
 @utility animate-confetti { animation: confetti var(--dur, 2.4s) cubic-bezier(.2,.6,.4,1) forwards; }
+
+/* Ícones nunca encolhem dentro de botões (evita ícone virar um ponto em telas estreitas) */
+button > svg, a > svg { flex-shrink: 0; }

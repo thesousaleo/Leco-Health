@@ -62,6 +62,29 @@ jobs:
           PY
           grep -n -A3 "signingConfigs" android/app/build.gradle
 
+      - name: Travar o tamanho do texto da WebView (o app tem o próprio ajuste)
+        run: |
+          f=$(find android/app/src/main/java -name MainActivity.java | head -1)
+          pkg=$(grep -m1 '^package' "$f")
+          cat > "$f" <<JAVA
+          $pkg
+
+          import android.os.Bundle;
+          import com.getcapacitor.BridgeActivity;
+
+          public class MainActivity extends BridgeActivity {
+              @Override
+              public void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  if (getBridge() != null && getBridge().getWebView() != null) {
+                      getBridge().getWebView().getSettings().setTextZoom(100);
+                  }
+              }
+          }
+          JAVA
+          sed -i 's/^          //' "$f"
+          cat "$f"
+
       - name: Compilar APK
         working-directory: android
         run: |

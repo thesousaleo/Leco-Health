@@ -131,21 +131,21 @@ function MealCard({ meal, onEdit, onOpenPhoto, onRepeat }: { meal: MealLog; onEd
       <Card className="p-3 md:p-4 flex gap-3 md:gap-4">
         {first ? (
           <button onClick={() => onOpenPhoto(0)} className="press relative shrink-0" aria-label="Ver foto">
-            <Thumb id={first} className="size-24 md:size-28 rounded-[20px]" />
+            <Thumb id={first} className="size-20 min-[360px]:size-24 md:size-28 rounded-[20px]" />
             {meal.photos.length > 1 && (
               <span className="absolute bottom-1.5 right-1.5 h-6 px-2 rounded-full bg-ink/80 text-white text-[11px] font-semibold grid place-items-center">+{meal.photos.length - 1}</span>
             )}
           </button>
         ) : (
-          <button onClick={onEdit} className="press size-24 md:size-28 rounded-[20px] bg-cream grid place-items-center text-ink/30 shrink-0" aria-label="Adicionar foto">
+          <button onClick={onEdit} className="press size-20 min-[360px]:size-24 md:size-28 rounded-[20px] bg-cream grid place-items-center text-ink/30 shrink-0" aria-label="Adicionar foto">
             <LuCamera size={22} />
           </button>
         )}
         <div className="flex-1 min-w-0 py-1">
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center h-6 px-2.5 rounded-full bg-blush/70 text-orange text-[12px] font-medium">{mealLabel(meal.kind)}</span>
-            <span className="text-[13px] text-muted tabular-nums">{meal.time}</span>
-            <span className="ml-auto flex -mr-1 -mt-1">
+            <span className="min-w-0 truncate h-6 leading-6 px-2.5 rounded-full bg-blush/70 text-orange text-[12px] font-medium">{mealLabel(meal.kind)}</span>
+            <span className="shrink-0 text-[13px] text-muted tabular-nums">{meal.time}</span>
+            <span className="ml-auto shrink-0 flex -mr-1 -mt-1">
               <IconButton label="Repetir agora" className="size-8" onClick={onRepeat}><LuRepeat size={14} /></IconButton>
               <IconButton label="Editar" className="size-8" onClick={onEdit}><LuPencil size={14} /></IconButton>
             </span>

@@ -1,4 +1,18 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+
+/** Largura real do contêiner, para o texto do gráfico não encolher no celular. */
+function useWidth(fallback = 600) {
+  const [el, setEl] = useState<HTMLDivElement | null>(null);
+  const [w, setW] = useState(fallback);
+  useEffect(() => {
+    if (!el) return;
+    const upd = () => { const cw = Math.round(el.clientWidth); if (cw > 0) setW(Math.max(260, cw)); };
+    upd();
+    const ro = new ResizeObserver(upd); ro.observe(el);
+    return () => ro.disconnect();
+  }, [el]);
+  return [setEl, w] as const;
+}
 import { nf } from '../utils';
 
 /* Gráficos em SVG puro, com cores do tema (funcionam no claro/escuro e com qualquer cor de destaque). */
@@ -29,7 +43,7 @@ export function LineChart({ data, color = 'var(--color-orange)', unit = '', heig
   /** linha de tendência (mesmo tamanho de data) */
   trend?: (number | null)[];
 }) {
-  const W = 600, H = height;
+  const [boxRef, W] = useWidth(); const H = height;
   const P = { l: 40, r: 14, t: 16, b: 26 };
   const [hover, setHover] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -58,7 +72,7 @@ export function LineChart({ data, color = 'var(--color-orange)', unit = '', heig
   const labelEvery = Math.ceil(data.length / 7);
 
   return (
-    <div className="relative">
+    <div className="relative" ref={boxRef}>
       <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="w-full touch-pan-y select-none" style={{ height: 'auto', aspectRatio: `${W}/${H}` }}
         onPointerMove={onMove} onPointerDown={onMove} onPointerLeave={() => setHover(null)}>
         <defs>
@@ -108,7 +122,7 @@ export function BarChart({ data, color = 'var(--color-orange)', unit = '', heigh
   data: Pt[]; color?: string; unit?: string; height?: number; goal?: number; decimals?: number;
   dots?: unknown;
 }) {
-  const W = 600, H = height;
+  const [boxRef, W] = useWidth(); const H = height;
   const P = { l: 10, r: 10, t: 22, b: 26 };
   const [hover, setHover] = useState<number | null>(null);
   if (!data.length) return <div className="h-32 grid place-items-center text-[13px] text-muted">Sem dados ainda.</div>;
@@ -116,6 +130,7 @@ export function BarChart({ data, color = 'var(--color-orange)', unit = '', heigh
   const bw = (W - P.l - P.r) / data.length;
   const y = (v: number) => P.t + (1 - v / max) * (H - P.t - P.b);
   return (
+    <div ref={boxRef}>
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full select-none" style={{ height: 'auto', aspectRatio: `${W}/${H}` }} onPointerLeave={() => setHover(null)}>
       {goal != null && <line x1={P.l} x2={W - P.r} y1={y(goal)} y2={y(goal)} style={{ stroke: color, strokeOpacity: 0.45 }} strokeDasharray="5 6" />}
       {data.map((d, i) => {
@@ -139,5 +154,6 @@ export function BarChart({ data, color = 'var(--color-orange)', unit = '', heigh
         );
       })}
     </svg>
+    </div>
   );
 }

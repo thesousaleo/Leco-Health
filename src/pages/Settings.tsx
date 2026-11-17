@@ -27,10 +27,10 @@ export default function Settings({ go }: { go?: (t: TabId) => void }) {
   return (
     <div>
       <PageHeader title="Ajustes" />
-      <div className="flex gap-1 p-1 rounded-full bg-surface mb-5 md:w-fit overflow-x-auto no-scrollbar">
+      <div className="grid grid-cols-3 min-[360px]:grid-cols-4 gap-1 p-1 rounded-[24px] bg-surface mb-5 md:flex md:w-fit md:rounded-full">
         {TABS.map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={cx('press shrink-0 md:flex-none h-10 px-4 rounded-full text-[14px] font-medium transition-colors whitespace-nowrap',
+            className={cx('press min-w-0 h-10 px-1 md:px-4 rounded-full text-[13px] md:text-[14px] font-medium transition-colors whitespace-nowrap truncate',
               tab === t.id ? 'bg-ink text-on-ink' : 'text-ink/55')}>
             {t.label}
           </button>
@@ -353,11 +353,11 @@ function AppearanceTab({ go }: { go?: (t: TabId) => void }) {
         <p className="text-[12.5px] text-muted mt-2">Automático segue o modo claro/escuro do celular.</p>
       </Section>
       <Section title="Cor de destaque">
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 min-[400px]:grid-cols-3 gap-2">
           {ACCENTS.map((a) => (
             <button key={a.id} onClick={() => set({ accent: a.id })}
-              className={cx('press h-12 rounded-2xl flex items-center gap-2.5 px-3 text-[14px]', p.accent === a.id ? 'bg-ink text-on-ink' : 'bg-cream text-ink/75')}>
-              <span className="size-5 rounded-full shrink-0" style={{ background: a.color }} />{a.label}
+              className={cx('press h-12 min-w-0 rounded-2xl flex items-center gap-2 px-2.5 text-[13.5px]', p.accent === a.id ? 'bg-ink text-on-ink' : 'bg-cream text-ink/75')}>
+              <span className="size-4 rounded-full shrink-0" style={{ background: a.color }} /><span className="truncate">{a.label}</span>
             </button>
           ))}
         </div>

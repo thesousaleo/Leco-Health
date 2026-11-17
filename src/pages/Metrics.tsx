@@ -26,7 +26,7 @@ export default function Metrics() {
   return (
     <div>
       <PageHeader title="Registros" sub="Peso, sono e diário de saúde" />
-      <div className="mb-4 overflow-x-auto no-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
+      <div className="mb-4">
         <Segmented value={view} onChange={setView} options={[
           { value: 'peso', label: <><LuScale size={15} /> Peso</> },
           { value: 'sono', label: <><LuMoon size={15} /> Sono</> },
@@ -209,8 +209,8 @@ function Sleep() {
         </Field>
 
         <div className="grid grid-cols-2 gap-2">
-          <Field label="Dormi às"><Input type="time" className="min-w-0 px-3 text-[18px] font-medium" value={f.bedtime} onChange={(e) => setF({ ...f, bedtime: e.target.value || f.bedtime })} /></Field>
-          <Field label="Acordei às"><Input type="time" className="min-w-0 px-3 text-[18px] font-medium" value={f.wake} onChange={(e) => setF({ ...f, wake: e.target.value || f.wake })} /></Field>
+          <Field label="Dormi às"><Input type="time" className="min-w-0 px-2.5 text-[16px] font-medium" value={f.bedtime} onChange={(e) => setF({ ...f, bedtime: e.target.value || f.bedtime })} /></Field>
+          <Field label="Acordei às"><Input type="time" className="min-w-0 px-2.5 text-[16px] font-medium" value={f.wake} onChange={(e) => setF({ ...f, wake: e.target.value || f.wake })} /></Field>
         </div>
         <div className="mt-3 rounded-2xl bg-cream px-4 py-3 flex items-baseline justify-between">
           <span className="text-[13.5px] text-muted">Tempo de sono</span>

@@ -197,9 +197,9 @@ function MealsCard({ go }: { go: (t: TabId) => void }) {
   return (
     <Card className="p-5 md:p-6">
       <SectionTitle title="Refeições de hoje" action={meals.length ? 'Ver diário' : undefined} onAction={() => go('nutricao')} />
-      <div className="flex gap-3 overflow-x-auto no-scrollbar -mx-5 px-5 md:-mx-6 md:px-6">
+      <div className="flex gap-3 overflow-x-auto no-scrollbar">
         {meals.map((m) => (
-          <button key={m.id} onClick={() => go('nutricao')} className="press w-[96px] shrink-0 text-left">
+          <button key={m.id} onClick={() => go('nutricao')} className="press w-[calc((100%-1.5rem)/3)] max-w-[120px] shrink-0 text-left">
             {m.photos[0] ? (
               <Thumb id={m.photos[0]} className="w-full aspect-square rounded-2xl" />
             ) : (
@@ -209,7 +209,7 @@ function MealsCard({ go }: { go: (t: TabId) => void }) {
             <p className="text-[12px] text-muted tabular-nums">{m.time}</p>
           </button>
         ))}
-        <button onClick={() => go('nutricao')} className="press w-[96px] shrink-0 text-left">
+        <button onClick={() => go('nutricao')} className="press w-[calc((100%-1.5rem)/3)] max-w-[120px] shrink-0 text-left">
           <div className="w-full aspect-square rounded-2xl border-2 border-dashed border-ink/15 grid place-items-center text-ink/45"><LuCamera size={22} /></div>
           <p className="text-[13px] font-medium text-ink mt-2">Registrar</p>
           <p className="text-[12px] text-muted">{meals.length ? 'mais uma' : 'primeira'}</p>
