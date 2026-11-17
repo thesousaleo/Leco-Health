@@ -9,7 +9,7 @@ import {
   activeHabits, addDays, dueHabits, fmtWeekdayShort, freqLabel, fromKey, habitCount, habitStreak, isHabitDone, isHabitScheduled, lastNDays,
   overallStreak, todayKey, toKey, weekDoneCount,
 } from '../utils';
-import { Button, Card, cx, DeleteButton, Empty, Field, IconButton, Input, Modal, NumInput, PageHeader, ProgressBar, Segmented } from '../components/ui';
+import { Button, Card, cx, DeleteButton, Empty, Field, heatColor, HeatLegend, IconButton, Input, Modal, NumInput, PageHeader, ProgressBar, Segmented } from '../components/ui';
 
 const CATS: { id: HabitCategory; icon: React.ReactNode }[] = [
   { id: 'Saúde', icon: <LuHeartPulse size={15} /> },
@@ -71,6 +71,7 @@ export default function Habits() {
           ) : (
             <WeekView onMonth={setMonth} />
           )}
+          <MonthHeatmap habits={habits} />
         </>
       )}
 
@@ -235,6 +236,101 @@ function MonthModal({ habit, onClose }: { habit: Habit; onClose: () => void }) {
       </div>
       <p className="text-[12.5px] text-muted mt-3">{freqLabel(habit)} · toque num dia para marcar ou desmarcar.</p>
     </Modal>
+  );
+}
+
+/* ── mapa do mês ─────────────────────────────────────────── */
+function MonthHeatmap({ habits }: { habits: Habit[] }) {
+  const { state } = useStore();
+  const today = todayKey();
+  const [filter, setFilter] = useState<string>('todos');
+  const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
+  const [sel, setSel] = useState<string | null>(null);
+  const habit = filter === 'todos' ? null : habits.find((h) => h.id === filter) ?? null;
+
+  const first = toKey(month);
+  const daysIn = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+  const lead = (month.getDay() + 6) % 7;
+  const days = [...Array(daysIn)].map((_, i) => addDays(first, i));
+
+  /** 0–1 = quanto do dia foi cumprido; null = nada a cumprir (ou futuro). */
+  const info = (d: string): { v: number | null; text: string } => {
+    if (d > today) return { v: null, text: 'Dia futuro' };
+    if (!habit) {
+      const due = dueHabits(state, d);
+      if (!due.length) return { v: null, text: 'Nenhum hábito programado' };
+      const n = due.filter((h) => isHabitDone(state, h.id, d)).length;
+      return { v: n / due.length, text: `${n} de ${due.length} hábitos · ${Math.round((n / due.length) * 100)}%` };
+    }
+    if (habit.createdAt && d < habit.createdAt) return { v: null, text: 'Antes de criar o hábito' };
+    const done = isHabitDone(state, habit.id, d);
+    if (habit.freq?.type === 'weekly') return { v: done ? 1 : null, text: done ? 'Feito' : 'Não feito' };
+    if (!isHabitScheduled(habit, d)) return { v: null, text: 'Não programado neste dia' };
+    if (habit.target && habit.target > 1) {
+      const c = done ? Math.max(habitCount(state, habit.id, d), habit.target) : habitCount(state, habit.id, d);
+      return { v: Math.min(1, c / habit.target), text: `${c} de ${habit.target}${habit.unit ? ' ' + habit.unit : ''}` };
+    }
+    return { v: done ? 1 : 0, text: done ? 'Feito' : 'Não feito' };
+  };
+
+  const vals = days.map((d) => info(d).v).filter((v): v is number => v != null);
+  const avg = vals.length ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) : 0;
+  const full = vals.filter((v) => v >= 1).length;
+  const MONTHS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  const lbl = `${MONTHS[month.getMonth()]} ${month.getFullYear()}`;
+  const isCurrent = first === toKey(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const selInfo = sel ? info(sel) : null;
+
+  return (
+    <Card className="p-5 md:p-6 mt-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[16px] font-semibold text-ink whitespace-nowrap">Mapa do mês</p>
+        <div className="flex items-center gap-1">
+          <IconButton label="Mês anterior" className="size-9" onClick={() => { setSel(null); setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1)); }}><LuChevronLeft size={17} /></IconButton>
+          <span className="text-[13.5px] font-medium text-ink min-w-[76px] text-center whitespace-nowrap">{lbl}</span>
+          <IconButton label="Próximo mês" className={cx('size-9', isCurrent && 'opacity-30 pointer-events-none')} onClick={() => { setSel(null); setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1)); }}><LuChevronRight size={17} /></IconButton>
+        </div>
+      </div>
+
+      <div className="flex gap-2 overflow-x-auto no-scrollbar mt-3 pb-1">
+        {[{ id: 'todos', name: 'Todos' }, ...habits].map((h) => (
+          <button key={h.id} onClick={() => { setFilter(h.id); setSel(null); }}
+            className={cx('press shrink-0 h-9 px-3.5 rounded-full text-[13px] font-medium whitespace-nowrap max-w-[180px] truncate',
+              filter === h.id ? 'bg-ink text-on-ink' : 'bg-cream text-ink/65')}>
+            {h.name}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 mt-4">
+        <div className="rounded-2xl bg-cream px-3 py-2.5"><p className="text-[12px] text-muted">Média</p><p className="text-[18px] font-semibold text-ink tabular-nums">{avg}%</p></div>
+        <div className="rounded-2xl bg-cream px-3 py-2.5"><p className="text-[12px] text-muted">Dias 100%</p><p className="text-[18px] font-semibold text-ink tabular-nums">{full}</p></div>
+        <div className="rounded-2xl bg-cream px-3 py-2.5"><p className="text-[12px] text-muted">Dias</p><p className="text-[18px] font-semibold text-ink tabular-nums">{vals.length}</p></div>
+      </div>
+
+      <div className="grid grid-cols-7 gap-1.5 text-center mt-4">
+        {['S', 'T', 'Q', 'Q', 'S', 'S', 'D'].map((d, i) => <span key={i} className="text-[11px] text-muted pb-0.5">{d}</span>)}
+        {[...Array(lead)].map((_, i) => <span key={'l' + i} />)}
+        {days.map((d) => {
+          const { v } = info(d);
+          const strong = v != null && v >= 0.6;
+          return (
+            <button key={d} disabled={d > today} onClick={() => setSel(sel === d ? null : d)}
+              className={cx('press aspect-square rounded-[10px] grid place-items-center text-[12.5px] tabular-nums transition-shadow',
+                v == null ? 'bg-ink/[0.04] text-ink/30' : strong ? 'text-white font-semibold' : 'text-ink/75',
+                d === today && 'ring-2 ring-ink/50', sel === d && 'ring-2 ring-ink', d > today && 'opacity-40')}
+              style={v != null ? { background: heatColor(v) } : undefined}>
+              {fromKey(d).getDate()}
+            </button>
+          );
+        })}
+      </div>
+
+      <p className="text-[13px] text-muted mt-3 min-h-[20px]">
+        {sel && selInfo ? <><span className="text-ink font-medium">{fromKey(sel).getDate()}/{fromKey(sel).getMonth() + 1}</span> · {selInfo.text}</> : 'Toque num dia para ver o detalhe.'}
+      </p>
+      <div className="mt-2"><HeatLegend /></div>
+    </Card>
   );
 }
 
