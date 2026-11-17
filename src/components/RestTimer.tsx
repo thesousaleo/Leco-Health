@@ -87,7 +87,7 @@ export function RestTimerProvider({ children, visible }: { children: React.React
     <Ctx.Provider value={{ start, preset, setPreset }}>
       {children}
       {(visible || active || flash) && (
-        <div className="fixed z-50 right-4 md:right-8 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] md:bottom-8 flex flex-col items-end gap-2">
+        <div className="fixed z-50 right-4 md:right-8 bottom-[calc(5.5rem+var(--sab))] md:bottom-8 flex flex-col items-end gap-2">
           {open && (
             <div className="w-[284px] rounded-[28px] bg-[#1C1B1A] text-white p-5 shadow-2xl animate-pop">
               <div className="flex items-center justify-between mb-4">

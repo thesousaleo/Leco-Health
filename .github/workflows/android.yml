@@ -62,27 +62,81 @@ jobs:
           PY
           grep -n -A3 "signingConfigs" android/app/build.gradle
 
-      - name: Travar o tamanho do texto da WebView (o app tem o próprio ajuste)
+      - name: Tela infinita e tamanho de texto fixo (MainActivity)
         run: |
           f=$(find android/app/src/main/java -name MainActivity.java | head -1)
           pkg=$(grep -m1 '^package' "$f")
-          cat > "$f" <<JAVA
-          $pkg
-
+          { echo "$pkg"; echo; cat <<'JAVA'
+          import android.graphics.Color;
+          import android.os.Build;
           import android.os.Bundle;
+          import android.view.View;
+          import android.view.Window;
+          import android.webkit.JavascriptInterface;
+          import android.webkit.WebView;
+          import androidx.core.graphics.Insets;
+          import androidx.core.view.ViewCompat;
+          import androidx.core.view.WindowCompat;
+          import androidx.core.view.WindowInsetsCompat;
+          import androidx.core.view.WindowInsetsControllerCompat;
           import com.getcapacitor.BridgeActivity;
 
           public class MainActivity extends BridgeActivity {
+              private volatile float insetTop = 0f, insetBottom = 0f;
+
+              public class Insets_ {
+                  @JavascriptInterface public String get() { return insetTop + "," + insetBottom; }
+                  @JavascriptInterface public void setLight(final boolean light) {
+                      runOnUiThread(() -> {
+                          WindowInsetsControllerCompat c = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+                          c.setAppearanceLightStatusBars(light);
+                          c.setAppearanceLightNavigationBars(light);
+                      });
+                  }
+              }
+
               @Override
               public void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
-                  if (getBridge() != null && getBridge().getWebView() != null) {
-                      getBridge().getWebView().getSettings().setTextZoom(100);
+                  Window w = getWindow();
+                  // Tela infinita: o app desenha por trás da barra de status e da barra de navegação.
+                  WindowCompat.setDecorFitsSystemWindows(w, false);
+                  w.setStatusBarColor(Color.TRANSPARENT);
+                  w.setNavigationBarColor(Color.TRANSPARENT);
+                  if (Build.VERSION.SDK_INT >= 29) {
+                      w.setStatusBarContrastEnforced(false);
+                      w.setNavigationBarContrastEnforced(false);
                   }
+                  if (getBridge() == null) return;
+                  final WebView wv = getBridge().getWebView();
+                  if (wv == null) return;
+                  wv.getSettings().setTextZoom(100);
+                  wv.addJavascriptInterface(new Insets_(), "LecoInsets");
+
+                  final View content = findViewById(android.R.id.content);
+                  ViewCompat.setOnApplyWindowInsetsListener(content, (v, insets) -> {
+                      Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+                      Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+                      float d = getResources().getDisplayMetrics().density;
+                      insetTop = bars.top / d;
+                      insetBottom = bars.bottom / d;
+                      // Teclado aberto: encolhe o app para o campo não ficar escondido.
+                      v.setPadding(bars.left, 0, bars.right, ime.bottom > bars.bottom ? ime.bottom : 0);
+                      wv.post(() -> wv.evaluateJavascript("window.__setInsets&&window.__setInsets(" + insetTop + "," + insetBottom + ")", null));
+                      return WindowInsetsCompat.CONSUMED;
+                  });
+                  ViewCompat.requestApplyInsets(content);
+              }
+
+              @Override
+              public void onResume() {
+                  super.onResume();
+                  View content = findViewById(android.R.id.content);
+                  if (content != null) ViewCompat.requestApplyInsets(content);
               }
           }
           JAVA
-          sed -i 's/^          //' "$f"
+          } > "$f"
           cat "$f"
 
       - name: Compilar APK

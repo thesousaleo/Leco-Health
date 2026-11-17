@@ -153,7 +153,7 @@ function Shell() {
       </aside>
 
       {/* Top bar mobile */}
-      <header className="md:hidden sticky top-0 z-40 flex items-center justify-between px-4 pt-[env(safe-area-inset-top)] h-[calc(4rem+env(safe-area-inset-top))] bg-canvas/85 backdrop-blur-xl">
+      <header className="md:hidden sticky top-0 z-40 flex items-center justify-between px-4 pt-[var(--sat)] h-[calc(4rem+var(--sat))] bg-canvas/85 backdrop-blur-xl">
         <Logo />
         <div className="flex items-center gap-2">
           <span className="text-[13px] font-semibold tabular-nums text-white px-3 h-8 rounded-full bg-orange grid place-items-center">{score}%</span>
@@ -165,13 +165,13 @@ function Shell() {
       </header>
 
       <main className="md:pl-64">
-        <div key={tab} className="mx-auto max-w-[1280px] px-4 md:px-8 pt-3 md:pt-8 pb-[calc(6.5rem+env(safe-area-inset-bottom))] md:pb-12 animate-page">
+        <div key={tab} className="mx-auto max-w-[1280px] px-4 md:px-8 pt-3 md:pt-8 pb-[calc(6.5rem+var(--sab))] md:pb-12 animate-page">
           {page}
         </div>
       </main>
 
       {/* Bottom nav mobile */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 px-3 pb-[max(.75rem,env(safe-area-inset-bottom))] pt-2 pointer-events-none">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 px-3 pb-[max(.75rem,var(--sab))] pt-2 pointer-events-none">
         <div className="pointer-events-auto mx-auto max-w-md grid rounded-full bg-surface p-1 shadow-[0_10px_30px_-10px_rgba(0,0,0,.3)]"
           style={{ gridTemplateColumns: `repeat(${mobileTabs.length}, minmax(0,1fr))` }}>
           {mobileTabs.map((t) => {

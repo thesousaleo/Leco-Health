@@ -26,6 +26,9 @@
   --color-peach: color-mix(in srgb, var(--color-orange) 62%, var(--color-surface));
   --color-blush: color-mix(in srgb, var(--color-orange) 24%, var(--color-surface));
   --ui-zoom: 1;
+  /* Áreas das barras do sistema. No APK o app nativo preenche os valores reais. */
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
 }
 :root[data-accent="verde"] { --color-orange: #16A34A; }
 :root[data-accent="azul"] { --color-orange: #2563EB; }

@@ -7,8 +7,12 @@ const config: CapacitorConfig = {
   backgroundColor: '#E9E5DF',
   android: {
     allowMixedContent: false,
-    // Android 15 desenha o app por baixo das barras do sistema; 'force' reserva esse espaço.
-    adjustMarginsForEdgeToEdge: 'force',
+    // Tela infinita: o app desenha por baixo das barras do sistema e o
+    // MainActivity informa a altura delas ao app (variáveis --sat/--sab).
+    adjustMarginsForEdgeToEdge: 'disable',
+  },
+  plugins: {
+    StatusBar: { overlaysWebView: true },
   },
 };
 

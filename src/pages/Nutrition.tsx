@@ -221,12 +221,12 @@ export function PhotoViewer({ ids, index, onClose }: { ids: string[]; index: num
       onTouchEnd={(e) => { if (touch.current == null) return; const dx = e.changedTouches[0].clientX - touch.current; if (Math.abs(dx) > 50) go(dx < 0 ? 1 : -1); touch.current = null; }}>
       {url ? <img src={url} alt="Foto da refeição" className="max-w-full max-h-full object-contain" onClick={(e) => e.stopPropagation()} />
         : <LuLoaderCircle size={28} className="animate-spin text-white/60" />}
-      <button aria-label="Fechar" onClick={onClose} className="press absolute top-[max(1rem,env(safe-area-inset-top))] right-4 size-11 rounded-full bg-white/15 text-white grid place-items-center"><LuX size={20} /></button>
+      <button aria-label="Fechar" onClick={onClose} className="press absolute top-[max(1rem,var(--sat))] right-4 size-11 rounded-full bg-white/15 text-white grid place-items-center"><LuX size={20} /></button>
       {ids.length > 1 && (
         <>
           <button aria-label="Anterior" onClick={(e) => { e.stopPropagation(); go(-1); }} className="press absolute left-3 size-11 rounded-full bg-white/15 text-white grid place-items-center"><LuChevronLeft size={20} /></button>
           <button aria-label="Próxima" onClick={(e) => { e.stopPropagation(); go(1); }} className="press absolute right-3 size-11 rounded-full bg-white/15 text-white grid place-items-center"><LuChevronRight size={20} /></button>
-          <span className="absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] text-white/70 text-[13px] tabular-nums">{i + 1} / {ids.length}</span>
+          <span className="absolute bottom-[max(1.5rem,var(--sab))] text-white/70 text-[13px] tabular-nums">{i + 1} / {ids.length}</span>
         </>
       )}
     </div>

@@ -115,7 +115,9 @@ export async function verifyBiometric() {
 export async function setSystemBars(dark: boolean, color: string) {
   if (!isNative()) return;
   try {
+    const bridge = (window as any).LecoInsets;
+    if (bridge?.setLight) { bridge.setLight(!dark); return; }
+    void color;
     await StatusBar.setStyle({ style: dark ? Style.Dark : Style.Light });
-    await StatusBar.setBackgroundColor({ color });
   } catch { /* */ }
 }
