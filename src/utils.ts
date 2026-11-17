@@ -159,8 +159,12 @@ export const dayScore = (state: AppState, day: DateKey = todayKey()) => {
   const hs = activeHabits(state, day);
   const habits = hs.length ? hs.filter((h) => isHabitDone(state, h.id, day)).length / hs.length : 1;
 
-  const total = Math.round(((workout + nutrition + habits) / 3) * 100);
-  return { total, workout, nutrition, habits, isRest: !splitId };
+  // só entram no score as partes que o usuário configurou
+  const hasWorkout = state.splits.length > 0;
+  const hasHabits = hs.length > 0;
+  const parts = [nutrition, ...(hasWorkout ? [workout] : []), ...(hasHabits ? [habits] : [])];
+  const total = Math.round((parts.reduce((a, b) => a + b, 0) / parts.length) * 100);
+  return { total, workout, nutrition, habits, isRest: !splitId, hasWorkout, hasHabits, parts: parts.length };
 };
 
 /* ── resumo público para amigos ────────────────────────────── */

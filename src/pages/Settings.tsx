@@ -6,7 +6,7 @@ import AuthForm from '../components/AuthForm';
 import { LuCloud, LuLogOut, LuRefreshCw } from 'react-icons/lu';
 import type { Goals } from '../types';
 import { nf } from '../utils';
-import { Button, Card, CardHeader, DeleteButton, Field, Input, NumInput, PageHeader, TextArea } from '../components/ui';
+import { Button, Card, CardHeader, DeleteButton, Field, Input, Modal, NumInput, PageHeader, TextArea } from '../components/ui';
 
 export default function Settings() {
   const { state, actions, toast, storageOk } = useStore();
@@ -43,6 +43,8 @@ export default function Settings() {
       <PageHeader title="Ajustes" sub="Perfil, metas e backup" accent="neutral" icon={<LuSettings size={20} />} />
 
       <AccountCard />
+
+      <ResetCard />
 
       <div className="grid lg:grid-cols-2 gap-4">
         <Card className="p-5">
@@ -107,7 +109,7 @@ export default function Settings() {
 
         <div className="flex flex-wrap gap-2 mt-5 pt-5 border-t border-line">
           <Button variant="ghost" onClick={() => { actions.resetDemo(); toast('Dados de exemplo restaurados'); }}><LuRotateCcw size={15} /> Restaurar dados de exemplo</Button>
-          <DeleteButton compact={false} label="Apagar todos os dados" onConfirm={() => { actions.clearAll(); setName(''); toast('Todos os dados foram apagados'); }} />
+
         </div>
       </Card>
     </div>
@@ -153,6 +155,40 @@ function AccountCard() {
         </span>
         <input type="checkbox" className="size-5 accent-[#F26B3A]" checked={!!state.profile.shareBody} onChange={(e) => actions.setShareBody(e.target.checked)} />
       </label>
+    </Card>
+  );
+}
+
+function ResetCard() {
+  const { toast } = useStore();
+  const sync = useSync();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  return (
+    <Card className="p-5 md:p-7">
+      <div className="flex flex-col md:flex-row md:items-center gap-4 justify-between">
+        <div>
+          <h3 className="text-[17px] font-medium text-ink">Começar do zero</h3>
+          <p className="text-[13px] text-muted mt-0.5 max-w-xl">
+            Apaga os dados de exemplo e tudo o que foi registrado: treinos, fichas, refeições e fotos, hábitos, medidas, sono e notas.
+            {sync.session ? ' Apaga também da nuvem.' : ''} Sua conta e seus amigos continuam.
+          </p>
+        </div>
+        <Button variant="danger" onClick={() => setOpen(true)}>Zerar o app</Button>
+      </div>
+      <Modal open={open} onClose={() => !busy && setOpen(false)} title="Zerar o app?"
+        footer={<>
+          <Button variant="ghost" disabled={busy} onClick={() => setOpen(false)}>Cancelar</Button>
+          <Button variant="primary" disabled={busy} onClick={async () => {
+            setBusy(true);
+            try { await sync.resetAll(); toast('Pronto! O app está zerado'); setOpen(false); }
+            catch { toast('Não foi possível apagar tudo. Tente de novo.'); }
+            finally { setBusy(false); }
+          }}>{busy ? 'Apagando…' : 'Apagar tudo'}</Button>
+        </>}>
+        <p className="text-[15px] text-ink/80">Todos os registros {sync.session ? 'deste aparelho e da nuvem ' : ''}serão apagados e não dá para desfazer.</p>
+        <p className="text-[13px] text-muted mt-3">Se quiser guardar uma cópia antes, use “Copiar backup” mais abaixo.</p>
+      </Modal>
     </Card>
   );
 }

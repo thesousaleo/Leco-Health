@@ -31,7 +31,7 @@ export default function Dashboard({ go }: { go: (t: TabId) => void }) {
   const prev7 = prev7Days.map((d) => dayScore(state, d).total);
   const prevAvg = prev7.reduce((a, b) => a + b, 0) / 7;
   const beaten = prev7.filter((s) => score.total > s).length;
-  const metas = [score.workout >= 1, score.nutrition >= 1, score.habits >= 0.8].filter(Boolean).length;
+  const metas = [score.nutrition >= 1, score.hasWorkout && score.workout >= 1, score.hasHabits && score.habits >= 0.8].filter(Boolean).length;
   const consistency7 = Math.round((lastNDays(7).reduce((a, d) => {
     const hs = activeHabits(state, d);
     return a + (hs.length ? hs.filter((h) => isHabitDone(state, h.id, d)).length / hs.length : 0);
@@ -87,7 +87,7 @@ export default function Dashboard({ go }: { go: (t: TabId) => void }) {
                 ? <>Hoje está acima de <span className="text-orange font-medium">{beaten} dos últimos 7</span> dias</>
                 : streak > 0
                   ? <>Você está numa sequência de <span className="text-orange font-medium">{streak} {streak === 1 ? 'dia' : 'dias'}</span></>
-                  : <>Cada meta concluída soma <span className="text-orange font-medium">33%</span> no score</>}
+                  : <>Cada meta concluída soma <span className="text-orange font-medium">{Math.round(100 / score.parts)}%</span> no score</>}
             </p>
           </Tile>
 
@@ -101,7 +101,7 @@ export default function Dashboard({ go }: { go: (t: TabId) => void }) {
           <div className="flex items-center justify-between mt-3 text-[13px] text-muted px-1">
             <span>0</span>
             <span className="inline-flex items-center gap-1.5 h-7 px-3 rounded-full bg-blush/60 text-[#D9541F]">
-              <span className="size-1.5 rounded-full bg-orange" /> {metas} de 3 metas
+              <span className="size-1.5 rounded-full bg-orange" /> {metas} de {score.parts} {score.parts === 1 ? 'meta' : 'metas'}
             </span>
             <span>100%</span>
           </div>

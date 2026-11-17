@@ -4,7 +4,7 @@ import type { Friend, Profile, Session } from './cloud';
 import { useStore } from './store';
 import { buildEmptyState } from './mock';
 import { buildProgress } from './utils';
-import { uploadPending } from './photos';
+import { clearAllPhotos, uploadPending } from './photos';
 import type { AppState } from './types';
 
 /* Sincronização: conta (Supabase Auth) + backup do estado + progresso para amigos. */
@@ -30,6 +30,7 @@ interface SyncCtx {
   acceptFriend: (id: number) => Promise<void>;
   removeFriend: (id: number) => Promise<void>;
   rename: (name: string) => Promise<void>;
+  resetAll: () => Promise<void>;
 }
 
 const Ctx = createContext<SyncCtx | null>(null);
@@ -118,8 +119,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
   // envia alterações (debounce)
   useEffect(() => {
-    if (!session || !ready || needsChoice) return;
     if (skipPush.current) { skipPush.current = false; return; }
+    if (!session || !ready || needsChoice) return;
     const t = setTimeout(async () => {
       const s = await fresh();
       if (s) pushAll(s, stateRef.current);
@@ -171,6 +172,21 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     },
     acceptFriend: async (id) => { const s = await fresh(); if (s) { await cloud.acceptFriend(s, id); await refreshFriends(); } },
     removeFriend: async (id) => { const s = await fresh(); if (s) { await cloud.removeFriend(s, id); await refreshFriends(); } },
+    resetAll: async () => {
+      const empty = buildEmptyState();
+      const cur = stateRef.current;
+      empty.profile = { name: profile?.display_name || cur.profile.name || '', shareBody: cur.profile.shareBody };
+      skipPush.current = true; // o envio é feito aqui mesmo, sem esperar o debounce
+      actions.replaceAll(empty);
+      await clearAllPhotos();
+      const s = await fresh();
+      if (s) {
+        setLinked(s.user.id);
+        setNeedsChoice(false);
+        await pushAll(s, { ...empty, meta: { ...empty.meta, updatedAt: new Date().toISOString() } });
+        setReady(true);
+      }
+    },
     rename: async (name) => {
       const s = await fresh(); if (!s) return;
       await cloud.updateName(s, name);

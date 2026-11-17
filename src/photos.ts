@@ -154,3 +154,24 @@ export function usePhoto(id?: string) {
   }, [id]);
   return { url, missing };
 }
+
+/** Apaga todas as fotos: do aparelho e da nuvem (pasta do usuário). */
+export async function clearAllPhotos() {
+  urlCache.clear();
+  setPending([]);
+  try { await tx('readwrite', (s) => s.clear()); } catch { /* */ }
+  const s = await ensureSession(loadSession());
+  if (!s) return;
+  const h = { apikey: SUPABASE_KEY, Authorization: `Bearer ${s.access_token}`, 'Content-Type': 'application/json' };
+  for (let round = 0; round < 20; round++) {
+    const r = await fetch(`${SUPABASE_URL}/storage/v1/object/list/meal-photos`, {
+      method: 'POST', headers: h, body: JSON.stringify({ prefix: s.user.id, limit: 1000, offset: 0 }),
+    }).catch(() => null);
+    if (!r || !r.ok) return;
+    const items: { name: string }[] = await r.json();
+    if (!items.length) return;
+    await fetch(`${SUPABASE_URL}/storage/v1/object/meal-photos`, {
+      method: 'DELETE', headers: h, body: JSON.stringify({ prefixes: items.map((i) => `${s.user.id}/${i.name}`) }),
+    }).catch(() => null);
+  }
+}
