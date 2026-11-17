@@ -115,32 +115,76 @@ export const lastPerformance = (state: AppState, exerciseId: ID, before: DateKey
 export const isHabitDone = (state: AppState, habitId: ID, day: DateKey) =>
   (state.habitLogs[day] || []).includes(habitId);
 
-/** Dias seguidos; se hoje ainda não foi feito, conta a partir de ontem. */
-export const habitStreak = (state: AppState, habitId: ID, ref = todayKey()) => {
-  let d = isHabitDone(state, habitId, ref) ? ref : addDays(ref, -1);
+export const habitCount = (state: AppState, habitId: ID, day: DateKey) => state.habitCounts?.[day]?.[habitId] ?? 0;
+
+/** Segunda-feira da semana de `day`. */
+export const weekStart = (day: DateKey) => addDays(day, -((weekday(day) + 6) % 7));
+
+export const weekDoneCount = (state: AppState, habitId: ID, day: DateKey) => {
+  const ws = weekStart(day);
   let n = 0;
-  while (isHabitDone(state, habitId, d)) {
+  for (let i = 0; i < 7; i++) { const d = addDays(ws, i); if (d > day) break; if (isHabitDone(state, habitId, d)) n++; }
+  return n;
+};
+
+/** O hábito está programado para este dia? (semanais aparecem todo dia) */
+export const isHabitScheduled = (h: Habit, day: DateKey) =>
+  !h.freq || h.freq.type === 'daily' || h.freq.type === 'weekly' || h.freq.days.includes(weekday(day));
+
+export const activeHabits = (state: AppState, day?: DateKey): Habit[] =>
+  state.habits.filter((h) => !h.archived && (!day || !h.createdAt || h.createdAt <= day));
+
+/** Hábitos que contam no score do dia: diários, os do dia da semana e os semanais feitos naquele dia. */
+export const dueHabits = (state: AppState, day: DateKey): Habit[] =>
+  activeHabits(state, day).filter((h) =>
+    h.freq?.type === 'weekly' ? isHabitDone(state, h.id, day) : isHabitScheduled(h, day));
+
+export const freqLabel = (h: Habit) => {
+  const f = h.freq;
+  if (!f || f.type === 'daily') return 'Todo dia';
+  if (f.type === 'weekly') return `${f.times}x por semana`;
+  const names = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  if (f.days.length === 5 && [1, 2, 3, 4, 5].every((d) => f.days.includes(d))) return 'Dias úteis';
+  return [...f.days].sort().map((d) => names[d]).join(', ');
+};
+
+/** Sequência: diários = dias seguidos; dias da semana = dias programados seguidos; semanais = semanas seguidas com a meta. */
+export const habitStreak = (state: AppState, habitId: ID, ref = todayKey()) => {
+  const h = state.habits.find((x) => x.id === habitId);
+  if (h?.freq?.type === 'weekly') {
+    const t = h.freq.times;
+    let ws = weekStart(ref);
+    let n = 0;
+    if (weekDoneCount(state, habitId, addDays(ws, 6) > ref ? ref : addDays(ws, 6)) < t) ws = addDays(ws, -7);
+    while (n < 520 && weekDoneCount(state, habitId, addDays(ws, 6)) >= t) { n++; ws = addDays(ws, -7); }
+    return n;
+  }
+  let d = isHabitDone(state, habitId, ref) ? ref : addDays(ref, -1);
+  let n = 0, guard = 0;
+  while (guard++ < 2000) {
+    if (h && !isHabitScheduled(h, d)) { d = addDays(d, -1); continue; }
+    if (!isHabitDone(state, habitId, d)) break;
     n++;
     d = addDays(d, -1);
   }
   return n;
 };
 
-export const activeHabits = (state: AppState, day?: DateKey): Habit[] =>
-  state.habits.filter((h) => !h.archived && (!day || !h.createdAt || h.createdAt <= day));
-
-/** Sequência geral: dias seguidos com ≥ 80% dos hábitos concluídos. */
+/** Sequência geral: dias seguidos com ≥ 80% dos hábitos do dia concluídos. */
 export const overallStreak = (state: AppState, ref = todayKey()) => {
   if (!activeHabits(state).length) return 0;
   const ok = (d: DateKey) => {
-    const hs = activeHabits(state, d);
-    return hs.length > 0 && hs.filter((h) => isHabitDone(state, h.id, d)).length / hs.length >= 0.8;
+    const hs = dueHabits(state, d).filter((h) => h.freq?.type !== 'weekly');
+    return hs.length === 0 ? null : hs.filter((h) => isHabitDone(state, h.id, d)).length / hs.length >= 0.8;
   };
   let d = ok(ref) ? ref : addDays(ref, -1);
-  let n = 0;
-  while (ok(d) && n < 999) {
-    n++;
+  let n = 0, guard = 0;
+  while (guard++ < 999) {
+    const r = ok(d);
+    if (r === false) break;
+    if (r === true) n++;
     d = addDays(d, -1);
+    if (r === null && guard > 60) break;
   }
   return n;
 };
@@ -149,55 +193,81 @@ export const overallStreak = (state: AppState, ref = todayKey()) => {
 export const dayScore = (state: AppState, day: DateKey = todayKey()) => {
   // treino
   const splitId = state.schedule[weekday(day)] ?? null;
+  // dias antes de começar a usar o app não pontuam
+  const start = state.meta?.createdAt?.slice(0, 10);
+  if (start && day < start) return { total: 0, workout: 0, nutrition: 0, habits: 0, isRest: !splitId, hasWorkout: false, hasHabits: false, parts: 1 };
   const session = state.sessions.find((s) => s.date === day);
-  const workout = session ? sessionProgress(session) : splitId ? 0 : 1; // descanso = meta cumprida
+  const cardioToday = (state.cardio || []).some((c) => c.date === day);
+  const workout = cardioToday ? 1 : session ? sessionProgress(session) : splitId ? 0 : 1; // descanso = meta cumprida
 
   // alimentação: refeições registradas no dia vs. meta
   const nutrition = clamp(mealsOn(state, day).length / (state.goals.meals || 4));
 
-  // hábitos
-  const hs = activeHabits(state, day);
+  // hábitos (só os programados para o dia)
+  const hs = dueHabits(state, day);
   const habits = hs.length ? hs.filter((h) => isHabitDone(state, h.id, day)).length / hs.length : 1;
 
-  // só entram no score as partes que o usuário configurou
-  const hasWorkout = state.splits.length > 0;
+  // só entram no score as partes configuradas, com o peso escolhido pelo usuário
+  const w = state.prefs?.scoreWeights ?? { treino: 1, refeicoes: 1, habitos: 1 };
+  const hasWorkout = state.splits.length > 0 || (state.cardio || []).length > 0;
   const hasHabits = hs.length > 0;
-  const parts = [nutrition, ...(hasWorkout ? [workout] : []), ...(hasHabits ? [habits] : [])];
-  const total = Math.round((parts.reduce((a, b) => a + b, 0) / parts.length) * 100);
-  return { total, workout, nutrition, habits, isRest: !splitId, hasWorkout, hasHabits, parts: parts.length };
+  const parts: [number, number][] = [[nutrition, w.refeicoes]];
+  if (hasWorkout) parts.push([workout, w.treino]);
+  if (hasHabits) parts.push([habits, w.habitos]);
+  const wsum = parts.reduce((a, [, k]) => a + k, 0) || 1;
+  const total = Math.round((parts.reduce((a, [v, k]) => a + v * k, 0) / wsum) * 100);
+  return { total, workout, nutrition, habits, isRest: !splitId, hasWorkout, hasHabits, parts: parts.filter(([, k]) => k > 0).length };
 };
 
-/* ── resumo público para amigos ────────────────────────────── */
+/* ── resumo público para amigos (cada categoria pode ser escondida por amigo) ── */
+export const SHARE_CATEGORIES = [
+  { id: 'score', label: 'Score do dia' }, { id: 'treino', label: 'Treinos' }, { id: 'habitos', label: 'Hábitos' },
+  { id: 'refeicoes', label: 'Refeições' }, { id: 'agua', label: 'Água' }, { id: 'sono', label: 'Sono' }, { id: 'peso', label: 'Peso' },
+] as const;
+export type ShareCat = (typeof SHARE_CATEGORIES)[number]['id'];
+
 export const buildProgress = (state: AppState, name: string) => {
   const today = todayKey();
-  const scores14 = lastNDays(14).map((d) => ({ date: d, score: dayScore(state, d).total }));
-  const hs = activeHabits(state, today);
-  const done = hs.filter((h) => isHabitDone(state, h.id, today)).length;
+  const days30 = lastNDays(30);
   const week = lastNDays(7);
-  const sessions7 = state.sessions.filter((s) => s.completed && week.includes(s.date));
+  const goalMeals = state.goals.meals || 4;
+  const goalSleep = state.goals.sleep || 8;
+  const trainedOn = (d: DateKey) => state.sessions.some((s) => s.completed && s.date === d) || (state.cardio || []).some((c) => c.date === d);
+  const habitRatio = (d: DateKey) => { const hs = dueHabits(state, d); return hs.length ? hs.filter((h) => isHabitDone(state, h.id, d)).length / hs.length : 0; };
+  const sleepBy = Object.fromEntries(state.sleep.map((x) => [x.date, x.hours]));
+  const r2 = (v: number) => Math.round(v * 100) / 100;
   const last = [...state.sessions].filter((s) => s.completed).sort((a, b) => (a.date < b.date ? 1 : -1))[0];
   const lastSplit = last && state.splits.find((x) => x.id === last.splitId);
-  const meals7 = (state.meals || []).filter((m) => week.includes(m.date)).length;
-  let body: { weight?: number; weightDelta30?: number; bodyFat?: number } | undefined;
-  if (state.profile.shareBody) {
-    const b = [...state.body].sort((x, y) => (x.date < y.date ? 1 : -1));
-    const w0 = b.find((x) => x.weight != null);
-    const old = b.find((x) => x.weight != null && x.date <= addDays(today, -30)) ?? b.filter((x) => x.weight != null).at(-1);
-    body = { weight: w0?.weight, bodyFat: b.find((x) => x.bodyFat != null)?.bodyFat,
-      weightDelta30: w0?.weight != null && old?.weight != null && old !== w0 ? round1(w0.weight - old.weight) : undefined };
-  }
+  const hsToday = dueHabits(state, today);
+  const b = [...state.body].filter((x) => x.weight != null).sort((x, y) => (x.date < y.date ? 1 : -1));
+  const old = b.find((x) => x.date <= addDays(today, -30)) ?? b[b.length - 1];
+  const sleep7 = state.sleep.filter((x) => week.includes(x.date));
   return {
+    v: 2,
     name,
-    scoreToday: dayScore(state, today).total,
-    scores14,
-    streak: overallStreak(state),
-    habitsToday: `${done}/${hs.length}`,
-    workouts7: sessions7.length,
-    lastWorkout: last ? { date: last.date, name: lastSplit ? `Treino ${lastSplit.letter} · ${lastSplit.name}` : 'Treino', volume: Math.round(sessionVolume(last)) } : undefined,
-    meals7,
-    mealsToday: mealsOn(state, today).length,
-    waterToday: state.goals.water ? clamp((state.water[today] || 0) / state.goals.water) : 0,
-    body,
     updatedAt: new Date().toISOString(),
+    score: { today: dayScore(state, today).total, days: days30.map((d) => ({ d, v: dayScore(state, d).total })) },
+    treino: {
+      week: week.filter(trainedOn).length,
+      last: last ? { date: last.date, name: lastSplit ? `Treino ${lastSplit.letter} · ${lastSplit.name}` : 'Treino', volume: Math.round(sessionVolume(last)) } : undefined,
+      days: days30.map((d) => ({ d, v: trainedOn(d) ? 1 : 0 })),
+    },
+    habitos: {
+      today: `${hsToday.filter((h) => isHabitDone(state, h.id, today)).length}/${hsToday.length}`,
+      streak: overallStreak(state),
+      days: days30.map((d) => ({ d, v: r2(habitRatio(d)) })),
+    },
+    refeicoes: { today: mealsOn(state, today).length, goal: goalMeals, days: days30.map((d) => ({ d, v: r2(mealsOn(state, d).length / goalMeals) })) },
+    agua: { today: r2(state.goals.water ? (state.water[today] || 0) / state.goals.water : 0), days: days30.map((d) => ({ d, v: r2(state.goals.water ? (state.water[d] || 0) / state.goals.water : 0) })) },
+    sono: {
+      last: state.sleep.length ? [...state.sleep].sort((x, y) => (x.date < y.date ? 1 : -1))[0].hours : undefined,
+      avg7: sleep7.length ? round1(sleep7.reduce((a, x) => a + x.hours, 0) / sleep7.length) : undefined,
+      days: days30.map((d) => ({ d, v: sleepBy[d] ? r2(sleepBy[d] / goalSleep) : 0 })),
+    },
+    peso: b[0] ? { weight: b[0].weight, delta30: old && old !== b[0] ? round1(b[0].weight! - old.weight!) : undefined } : undefined,
   };
 };
+export type ProgressV2 = ReturnType<typeof buildProgress>;
+
+/** Dia "cumprido" para cada métrica (usado em desafios e rankings). */
+export const metMetric = (metric: string, v: number) => (metric === 'score' ? v >= 80 : metric === 'habitos' ? v >= 0.8 : v >= 1);

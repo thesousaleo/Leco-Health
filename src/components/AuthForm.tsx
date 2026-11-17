@@ -52,7 +52,7 @@ export default function AuthForm({ onDone }: { onDone?: () => void }) {
         <Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="Mínimo 6 caracteres"
           autoComplete={mode === 'entrar' ? 'current-password' : 'new-password'} minLength={6} required />
       </Field>
-      {err && <p className="text-[13px] text-[#D9541F] bg-blush/50 rounded-2xl px-4 py-3">{err}</p>}
+      {err && <p className="text-[13px] text-orange bg-blush/50 rounded-2xl px-4 py-3">{err}</p>}
       {info && <p className="text-[13px] text-ink bg-cream rounded-2xl px-4 py-3">{info}</p>}
       <Button type="submit" variant="primary" size="lg" className="w-full" disabled={busy}>
         {busy && <LuLoaderCircle className="animate-spin" size={18} />}

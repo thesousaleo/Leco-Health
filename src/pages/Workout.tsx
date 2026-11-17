@@ -1,246 +1,339 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  LuCalendarDays, LuChevronDown, LuChevronUp, LuCircleCheck, LuClock, LuDumbbell, LuHistory, LuPencil, LuPlay, LuPlus,
-  LuRotateCcw, LuTrendingUp, LuTrophy, LuX, LuClipboardList, LuCheck,
+  LuBike, LuCalendarDays, LuCheck, LuChevronDown, LuChevronLeft, LuChevronRight, LuChevronUp, LuClipboardList, LuClock, LuDumbbell,
+  LuFootprints, LuHistory, LuNotebookPen, LuPencil, LuPlay, LuPlus, LuRotateCcw, LuSearch, LuTimer, LuTrendingUp, LuTrophy, LuWaves, LuX,
 } from 'react-icons/lu';
 import { useStore } from '../store';
-import type { ExerciseLog, Split, WorkoutSession } from '../types';
+import type { CardioKind, CardioLog, Exercise, ExerciseLog, Split, WorkoutSession } from '../types';
 import {
-  fmtDayMonth, lastPerformance, nf, relDay, sessionProgress, sessionVolume, todayKey, weekday, WEEKDAYS, fmtShort,
+  addDays, fmtDayMonth, fmtShort, fromKey, lastPerformance, nf, relDay, round1, sessionProgress, sessionVolume, todayKey, toKey, weekday, WEEKDAYS,
 } from '../utils';
+import { MUSCLES, oneRM, searchExercises } from '../exercises';
 import {
-  ACCENT, Button, Card, CardHeader, Chip, cx, DeleteButton, Empty, Field, IconButton, Input, Modal, NumInput,
-  PageHeader, ProgressBar, Segmented, Select, Tag,
+  Button, Card, Chip, cx, DeleteButton, Empty, Field, IconButton, Input, Modal, NumInput, PageHeader, ProgressBar, Segmented, Select, Tag, TextArea,
 } from '../components/ui';
 import { BarChart, LineChart } from '../components/charts';
 import { useRestTimer } from '../components/RestTimer';
 
-const MUSCLES = ['Peito', 'Costas', 'Ombros', 'Bíceps', 'Tríceps', 'Quadríceps', 'Posterior', 'Glúteos', 'Panturrilha', 'Abdômen', 'Antebraço', 'Cardio'];
+type View = 'sessao' | 'cardio' | 'fichas' | 'historico';
 
 export default function Workout() {
   const { state } = useStore();
   const today = todayKey();
   const scheduled = state.schedule[weekday(today)];
-  const todaySession = state.sessions.find((s) => s.date === today);
-  const [view, setView] = useState<'sessao' | 'fichas' | 'historico'>('sessao');
-  const [splitId, setSplitId] = useState<string | undefined>(todaySession?.splitId ?? scheduled ?? state.splits[0]?.id);
-
-  useEffect(() => {
-    if (!state.splits.find((s) => s.id === splitId)) setSplitId(state.splits[0]?.id);
-  }, [state.splits, splitId]);
-
-  const split = state.splits.find((s) => s.id === splitId);
+  const [view, setView] = useState<View>('sessao');
+  const [editing, setEditing] = useState<string | null>(null); // sessão antiga em edição
+  const editingSession = state.sessions.find((s) => s.id === editing);
 
   return (
     <div>
-      <PageHeader title="Musculação" sub={scheduled ? `Hoje: Treino ${state.splits.find((s) => s.id === scheduled)?.letter ?? ''}` : 'Hoje é dia de descanso'}
-        accent="treino" icon={<LuDumbbell size={20} />} />
-      <div className="mb-4">
-        <Segmented accent="treino" value={view} onChange={setView} options={[
-          { value: 'sessao', label: <><LuPlay size={14} /> Sessão</> },
+      <PageHeader title="Treino" sub={scheduled ? `Hoje: Treino ${state.splits.find((s) => s.id === scheduled)?.letter ?? ''}` : 'Hoje é dia de descanso'} />
+      <div className="mb-5 overflow-x-auto no-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
+        <Segmented value={view} onChange={(v) => { setView(v); setEditing(null); }} options={[
+          { value: 'sessao', label: <><LuPlay size={14} /> Treino</> },
+          { value: 'cardio', label: <><LuFootprints size={14} /> Cardio</> },
           { value: 'fichas', label: <><LuClipboardList size={14} /> Fichas</> },
           { value: 'historico', label: <><LuHistory size={14} /> Histórico</> },
         ]} />
       </div>
 
-      {view === 'sessao' && (
-        state.splits.length === 0 ? (
-          <Card className="p-5"><Empty icon={<LuDumbbell />} title="Nenhuma ficha criada" text="Crie sua divisão de treino (A, B, C…) na aba Fichas." action={<Button accent="treino" onClick={() => setView('fichas')}>Criar ficha</Button>} /></Card>
-        ) : (
-          <>
-            <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4 md:mx-0 md:px-0 pb-1 mb-4">
-              {state.splits.map((s) => (
-                <Chip key={s.id} accent="treino" active={s.id === splitId} onClick={() => setSplitId(s.id)}>
-                  <span className="font-display font-bold mr-1">{s.letter}</span>
-                  <span className="opacity-60 font-normal">{s.name}</span>
-                  {s.id === scheduled && <span className="ml-2 size-1.5 rounded-full bg-orange inline-block align-middle" />}
-                </Chip>
-              ))}
-            </div>
-            {split && <SessionView split={split} />}
-          </>
-        )
+      {editingSession ? (
+        <div>
+          <button onClick={() => setEditing(null)} className="press mb-4 h-10 px-4 rounded-full bg-surface text-[14px] text-ink flex items-center gap-1.5">
+            <LuChevronLeft size={16} /> Voltar ao histórico
+          </button>
+          <SessionEditor session={editingSession} past />
+        </div>
+      ) : (
+        <>
+          {view === 'sessao' && <TodayView goFichas={() => setView('fichas')} />}
+          {view === 'cardio' && <CardioView />}
+          {view === 'fichas' && <SplitsManager />}
+          {view === 'historico' && <History onEdit={setEditing} />}
+        </>
       )}
-      {view === 'fichas' && <SplitsManager />}
-      {view === 'historico' && <History />}
     </div>
   );
 }
 
-/* ─────────────────────────── Sessão ─────────────────────────── */
-function SessionView({ split }: { split: Split }) {
+/* ─────────────────────────── Treino do dia ─────────────────────────── */
+function TodayView({ goFichas }: { goFichas: () => void }) {
   const { state, actions, toast } = useStore();
   const today = todayKey();
-  const session = state.sessions.find((s) => s.date === today && s.splitId === split.id);
-  const otherToday = state.sessions.find((s) => s.date === today && s.splitId !== split.id);
+  const scheduled = state.schedule[weekday(today)];
+  const todaySession = state.sessions.find((s) => s.date === today);
+  const [splitId, setSplitId] = useState<string | undefined>(todaySession?.splitId ?? scheduled ?? state.splits[0]?.id);
+  useEffect(() => { if (!state.splits.find((s) => s.id === splitId)) setSplitId(state.splits[0]?.id); }, [state.splits, splitId]);
+  const split = state.splits.find((s) => s.id === splitId);
+  const session = split && state.sessions.find((s) => s.date === today && s.splitId === split.id);
+
+  if (!state.splits.length)
+    return <Card className="p-5"><Empty icon={<LuDumbbell />} title="Nenhuma ficha criada" text="Crie sua divisão de treino (A, B, C…) na aba Fichas." action={<Button variant="primary" onClick={goFichas}>Criar ficha</Button>} /></Card>;
+
+  return (
+    <>
+      <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4 md:mx-0 md:px-0 pb-1 mb-4">
+        {state.splits.map((s) => (
+          <Chip key={s.id} active={s.id === splitId} onClick={() => setSplitId(s.id)}>
+            <span className="font-semibold mr-1.5">{s.letter}</span><span className="opacity-60 font-normal">{s.name}</span>
+            {s.id === scheduled && <span className="ml-2 size-1.5 rounded-full bg-orange inline-block align-middle" />}
+          </Chip>
+        ))}
+      </div>
+      {split && (session ? <SessionEditor session={session} /> : (
+        <Card className="p-5 md:p-6">
+          <p className="text-[18px] font-semibold text-ink">Treino {split.letter} · {split.name}</p>
+          <p className="text-[13.5px] text-muted">{split.exercises.length} exercícios · {split.exercises.reduce((a, e) => a + e.targetSets, 0)} séries</p>
+          <ul className="divide-y divide-line mt-4 mb-5">
+            {split.exercises.map((e) => {
+              const last = lastPerformance(state, e.id, today);
+              return (
+                <li key={e.id} className="flex items-center gap-3 py-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[15px] text-ink truncate">{e.name}</p>
+                    <p className="text-[12.5px] text-muted">{e.muscle} · {e.targetSets} × {e.targetReps}{e.rest ? ` · ${e.rest}s` : ''}</p>
+                  </div>
+                  {last && <span className="text-[12.5px] text-muted tabular-nums text-right">última<br /><b className="text-ink font-semibold">{nf(last.best.weight, 1)} kg × {last.best.reps}</b></span>}
+                </li>
+              );
+            })}
+          </ul>
+          <Button variant="primary" size="lg" className="w-full" disabled={!split.exercises.length}
+            onClick={() => { actions.startSession(split.id); toast(`Treino ${split.letter} iniciado 💪`); }}>
+            <LuPlay size={17} /> Iniciar Treino {split.letter}
+          </Button>
+          {!split.exercises.length && <p className="text-[13px] text-muted text-center mt-3">Adicione exercícios a esta ficha na aba Fichas.</p>}
+        </Card>
+      ))}
+    </>
+  );
+}
+
+/* ─────────────────────────── Sessão (hoje ou passada) ─────────────────────────── */
+function SessionEditor({ session, past }: { session: WorkoutSession; past?: boolean }) {
+  const { state, actions, toast } = useStore();
+  const split = state.splits.find((x) => x.id === session.splitId);
   const [tick, setTick] = useState(Date.now());
   useEffect(() => {
-    if (!session || session.completed) return;
+    if (session.completed) return;
     const t = setInterval(() => setTick(Date.now()), 30000);
     return () => clearInterval(t);
-  }, [session]);
-
-  if (!session) {
-    return (
-      <Card className="p-5">
-        <CardHeader icon={<span className="font-display font-bold">{split.letter}</span>} accent="treino"
-          title={`Treino ${split.letter} — ${split.name}`} sub={`${split.exercises.length} exercícios · ${split.exercises.reduce((a, e) => a + e.targetSets, 0)} séries`} />
-        <ul className="divide-y divide-line mb-5">
-          {split.exercises.map((e) => {
-            const last = lastPerformance(state, e.id, today);
-            return (
-              <li key={e.id} className="flex items-center gap-3 py-3">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-ink/90 truncate">{e.name}</p>
-                  <div className="flex items-center gap-2 mt-1"><Tag accent="treino">{e.muscle}</Tag><span className="text-xs text-ink/40">{e.targetSets} × {e.targetReps}</span></div>
-                </div>
-                {last && <span className="text-xs text-ink/50 tabular-nums text-right">Última<br /><b className="text-ink/80">{nf(last.best.weight, 1)} kg × {last.best.reps}</b></span>}
-              </li>
-            );
-          })}
-        </ul>
-        {otherToday && <p className="text-xs text-ink/45 mb-3">Você já registrou o Treino {state.splits.find((s) => s.id === otherToday.splitId)?.letter} hoje.</p>}
-        <Button variant="primary" accent="treino" className="w-full md:w-auto" disabled={!split.exercises.length}
-          onClick={() => { actions.startSession(split.id); toast(`Treino ${split.letter} iniciado 💪`); }}>
-          <LuPlay size={16} /> Iniciar Treino {split.letter}
-        </Button>
-      </Card>
-    );
-  }
-
-  const prog = sessionProgress(session);
-  const vol = sessionVolume(session);
+  }, [session.completed]);
+  const all = session.entries.flatMap((e) => e.sets);
+  const done = all.filter((s) => s.done).length;
   const mins = Math.round(((session.finishedAt ?? tick) - session.startedAt) / 60000);
-  const doneSets = session.entries.flatMap((e) => e.sets).filter((s) => s.done).length;
-  const allSets = session.entries.flatMap((e) => e.sets).length;
+  const locked = session.completed && !past;
 
   return (
     <div className="space-y-3 md:space-y-4">
-      <Card className="p-4 md:p-5">
-        <div className="flex items-center gap-4">
+      <Card className="p-5">
+        <div className="flex items-center gap-3">
           <div className="flex-1 min-w-0">
-            <p className="text-xs text-ink/45">{session.completed ? 'Treino concluído' : 'Em andamento'}</p>
-            <p className="font-display text-lg font-semibold text-ink truncate">Treino {split.letter} · {split.name}</p>
+            <p className="text-[13px] text-muted">{past ? `Editando · ${relDay(session.date)}` : session.completed ? 'Treino concluído' : 'Em andamento'}</p>
+            <p className="text-[18px] font-semibold text-ink truncate">Treino {split?.letter ?? ''} · {split?.name ?? 'Ficha removida'}</p>
           </div>
-          {session.completed ? (
-            <Tag accent="treino" className="h-7 px-3 text-xs"><LuCircleCheck size={13} /> Feito</Tag>
-          ) : null}
+          {session.completed && !past && <Tag accent="treino" className="h-7 px-3 text-[12.5px]"><LuCheck size={13} /> Feito</Tag>}
         </div>
-        <div className="grid grid-cols-3 gap-3 mt-4">
-          <MiniStat label="Séries" value={`${doneSets}/${allSets}`} />
-          <MiniStat label="Volume" value={`${nf(vol / 1000, 1)} t`} />
-          <MiniStat label="Duração" value={`${mins} min`} icon={<LuClock size={12} />} />
+        <div className="grid grid-cols-3 gap-2 mt-4">
+          {[['Séries', `${done}/${all.length}`], ['Volume', `${nf(sessionVolume(session) / 1000, 1)} t`], ['Duração', `${Math.max(0, mins)} min`]].map(([l, v]) => (
+            <div key={l} className="rounded-2xl bg-cream px-3 py-2.5">
+              <p className="text-[12px] text-muted">{l}</p>
+              <p className="text-[17px] font-semibold text-ink tabular-nums">{v}</p>
+            </div>
+          ))}
         </div>
-        <ProgressBar className="mt-4" value={prog} color={ACCENT.treino.hex} height={6} />
+        <ProgressBar className="mt-4" value={sessionProgress(session)} height={6} />
       </Card>
 
-      {session.entries.map((entry) => (
-        <ExerciseCard key={entry.exerciseId} session={session} entry={entry} />
-      ))}
+      {session.entries.map((entry) => <ExerciseCard key={entry.exerciseId} session={session} entry={entry} locked={locked} />)}
 
       <div className="flex flex-wrap gap-2 justify-between pt-1">
-        <DeleteButton compact={false} label="Descartar sessão" onConfirm={() => { actions.deleteSession(session.id); toast('Sessão descartada'); }} />
-        {session.completed ? (
-          <Button accent="treino" onClick={() => actions.reopenSession(session.id)}><LuRotateCcw size={15} /> Reabrir para editar</Button>
+        <DeleteButton compact={false} label={past ? 'Excluir treino' : 'Descartar'} onConfirm={() => { actions.deleteSession(session.id); toast('Treino removido'); }} />
+        {past ? (
+          <span className="text-[13px] text-muted self-center">As alterações são salvas na hora.</span>
+        ) : session.completed ? (
+          <Button variant="outline" onClick={() => actions.reopenSession(session.id)}><LuRotateCcw size={15} /> Reabrir para editar</Button>
         ) : (
-          <Button variant="primary" accent="treino" onClick={() => { actions.finishSession(session.id); toast('Treino finalizado! 🏆'); }}>
-            <LuCheck size={16} /> Finalizar treino
-          </Button>
+          <Button variant="primary" onClick={() => { actions.finishSession(session.id); toast('Treino finalizado! 🏆'); }}><LuCheck size={16} /> Finalizar treino</Button>
         )}
       </div>
     </div>
   );
 }
 
-function MiniStat({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
-  return (
-    <div className="rounded-xl bg-cream border border-line px-3 py-2">
-      <p className="text-[10.5px] uppercase tracking-wider text-ink/40 flex items-center gap-1">{icon}{label}</p>
-      <p className="font-display text-base font-semibold text-ink tabular-nums">{value}</p>
-    </div>
-  );
-}
-
-function ExerciseCard({ session, entry }: { session: WorkoutSession; entry: ExerciseLog }) {
+function ExerciseCard({ session, entry, locked }: { session: WorkoutSession; entry: ExerciseLog; locked: boolean }) {
   const { state, actions } = useStore();
   const timer = useRestTimer();
+  const exDef = state.splits.find((s) => s.id === session.splitId)?.exercises.find((e) => e.id === entry.exerciseId);
   const last = useMemo(() => lastPerformance(state, entry.exerciseId, session.date), [state.sessions, entry.exerciseId, session.date]);
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [note, setNote] = useState(entry.note ?? '');
   const done = entry.sets.filter((s) => s.done);
   const bestNow = done.reduce((b, s) => Math.max(b, s.weight), 0);
+  const best1rm = done.reduce((b, s) => Math.max(b, oneRM(s.weight, s.reps)), 0);
   const isPR = last && bestNow > last.best.weight;
   const allDone = entry.sets.length > 0 && done.length === entry.sets.length;
-  const locked = session.completed;
+  const rest = exDef?.rest;
 
   return (
-    <Card className={cx('p-4 md:p-5 transition', allDone && 'border-orange/25')}>
+    <Card className={cx('p-4 md:p-5', allDone && 'ring-2 ring-orange/30')}>
       <div className="flex items-start gap-3 mb-3">
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-ink truncate">{entry.name}</p>
-          <div className="flex flex-wrap items-center gap-2 mt-1.5">
-            <Tag accent="treino">{entry.muscle}</Tag>
-            {isPR && <Tag accent="bio"><LuTrophy size={11} /> Recorde</Tag>}
+          <p className="text-[16px] font-medium text-ink">{entry.name}</p>
+          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+            <Tag accent="neutral">{entry.muscle}</Tag>
+            {rest && <Tag accent="neutral"><LuTimer size={11} /> {rest}s</Tag>}
+            {isPR && <Tag accent="treino"><LuTrophy size={11} /> Recorde</Tag>}
+            {best1rm > 0 && <span className="text-[11.5px] text-muted tabular-nums">1RM ≈ {nf(best1rm, 0)} kg</span>}
           </div>
         </div>
         <div className="text-right shrink-0">
           {last ? (
             <>
-              <p className="text-[10.5px] uppercase tracking-wider text-ink/40">Última · {fmtDayMonth(last.date)}</p>
-              <p className="text-sm font-semibold text-ink/85 tabular-nums">{nf(last.best.weight, 1)} kg × {last.best.reps}</p>
-              {!isPR && done.length === 0 && <p className="text-[11px] text-orange/80 flex items-center gap-1 justify-end"><LuTrendingUp size={11} /> tente {nf(last.best.weight + 2.5, 1)} kg</p>}
+              <p className="text-[11.5px] text-muted">última · {fmtDayMonth(last.date)}</p>
+              <p className="text-[14px] font-semibold text-ink tabular-nums">{nf(last.best.weight, 1)} kg × {last.best.reps}</p>
+              {!isPR && done.length === 0 && <p className="text-[11.5px] text-orange flex items-center gap-1 justify-end"><LuTrendingUp size={11} /> tente {nf(last.best.weight + 2.5, 1)}</p>}
             </>
-          ) : <p className="text-[11px] text-ink/35">Primeira vez</p>}
+          ) : <p className="text-[11.5px] text-muted">primeira vez</p>}
         </div>
       </div>
 
-      <div className="grid grid-cols-[28px_1fr_1fr_1fr_40px] md:grid-cols-[36px_1fr_1fr_1fr_44px_32px] gap-1.5 md:gap-2 items-center text-[10.5px] uppercase tracking-wider text-ink/35 px-0.5 mb-1.5">
-        <span className="text-center">Set</span><span className="text-center">Kg</span><span className="text-center">Reps</span><span className="text-center">RPE</span><span className="text-center">✓</span><span className="hidden md:block" />
+      <div className="grid grid-cols-[26px_1fr_1fr_1fr_44px] gap-1.5 items-center text-[11px] text-muted px-0.5 mb-1.5">
+        <span className="text-center">#</span><span className="text-center">kg</span><span className="text-center">reps</span><span className="text-center">RPE</span><span />
       </div>
       <div className="space-y-1.5">
-        {entry.sets.map((s, i) => {
-          const prev = last?.sets[i];
-          return (
-            <div key={s.id}
-              className={cx('grid grid-cols-[28px_1fr_1fr_1fr_40px] md:grid-cols-[36px_1fr_1fr_1fr_44px_32px] gap-1.5 md:gap-2 items-center rounded-xl transition',
-                s.done && 'bg-blush/50')}>
-              <span className={cx('text-center text-sm font-display font-semibold', s.done ? 'text-orange' : 'text-ink/50')}>{i + 1}</span>
-              <NumInput disabled={locked} value={s.weight} step={2.5} onChange={(v) => actions.updateSet(session.id, entry.exerciseId, s.id, { weight: v })}
-                aria-label={`Peso série ${i + 1}`} placeholder={prev ? String(prev.weight) : '0'} />
-              <NumInput disabled={locked} value={s.reps} onChange={(v) => actions.updateSet(session.id, entry.exerciseId, s.id, { reps: Math.round(v) })}
-                aria-label={`Repetições série ${i + 1}`} />
-              <select disabled={locked} value={s.rpe} aria-label={`RPE série ${i + 1}`}
-                onChange={(e) => actions.updateSet(session.id, entry.exerciseId, s.id, { rpe: +e.target.value })}
-                className="h-11 md:h-10 rounded-xl bg-cream border border-line text-center text-base md:text-sm text-ink outline-none focus:border-ink/20 appearance-none tabular-nums"
-                style={{ color: s.rpe >= 9 ? '#F26B3A' : undefined }}>
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => <option key={n} value={n} className="bg-white">{n}</option>)}
-              </select>
-              <button disabled={locked} aria-label={`Concluir série ${i + 1}`} aria-pressed={s.done}
-                onClick={() => {
-                  actions.updateSet(session.id, entry.exerciseId, s.id, { done: !s.done });
-                  if (!s.done) timer.start();
-                }}
-                className={cx('press size-10 md:size-10 mx-auto rounded-xl grid place-items-center border transition-all disabled:opacity-60',
-                  s.done ? 'bg-orange border-orange text-white ' : 'border-line text-ink/30 hover:border-orange/50 hover:text-orange')}>
-                <LuCheck size={18} strokeWidth={3} />
-              </button>
-              <button disabled={locked} onClick={() => actions.removeSet(session.id, entry.exerciseId, s.id)}
-                aria-label="Remover série" className="hidden md:grid press size-8 place-items-center text-ink/25 hover:text-red-300 disabled:opacity-0">
-                <LuX size={14} />
-              </button>
-            </div>
-          );
-        })}
+        {entry.sets.map((s, i) => (
+          <div key={s.id} className={cx('grid grid-cols-[26px_1fr_1fr_1fr_44px] gap-1.5 items-center rounded-2xl', s.done && 'bg-blush/40')}>
+            <span className={cx('text-center text-[14px] font-semibold', s.done ? 'text-orange' : 'text-muted')}>{i + 1}</span>
+            <NumInput disabled={locked} value={s.weight} onChange={(v) => actions.updateSet(session.id, entry.exerciseId, s.id, { weight: v })} aria-label={`Peso série ${i + 1}`} />
+            <NumInput disabled={locked} value={s.reps} onChange={(v) => actions.updateSet(session.id, entry.exerciseId, s.id, { reps: Math.round(v) })} aria-label={`Repetições série ${i + 1}`} />
+            <select disabled={locked} value={s.rpe} aria-label={`RPE série ${i + 1}`}
+              onChange={(e) => actions.updateSet(session.id, entry.exerciseId, s.id, { rpe: +e.target.value })}
+              className={cx('h-12 md:h-11 rounded-2xl bg-cream text-center text-base md:text-[15px] outline-none appearance-none tabular-nums', s.rpe >= 9 ? 'text-orange font-semibold' : 'text-ink')}>
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+            <button disabled={locked} aria-label={`Concluir série ${i + 1}`} aria-pressed={s.done}
+              onClick={() => { actions.updateSet(session.id, entry.exerciseId, s.id, { done: !s.done }); if (!s.done && !session.completed) timer.start(rest); }}
+              className={cx('press size-11 rounded-full grid place-items-center transition-colors disabled:opacity-60', s.done ? 'bg-orange text-white' : 'bg-cream text-ink/30')}>
+              <LuCheck size={18} strokeWidth={3} />
+            </button>
+          </div>
+        ))}
       </div>
+
+      {(entry.note || noteOpen) && (
+        noteOpen ? (
+          <div className="mt-3 flex gap-2">
+            <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ex: pegada fechada, senti o ombro…" autoFocus />
+            <Button size="sm" variant="dark" className="h-12 md:h-11" onClick={() => { actions.setExerciseNote(session.id, entry.exerciseId, note.trim()); setNoteOpen(false); }}>OK</Button>
+          </div>
+        ) : <p className="mt-3 text-[13.5px] text-ink/75 bg-cream rounded-2xl px-4 py-2.5">📝 {entry.note}</p>
+      )}
+
       {!locked && (
-        <div className="flex justify-between mt-3">
+        <div className="flex flex-wrap gap-1 mt-3">
           <Button size="sm" variant="ghost" onClick={() => actions.addSet(session.id, entry.exerciseId)}><LuPlus size={14} /> Série</Button>
-          {entry.sets.length > 0 && (
-            <Button size="sm" variant="ghost" className="md:hidden" onClick={() => actions.removeSet(session.id, entry.exerciseId, entry.sets[entry.sets.length - 1].id)}>
-              <LuX size={13} /> Remover última
-            </Button>
-          )}
+          {entry.sets.length > 0 && <Button size="sm" variant="ghost" onClick={() => actions.removeSet(session.id, entry.exerciseId, entry.sets[entry.sets.length - 1].id)}><LuX size={13} /> Remover</Button>}
+          <Button size="sm" variant="ghost" className="ml-auto" onClick={() => { setNote(entry.note ?? ''); setNoteOpen(true); }}><LuNotebookPen size={14} /> Nota</Button>
         </div>
       )}
+      {!entry.note && !locked && last && (() => {
+        const prevNote = state.sessions.find((s) => s.date === last.date)?.entries.find((e) => e.exerciseId === entry.exerciseId)?.note;
+        return prevNote ? <p className="mt-2 text-[12.5px] text-muted">Nota da última vez: {prevNote}</p> : null;
+      })()}
     </Card>
+  );
+}
+
+/* ─────────────────────────── Cardio ─────────────────────────── */
+const CARDIO_KINDS: { id: CardioKind; icon: React.ReactNode }[] = [
+  { id: 'Corrida', icon: <LuFootprints size={15} /> }, { id: 'Caminhada', icon: <LuFootprints size={15} /> }, { id: 'Bike', icon: <LuBike size={15} /> },
+  { id: 'Natação', icon: <LuWaves size={15} /> }, { id: 'Elíptico', icon: <LuTimer size={15} /> }, { id: 'Outro', icon: <LuTimer size={15} /> },
+];
+const pace = (c: CardioLog) => {
+  if (!c.distanceKm || !c.minutes) return null;
+  const p = c.minutes / c.distanceKm;
+  return `${Math.floor(p)}:${String(Math.round((p % 1) * 60)).padStart(2, '0')} min/km`;
+};
+
+function CardioView() {
+  const { state, actions, toast } = useStore();
+  const [modal, setModal] = useState<{ c?: CardioLog } | null>(null);
+  const list = [...(state.cardio || [])].sort((a, b) => (a.date < b.date ? 1 : -1));
+  const last30 = list.filter((c) => c.date > addDays(todayKey(), -30));
+  return (
+    <div className="space-y-4">
+      <Card className="p-5 md:p-6">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[13.5px] text-muted">Últimos 30 dias</p>
+            <p className="text-[30px] font-semibold tracking-[-0.03em] text-ink tabular-nums leading-tight">{last30.length} <span className="text-[15px] font-normal text-muted">sessões</span></p>
+            <p className="text-[13.5px] text-muted">{last30.reduce((a, c) => a + c.minutes, 0)} min · {nf(last30.reduce((a, c) => a + (c.distanceKm || 0), 0), 1)} km</p>
+          </div>
+          <Button variant="primary" onClick={() => setModal({})}><LuPlus size={16} /> Registrar</Button>
+        </div>
+      </Card>
+      <Card className="p-2 md:p-3">
+        {list.length === 0 ? <Empty icon={<LuFootprints />} title="Nenhum cardio registrado" text="Corrida, caminhada, bike… registre o tempo e a distância." /> : (
+          <ul className="divide-y divide-line">
+            {list.map((c) => (
+              <li key={c.id}>
+                <button onClick={() => setModal({ c })} className="w-full flex items-center gap-3 px-3 py-3 text-left">
+                  <span className="grid place-items-center size-10 rounded-full bg-cream text-ink/70 shrink-0">{CARDIO_KINDS.find((k) => k.id === c.kind)?.icon}</span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-[15px] text-ink">{c.kind}</span>
+                    <span className="block text-[12.5px] text-muted">{relDay(c.date)}{pace(c) ? ` · ${pace(c)}` : ''}</span>
+                  </span>
+                  <span className="text-right">
+                    <span className="block text-[15px] font-semibold text-ink tabular-nums">{c.minutes} min</span>
+                    {c.distanceKm ? <span className="block text-[12.5px] text-muted tabular-nums">{nf(c.distanceKm, 1)} km</span> : null}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+      <CardioModal open={!!modal} c={modal?.c} onClose={() => setModal(null)}
+        onSave={(v) => { if (modal?.c) actions.updateCardio(modal.c.id, v); else actions.addCardio(v); toast('Cardio salvo'); setModal(null); }}
+        onDelete={modal?.c ? () => { actions.deleteCardio(modal.c!.id); setModal(null); toast('Cardio removido'); } : undefined} />
+    </div>
+  );
+}
+
+function CardioModal({ open, c, onClose, onSave, onDelete }: { open: boolean; c?: CardioLog; onClose: () => void; onSave: (v: Omit<CardioLog, 'id'>) => void; onDelete?: () => void }) {
+  const blank = { date: todayKey(), kind: 'Corrida' as CardioKind, minutes: 30, distanceKm: 0, note: '' };
+  const [f, setF] = useState(blank);
+  const key = open ? c?.id ?? 'new' : '';
+  const [last, setLast] = useState('');
+  if (key !== last) { setLast(key); if (open) setF(c ? { date: c.date, kind: c.kind, minutes: c.minutes, distanceKm: c.distanceKm ?? 0, note: c.note ?? '' } : blank); }
+  const p = pace({ ...f, id: '', distanceKm: f.distanceKm || undefined });
+  return (
+    <Modal open={open} onClose={onClose} title={c ? 'Editar cardio' : 'Registrar cardio'}
+      footer={<>
+        {onDelete && <div className="mr-auto"><DeleteButton compact={false} onConfirm={onDelete} /></div>}
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" disabled={f.minutes <= 0} onClick={() => onSave({ ...f, distanceKm: f.distanceKm || undefined, note: f.note.trim() || undefined })}>Salvar</Button>
+      </>}>
+      <div className="grid grid-cols-3 gap-2">
+        {CARDIO_KINDS.map((k) => (
+          <button key={k.id} onClick={() => setF({ ...f, kind: k.id })}
+            className={cx('press h-11 rounded-2xl flex items-center justify-center gap-1.5 text-[13.5px] font-medium', f.kind === k.id ? 'bg-ink text-on-ink' : 'bg-cream text-ink/70')}>
+            {k.icon}{k.id}
+          </button>
+        ))}
+      </div>
+      <div className="grid grid-cols-3 gap-2 mt-4">
+        <Field label="Dia" className="col-span-3"><Input type="date" className="min-w-0 px-3" value={f.date} max={todayKey()} onChange={(e) => setF({ ...f, date: e.target.value || f.date })} /></Field>
+        <Field label="Minutos"><NumInput value={f.minutes} onChange={(v) => setF({ ...f, minutes: Math.max(0, Math.round(v)) })} /></Field>
+        <Field label="Distância (km)"><NumInput value={f.distanceKm} onChange={(v) => setF({ ...f, distanceKm: Math.max(0, round1(v)) })} /></Field>
+        <div className="rounded-2xl bg-cream px-3 py-2 self-end h-12 md:h-11 flex flex-col justify-center">
+          <span className="text-[11px] text-muted">Ritmo</span>
+          <span className="text-[13px] font-semibold text-ink tabular-nums">{p ?? '—'}</span>
+        </div>
+      </div>
+      <Field label="Observação (opcional)" className="mt-4"><Input value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} placeholder="Ex: intervalado, subida…" /></Field>
+    </Modal>
   );
 }
 
@@ -250,39 +343,36 @@ function SplitsManager() {
   const [newOpen, setNewOpen] = useState(false);
   const [letter, setLetter] = useState('');
   const [name, setName] = useState('');
-
   return (
     <div className="space-y-4">
-      <Card className="p-5">
-        <CardHeader icon={<LuCalendarDays size={16} />} accent="treino" title="Agenda semanal" sub="Qual ficha você treina em cada dia" />
+      <Card className="p-5 md:p-6">
+        <p className="text-[16px] font-semibold text-ink">Agenda da semana</p>
+        <p className="text-[13px] text-muted mb-4">Qual ficha você treina em cada dia.</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
           {[1, 2, 3, 4, 5, 6, 0].map((d) => (
             <Field key={d} label={WEEKDAYS[d]}>
               <Select value={state.schedule[d] ?? ''} onChange={(e) => actions.setSchedule(d, e.target.value || null)}>
-                <option value="" className="bg-white">Descanso</option>
-                {state.splits.map((s) => <option key={s.id} value={s.id} className="bg-white">Treino {s.letter}</option>)}
+                <option value="">Descanso</option>
+                {state.splits.map((s) => <option key={s.id} value={s.id}>Treino {s.letter}</option>)}
               </Select>
             </Field>
           ))}
         </div>
       </Card>
-
       {state.splits.map((s) => <SplitEditor key={s.id} split={s} />)}
-
-      <Button accent="treino" className="w-full h-12 border-dashed" onClick={() => { setLetter(String.fromCharCode(65 + state.splits.length)); setName(''); setNewOpen(true); }}>
-        <LuPlus size={16} /> Nova ficha de treino
-      </Button>
-
-      <Modal open={newOpen} onClose={() => setNewOpen(false)} title="Nova ficha" accent="treino"
+      <button onClick={() => { setLetter(String.fromCharCode(65 + state.splits.length)); setName(''); setNewOpen(true); }}
+        className="press w-full h-14 rounded-[28px] border-2 border-dashed border-ink/15 text-[15px] text-ink/60 flex items-center justify-center gap-2">
+        <LuPlus size={17} /> Nova ficha de treino
+      </button>
+      <Modal open={newOpen} onClose={() => setNewOpen(false)} title="Nova ficha"
         footer={<>
           <Button variant="ghost" onClick={() => setNewOpen(false)}>Cancelar</Button>
-          <Button variant="primary" accent="treino" disabled={!letter.trim() || !name.trim()}
-            onClick={() => { actions.addSplit(letter.trim().toUpperCase(), name.trim()); setNewOpen(false); toast('Ficha criada'); }}>Criar ficha</Button>
+          <Button variant="primary" disabled={!letter.trim() || !name.trim()} onClick={() => { actions.addSplit(letter.trim().toUpperCase(), name.trim()); setNewOpen(false); toast('Ficha criada'); }}>Criar ficha</Button>
         </>}>
-        <form className="grid grid-cols-[90px_1fr] gap-3" onSubmit={(e) => e.preventDefault()}>
-          <Field label="Letra/Código"><Input value={letter} onChange={(e) => setLetter(e.target.value)} maxLength={6} placeholder="A / Push" /></Field>
-          <Field label="Nome"><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Peito / Tríceps" autoFocus /></Field>
-        </form>
+        <div className="grid grid-cols-[90px_1fr] gap-3">
+          <Field label="Letra"><Input value={letter} onChange={(e) => setLetter(e.target.value)} maxLength={6} /></Field>
+          <Field label="Nome"><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Peito / Tríceps" /></Field>
+        </div>
       </Modal>
     </div>
   );
@@ -293,54 +383,44 @@ function SplitEditor({ split }: { split: Split }) {
   const [open, setOpen] = useState(false);
   const [editHead, setEditHead] = useState(false);
   const [head, setHead] = useState({ letter: split.letter, name: split.name });
-  const [form, setForm] = useState({ name: '', muscle: 'Peito', targetSets: 3, targetReps: '10-12' });
   const [editing, setEditing] = useState<string | null>(null);
-
-  const add = () => {
-    if (!form.name.trim()) return;
-    actions.addExercise(split.id, { ...form, name: form.name.trim() });
-    setForm({ ...form, name: '' });
-    toast('Exercício adicionado');
-  };
-
+  const [adding, setAdding] = useState(false);
   return (
     <Card className="p-4 md:p-5">
       <div className="flex items-center gap-3">
-        <span className="grid place-items-center size-10 rounded-xl bg-blush/70 text-orange font-display font-bold border border-orange/25">{split.letter}</span>
+        <span className="grid place-items-center size-11 rounded-full bg-ink text-on-ink font-semibold shrink-0">{split.letter}</span>
         {editHead ? (
           <div className="flex-1 flex gap-2">
             <Input className="w-16" value={head.letter} onChange={(e) => setHead({ ...head, letter: e.target.value })} />
             <Input value={head.name} onChange={(e) => setHead({ ...head, name: e.target.value })} />
-            <IconButton label="Salvar" className="text-orange" onClick={() => { actions.updateSplit(split.id, head); setEditHead(false); }}><LuCheck size={16} /></IconButton>
+            <IconButton label="Salvar" onClick={() => { actions.updateSplit(split.id, head); setEditHead(false); }}><LuCheck size={17} /></IconButton>
           </div>
         ) : (
           <button className="flex-1 min-w-0 text-left" onClick={() => setOpen(!open)}>
-            <p className="font-medium text-ink truncate">{split.name}</p>
-            <p className="text-xs text-ink/45">{split.exercises.length} exercícios</p>
+            <p className="text-[16px] font-medium text-ink truncate">{split.name}</p>
+            <p className="text-[13px] text-muted">{split.exercises.length} exercícios</p>
           </button>
         )}
         {!editHead && <IconButton label="Editar nome" onClick={() => { setHead({ letter: split.letter, name: split.name }); setEditHead(true); }}><LuPencil size={15} /></IconButton>}
         <DeleteButton label="Excluir ficha" onConfirm={() => { actions.deleteSplit(split.id); toast('Ficha excluída'); }} />
         <IconButton label={open ? 'Recolher' : 'Expandir'} onClick={() => setOpen(!open)}>{open ? <LuChevronUp size={18} /> : <LuChevronDown size={18} />}</IconButton>
       </div>
-
       {open && (
         <div className="mt-4 animate-fade">
           <ul className="space-y-1.5">
             {split.exercises.map((e, i) => (
-              <li key={e.id} className="rounded-xl border border-line bg-cream px-3 py-2">
+              <li key={e.id} className="rounded-2xl bg-cream px-3 py-2.5">
                 {editing === e.id ? (
-                  <ExerciseForm initial={e} onCancel={() => setEditing(null)}
-                    onSave={(v) => { actions.updateExercise(split.id, e.id, v); setEditing(null); }} />
+                  <ExerciseForm initial={e} onCancel={() => setEditing(null)} onSave={(v) => { actions.updateExercise(split.id, e.id, v); setEditing(null); }} />
                 ) : (
                   <div className="flex items-center gap-2">
                     <div className="flex flex-col -my-1">
-                      <button aria-label="Subir" disabled={i === 0} className="text-ink/30 hover:text-ink disabled:opacity-20" onClick={() => actions.moveExercise(split.id, e.id, -1)}><LuChevronUp size={14} /></button>
-                      <button aria-label="Descer" disabled={i === split.exercises.length - 1} className="text-ink/30 hover:text-ink disabled:opacity-20" onClick={() => actions.moveExercise(split.id, e.id, 1)}><LuChevronDown size={14} /></button>
+                      <button aria-label="Subir" disabled={i === 0} className="text-ink/35 disabled:opacity-20" onClick={() => actions.moveExercise(split.id, e.id, -1)}><LuChevronUp size={15} /></button>
+                      <button aria-label="Descer" disabled={i === split.exercises.length - 1} className="text-ink/35 disabled:opacity-20" onClick={() => actions.moveExercise(split.id, e.id, 1)}><LuChevronDown size={15} /></button>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-ink/90 truncate">{e.name}</p>
-                      <div className="flex items-center gap-2 mt-0.5"><Tag accent="treino">{e.muscle}</Tag><span className="text-xs text-ink/40 tabular-nums">{e.targetSets} × {e.targetReps}</span></div>
+                      <p className="text-[14.5px] text-ink truncate">{e.name}</p>
+                      <p className="text-[12.5px] text-muted">{e.muscle} · {e.targetSets} × {e.targetReps}{e.rest ? ` · descanso ${e.rest}s` : ''}</p>
                     </div>
                     <IconButton label="Editar" className="size-8" onClick={() => setEditing(e.id)}><LuPencil size={14} /></IconButton>
                     <DeleteButton onConfirm={() => actions.deleteExercise(split.id, e.id)} />
@@ -349,120 +429,208 @@ function SplitEditor({ split }: { split: Split }) {
               </li>
             ))}
           </ul>
-          <form className="mt-3 rounded-xl border border-dashed border-orange/25 p-3 grid grid-cols-2 md:grid-cols-[1fr_140px_80px_90px_auto] gap-2 items-end"
-            onSubmit={(e) => { e.preventDefault(); add(); }}>
-            <Field label="Novo exercício" className="col-span-2 md:col-span-1"><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex: Supino declinado" /></Field>
-            <Field label="Grupo" className="col-span-2 md:col-span-1">
-              <Select value={form.muscle} onChange={(e) => setForm({ ...form, muscle: e.target.value })}>
-                {MUSCLES.map((m) => <option key={m} className="bg-white">{m}</option>)}
-              </Select>
-            </Field>
-            <Field label="Séries"><NumInput value={form.targetSets} onChange={(v) => setForm({ ...form, targetSets: Math.max(1, Math.round(v)) })} /></Field>
-            <Field label="Reps"><Input value={form.targetReps} onChange={(e) => setForm({ ...form, targetReps: e.target.value })} className="text-center" /></Field>
-            <Button type="submit" variant="primary" accent="treino" className="col-span-2 md:col-span-1 h-11 md:h-10" disabled={!form.name.trim()}><LuPlus size={15} /> Adicionar</Button>
-          </form>
+          {adding ? (
+            <div className="mt-3 rounded-2xl border-2 border-dashed border-ink/12 p-3">
+              <ExerciseForm initial={{ name: '', muscle: 'Peito', targetSets: 3, targetReps: '10-12' }} onCancel={() => setAdding(false)}
+                onSave={(v) => { actions.addExercise(split.id, v); toast('Exercício adicionado'); }} keepOpen />
+            </div>
+          ) : (
+            <button onClick={() => setAdding(true)} className="press mt-3 w-full h-12 rounded-2xl border-2 border-dashed border-ink/12 text-[14.5px] text-ink/60 flex items-center justify-center gap-2">
+              <LuPlus size={16} /> Adicionar exercício
+            </button>
+          )}
         </div>
       )}
     </Card>
   );
 }
 
-function ExerciseForm({ initial, onSave, onCancel }: { initial: { name: string; muscle: string; targetSets: number; targetReps: string }; onSave: (v: typeof initial) => void; onCancel: () => void }) {
-  const [f, setF] = useState(initial);
+type ExDraft = Omit<Exercise, 'id'>;
+function ExerciseForm({ initial, onSave, onCancel, keepOpen }: { initial: ExDraft; onSave: (v: ExDraft) => void; onCancel: () => void; keepOpen?: boolean }) {
+  const [f, setF] = useState<ExDraft>(initial);
+  const [q, setQ] = useState(initial.name);
+  const results = q !== f.name || !initial.name ? searchExercises(q) : [];
+  const submit = () => {
+    const name = (f.name || q).trim();
+    if (!name) return;
+    onSave({ ...f, name });
+    if (keepOpen) { setF({ ...initial }); setQ(''); }
+  };
   return (
-    <form className="grid grid-cols-2 md:grid-cols-[1fr_130px_70px_80px_auto] gap-2 items-end py-1" onSubmit={(e) => { e.preventDefault(); onSave(f); }}>
-      <Field label="Nome" className="col-span-2 md:col-span-1"><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
-      <Field label="Grupo" className="col-span-2 md:col-span-1">
-        <Select value={f.muscle} onChange={(e) => setF({ ...f, muscle: e.target.value })}>
-          {(MUSCLES.includes(f.muscle) ? MUSCLES : [f.muscle, ...MUSCLES]).map((m) => <option key={m} className="bg-white">{m}</option>)}
-        </Select>
-      </Field>
-      <Field label="Séries"><NumInput value={f.targetSets} onChange={(v) => setF({ ...f, targetSets: Math.max(1, Math.round(v)) })} /></Field>
-      <Field label="Reps"><Input value={f.targetReps} onChange={(e) => setF({ ...f, targetReps: e.target.value })} className="text-center" /></Field>
-      <div className="flex gap-1 col-span-2 md:col-span-1">
-        <Button variant="ghost" size="sm" onClick={onCancel}>Cancelar</Button>
-        <Button type="submit" variant="primary" accent="treino" size="sm">Salvar</Button>
+    <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+      <div className="relative">
+        <LuSearch size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-ink/35" />
+        <Input className="pl-10" value={q} placeholder="Buscar ou digitar exercício…"
+          onChange={(e) => { setQ(e.target.value); setF({ ...f, name: e.target.value }); }} />
+      </div>
+      {results.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {results.map((r) => (
+            <button key={r.name} type="button" onClick={() => { setF({ ...f, name: r.name, muscle: r.muscle }); setQ(r.name); }}
+              className="press h-8 px-3 rounded-full bg-surface text-[12.5px] text-ink">{r.name} <span className="text-muted">· {r.muscle}</span></button>
+          ))}
+        </div>
+      )}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <Field label="Grupo">
+          <Select value={f.muscle} onChange={(e) => setF({ ...f, muscle: e.target.value })}>
+            {(MUSCLES.includes(f.muscle) ? MUSCLES : [f.muscle, ...MUSCLES]).map((m) => <option key={m}>{m}</option>)}
+          </Select>
+        </Field>
+        <Field label="Séries"><NumInput value={f.targetSets} onChange={(v) => setF({ ...f, targetSets: Math.max(1, Math.round(v)) })} /></Field>
+        <Field label="Reps"><Input value={f.targetReps} onChange={(e) => setF({ ...f, targetReps: e.target.value })} className="text-center" /></Field>
+        <Field label="Descanso">
+          <Select value={f.rest ?? 0} onChange={(e) => setF({ ...f, rest: +e.target.value || undefined })}>
+            <option value={0}>Padrão</option>
+            {[45, 60, 90, 120, 150, 180].map((s) => <option key={s} value={s}>{s}s</option>)}
+          </Select>
+        </Field>
+      </div>
+      <div className="flex gap-2 justify-end">
+        <Button variant="ghost" size="sm" onClick={onCancel}>{keepOpen ? 'Fechar' : 'Cancelar'}</Button>
+        <Button type="submit" variant="primary" size="sm" disabled={!(f.name || q).trim()}>{keepOpen ? 'Adicionar' : 'Salvar'}</Button>
       </div>
     </form>
   );
 }
 
 /* ─────────────────────────── Histórico ─────────────────────────── */
-function History() {
-  const { state, actions } = useStore();
+function History({ onEdit }: { onEdit: (id: string) => void }) {
+  const { state } = useStore();
   const sessions = [...state.sessions].filter((s) => s.completed).sort((a, b) => (a.date < b.date ? 1 : -1));
-  const recent = sessions.slice(0, 12).reverse();
   const exercises = useMemo(() => {
     const map = new Map<string, string>();
     state.sessions.forEach((s) => s.entries.forEach((e) => map.set(e.exerciseId, e.name)));
     return [...map.entries()];
   }, [state.sessions]);
   const [exId, setExId] = useState(exercises[0]?.[0] ?? '');
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [metric, setMetric] = useState<'carga' | '1rm'>('carga');
 
-  const progression = sessions
-    .filter((s) => s.entries.some((e) => e.exerciseId === exId && e.sets.some((x) => x.done)))
-    .reverse()
-    .map((s) => {
-      const e = s.entries.find((x) => x.exerciseId === exId)!;
-      const best = Math.max(...e.sets.filter((x) => x.done).map((x) => x.weight));
-      return { label: fmtShort(s.date), value: best, sub: relDay(s.date) };
-    });
+  const prs = useMemo(() => exercises.map(([id, name]) => {
+    let best: { w: number; reps: number; date: string } | null = null;
+    let best1: { v: number; date: string } | null = null;
+    state.sessions.forEach((s) => s.entries.filter((e) => e.exerciseId === id).forEach((e) => e.sets.filter((x) => x.done).forEach((x) => {
+      if (!best || x.weight > best.w || (x.weight === best.w && x.reps > best.reps)) best = { w: x.weight, reps: x.reps, date: s.date };
+      const r = oneRM(x.weight, x.reps);
+      if (!best1 || r > best1.v) best1 = { v: r, date: s.date };
+    })));
+    return { id, name, best, best1 } as { id: string; name: string; best: { w: number; reps: number; date: string } | null; best1: { v: number; date: string } | null };
+  }).filter((p) => p.best).sort((a, b) => (a.best!.date < b.best!.date ? 1 : -1)), [state.sessions, exercises]);
 
-  if (!sessions.length)
-    return <Card className="p-5"><Empty icon={<LuHistory />} title="Nenhum treino concluído ainda" text="Finalize uma sessão para ver o histórico e a progressão de carga." /></Card>;
+  const progression = sessions.filter((s) => s.entries.some((e) => e.exerciseId === exId && e.sets.some((x) => x.done))).reverse().map((s) => {
+    const sets = s.entries.find((x) => x.exerciseId === exId)!.sets.filter((x) => x.done);
+    const v = metric === 'carga' ? Math.max(...sets.map((x) => x.weight)) : Math.max(...sets.map((x) => oneRM(x.weight, x.reps)));
+    return { label: fmtShort(s.date), value: round1(v), sub: relDay(s.date) };
+  });
+
+  if (!sessions.length && !(state.cardio || []).length)
+    return <Card className="p-5"><Empty icon={<LuHistory />} title="Nenhum treino concluído ainda" text="Finalize um treino para ver o histórico, recordes e evolução de carga." /></Card>;
 
   return (
     <div className="space-y-4">
+      <MonthCalendar />
       <div className="grid lg:grid-cols-2 gap-4">
-        <Card className="p-5">
-          <CardHeader icon={<LuTrendingUp size={16} />} accent="treino" title="Progressão de carga" sub="Maior carga por sessão" />
+        <Card className="p-5 md:p-6">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <p className="text-[16px] font-semibold text-ink">Evolução de carga</p>
+            <div className="flex gap-1 bg-cream rounded-full p-1">
+              {([['carga', 'Carga'], ['1rm', '1RM est.']] as const).map(([k, l]) => (
+                <button key={k} onClick={() => setMetric(k)} className={cx('press h-8 px-3 rounded-full text-[12.5px] font-medium', metric === k ? 'bg-ink text-on-ink' : 'text-ink/60')}>{l}</button>
+              ))}
+            </div>
+          </div>
           <Select value={exId} onChange={(e) => setExId(e.target.value)} className="mb-3">
-            {exercises.map(([id, n]) => <option key={id} value={id} className="bg-white">{n}</option>)}
+            {exercises.map(([id, n]) => <option key={id} value={id}>{n}</option>)}
           </Select>
-          <LineChart data={progression} color={ACCENT.treino.hex} unit=" kg" />
+          <LineChart data={progression} unit=" kg" />
         </Card>
-        <Card className="p-5">
-          <CardHeader icon={<LuDumbbell size={16} />} accent="treino" title="Volume por sessão" sub="Toneladas (kg × reps)" />
-          <BarChart data={recent.map((s) => ({ label: state.splits.find((x) => x.id === s.splitId)?.letter ?? '?', value: sessionVolume(s) / 1000 }))}
-            color={ACCENT.treino.hex} unit=" t" decimals={1} />
+        <Card className="p-5 md:p-6">
+          <p className="text-[16px] font-semibold text-ink mb-1 flex items-center gap-2"><LuTrophy size={17} className="text-orange" /> Recordes pessoais</p>
+          <p className="text-[12.5px] text-muted mb-3">Maior carga e 1RM estimado (fórmula de Epley).</p>
+          <ul className="divide-y divide-line max-h-[340px] overflow-y-auto">
+            {prs.map((p) => (
+              <li key={p.id} className="flex items-center gap-3 py-2.5">
+                <span className="flex-1 min-w-0">
+                  <span className="block text-[14.5px] text-ink truncate">{p.name}</span>
+                  <span className="block text-[12px] text-muted">{relDay(p.best!.date)}</span>
+                </span>
+                <span className="text-right shrink-0">
+                  <span className="block text-[14.5px] font-semibold text-ink tabular-nums">{nf(p.best!.w, 1)} kg × {p.best!.reps}</span>
+                  <span className="block text-[12px] text-muted tabular-nums">1RM ≈ {nf(p.best1!.v, 0)} kg</span>
+                </span>
+              </li>
+            ))}
+          </ul>
         </Card>
       </div>
-
+      <Card className="p-5 md:p-6">
+        <p className="text-[16px] font-semibold text-ink mb-3">Volume por treino</p>
+        <BarChart data={sessions.slice(0, 12).reverse().map((s) => ({ label: state.splits.find((x) => x.id === s.splitId)?.letter ?? '?', value: sessionVolume(s) / 1000 }))} unit=" t" decimals={1} />
+      </Card>
       <Card className="p-2 md:p-3">
         <ul className="divide-y divide-line">
-          {sessions.map((s) => {
+          {sessions.slice(0, 40).map((s) => {
             const sp = state.splits.find((x) => x.id === s.splitId);
             const sets = s.entries.flatMap((e) => e.sets).filter((x) => x.done).length;
             const mins = s.finishedAt ? Math.round((s.finishedAt - s.startedAt) / 60000) : null;
-            const open = expanded === s.id;
             return (
-              <li key={s.id}>
-                <button className="w-full flex items-center gap-3 px-3 py-3 text-left hover:bg-cream rounded-xl" onClick={() => setExpanded(open ? null : s.id)}>
-                  <span className="grid place-items-center size-9 rounded-xl bg-blush/70 text-orange font-display font-bold text-sm">{sp?.letter ?? '?'}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-ink/90 truncate">{sp?.name ?? 'Ficha removida'}</p>
-                    <p className="text-xs text-ink/45">{relDay(s.date)} · {sets} séries{mins ? ` · ${mins} min` : ''}</p>
-                  </div>
-                  <span className="text-sm font-semibold text-ink/80 tabular-nums">{nf(sessionVolume(s) / 1000, 1)} t</span>
-                  {open ? <LuChevronUp size={16} className="text-ink/40" /> : <LuChevronDown size={16} className="text-ink/40" />}
-                </button>
-                {open && (
-                  <div className="px-3 pb-3 animate-fade">
-                    {s.entries.map((e) => (
-                      <div key={e.exerciseId} className="flex items-baseline justify-between gap-3 py-1.5 text-xs">
-                        <span className="text-ink/70 truncate">{e.name}</span>
-                        <span className="text-ink/45 tabular-nums text-right">{e.sets.filter((x) => x.done).map((x) => `${nf(x.weight, 1)}×${x.reps}`).join(' · ') || '—'}</span>
-                      </div>
-                    ))}
-                    <div className="flex justify-end mt-2"><DeleteButton compact={false} label="Excluir sessão" onConfirm={() => actions.deleteSession(s.id)} /></div>
-                  </div>
-                )}
+              <li key={s.id} className="flex items-center gap-3 px-3 py-3">
+                <span className="grid place-items-center size-10 rounded-full bg-cream text-ink font-semibold text-[14px] shrink-0">{sp?.letter ?? '?'}</span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-[15px] text-ink truncate">{sp?.name ?? 'Ficha removida'}</span>
+                  <span className="block text-[12.5px] text-muted">{relDay(s.date)} · {sets} séries{mins ? ` · ${mins} min` : ''} · {nf(sessionVolume(s) / 1000, 1)} t</span>
+                </span>
+                <Button size="sm" variant="soft" onClick={() => onEdit(s.id)}><LuPencil size={13} /> Editar</Button>
               </li>
             );
           })}
         </ul>
       </Card>
     </div>
+  );
+}
+
+function MonthCalendar() {
+  const { state } = useStore();
+  const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
+  const first = toKey(month);
+  const daysIn = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+  const lead = (month.getDay() + 6) % 7;
+  const lift = new Set(state.sessions.filter((s) => s.completed).map((s) => s.date));
+  const cardio = new Set((state.cardio || []).map((c) => c.date));
+  const count = [...Array(daysIn)].filter((_, i) => { const d = addDays(first, i); return lift.has(d) || cardio.has(d); }).length;
+  const lbl = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(month);
+  const label = lbl.charAt(0).toUpperCase() + lbl.slice(1);
+  const today = todayKey();
+  return (
+    <Card className="p-5 md:p-6">
+      <div className="flex items-center justify-between mb-4">
+        <IconButton label="Mês anterior" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><LuChevronLeft size={18} /></IconButton>
+        <div className="text-center">
+          <p className="text-[16px] font-semibold text-ink flex items-center gap-2 justify-center"><LuCalendarDays size={16} /> {label}</p>
+          <p className="text-[12.5px] text-muted">{count} {count === 1 ? 'dia treinado' : 'dias treinados'}</p>
+        </div>
+        <IconButton label="Próximo mês" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}><LuChevronRight size={18} /></IconButton>
+      </div>
+      <div className="grid grid-cols-7 gap-1.5 text-center">
+        {['S', 'T', 'Q', 'Q', 'S', 'S', 'D'].map((d, i) => <span key={i} className="text-[11px] text-muted">{d}</span>)}
+        {[...Array(lead)].map((_, i) => <span key={'l' + i} />)}
+        {[...Array(daysIn)].map((_, i) => {
+          const d = addDays(first, i);
+          const l = lift.has(d), c = cardio.has(d);
+          return (
+            <div key={d} className={cx('aspect-square rounded-xl grid place-items-center text-[13px] tabular-nums relative',
+              l ? 'bg-orange text-white font-semibold' : c ? 'bg-ink text-on-ink font-semibold' : 'bg-cream text-ink/60', d === today && 'ring-2 ring-ink/40')}>
+              {fromKey(d).getDate()}
+              {l && c && <span className="absolute bottom-1 size-1 rounded-full bg-white" />}
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex gap-4 mt-3 text-[12px] text-muted">
+        <span className="flex items-center gap-1.5"><span className="size-3 rounded bg-orange" /> Musculação</span>
+        <span className="flex items-center gap-1.5"><span className="size-3 rounded bg-ink" /> Cardio</span>
+      </div>
+    </Card>
   );
 }

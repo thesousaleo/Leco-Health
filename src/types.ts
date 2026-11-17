@@ -16,6 +16,7 @@ export interface Exercise {
   muscle: string; // grupo muscular (tag)
   targetSets: number;
   targetReps: string; // ex: "8-10"
+  rest?: number; // descanso em segundos (padrão: o do timer)
 }
 
 export interface Split {
@@ -38,6 +39,17 @@ export interface ExerciseLog {
   name: string; // desnormalizado p/ histórico estável
   muscle: string;
   sets: SetLog[];
+  note?: string;
+}
+
+export type CardioKind = 'Corrida' | 'Caminhada' | 'Bike' | 'Natação' | 'Elíptico' | 'Outro';
+export interface CardioLog {
+  id: ID;
+  date: DateKey;
+  kind: CardioKind;
+  minutes: number;
+  distanceKm?: number;
+  note?: string;
 }
 
 export interface WorkoutSession {
@@ -95,12 +107,18 @@ export interface Goals {
 /* ── Hábitos ───────────────────────────────────────────────── */
 export type HabitCategory = 'Saúde' | 'Mente' | 'Suplementação' | 'Rotina';
 
+export type HabitFreq = { type: 'daily' } | { type: 'days'; days: number[] } | { type: 'weekly'; times: number };
+
 export interface Habit {
   id: ID;
   name: string;
   category: HabitCategory;
   createdAt: DateKey;
   archived?: boolean;
+  freq?: HabitFreq; // padrão: todo dia
+  target?: number; // hábito com quantidade (ex.: 20)
+  unit?: string; // ex.: "páginas"
+  reminder?: string; // 'HH:MM'
 }
 
 /* ── Registros / Biometria ─────────────────────────────────── */
@@ -141,6 +159,23 @@ export interface NoteEntry {
   tags: string[];
 }
 
+/* ── Preferências ──────────────────────────────────────────── */
+export type HomeBlockId = 'dia' | 'resumo' | 'agua' | 'semana' | 'habitos' | 'refeicoes' | 'corpo';
+export type Accent = 'laranja' | 'verde' | 'azul' | 'roxo' | 'rosa' | 'grafite';
+export interface Prefs {
+  theme: 'auto' | 'light' | 'dark';
+  accent: Accent;
+  textSize: 1 | 1.1 | 1.2;
+  haptics: boolean;
+  celebrate: boolean;
+  homeBlocks: { id: HomeBlockId; on: boolean }[];
+  navTabs: TabId[]; // abas da barra inferior (além do Início)
+  scoreWeights: { treino: number; refeicoes: number; habitos: number };
+  onboarded: boolean;
+  reminders: { water: { on: boolean; start: string; end: string; every: number } };
+  height?: number; // cm (IMC)
+}
+
 /* ── Estado raiz ───────────────────────────────────────────── */
 export interface AppState {
   meta: { version: number; createdAt: string; updatedAt: string };
@@ -149,14 +184,19 @@ export interface AppState {
   splits: Split[];
   schedule: WeekSchedule;
   sessions: WorkoutSession[];
+  cardio: CardioLog[];
   foods: FoodEntry[]; // legado (contagem de macros) — mantido para backups antigos
   meals: MealLog[];
+  mealFavorites: { id: ID; kind: MealKind; description: string }[];
   water: Record<DateKey, number>; // total do dia
   waterLog: WaterEntry[];
   waterSizes: WaterSize[];
   habits: Habit[];
   habitLogs: Record<DateKey, ID[]>;
+  habitCounts: Record<DateKey, Record<ID, number>>;
   body: BodyLog[];
+  progressPhotos: { id: ID; date: DateKey; photoId: ID; weight?: number; note?: string }[];
   sleep: SleepLog[];
   notes: NoteEntry[];
+  prefs: Prefs;
 }

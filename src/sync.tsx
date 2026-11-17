@@ -31,6 +31,9 @@ interface SyncCtx {
   removeFriend: (id: number) => Promise<void>;
   rename: (name: string) => Promise<void>;
   resetAll: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
+  /** Executa uma chamada à nuvem com a sessão válida. */
+  call: <T,>(fn: (s: Session) => Promise<T>) => Promise<T>;
 }
 
 const Ctx = createContext<SyncCtx | null>(null);
@@ -172,10 +175,28 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     },
     acceptFriend: async (id) => { const s = await fresh(); if (s) { await cloud.acceptFriend(s, id); await refreshFriends(); } },
     removeFriend: async (id) => { const s = await fresh(); if (s) { await cloud.removeFriend(s, id); await refreshFriends(); } },
+    call: async (fn) => {
+      const s = await fresh();
+      if (!s) throw new Error('Entre na sua conta primeiro.');
+      return fn(s);
+    },
+    deleteAccount: async () => {
+      const s = await fresh();
+      if (!s) throw new Error('Entre na conta para excluí-la.');
+      await clearAllPhotos();
+      await cloud.deleteAccount(s);
+      try { localStorage.removeItem(linkedKey(s.user.id)); } catch { /* */ }
+      const empty = buildEmptyState();
+      empty.prefs = { ...stateRef.current.prefs, onboarded: false };
+      skipPush.current = true;
+      actions.replaceAll(empty);
+      setSession(null); setProfile(null); setFriends([]); setReady(false); setNeedsChoice(false);
+    },
     resetAll: async () => {
       const empty = buildEmptyState();
       const cur = stateRef.current;
       empty.profile = { name: profile?.display_name || cur.profile.name || '', shareBody: cur.profile.shareBody };
+      empty.prefs = { ...cur.prefs, onboarded: false };
       skipPush.current = true; // o envio é feito aqui mesmo, sem esperar o debounce
       actions.replaceAll(empty);
       await clearAllPhotos();

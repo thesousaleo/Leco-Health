@@ -1,8 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import {
   LuActivity, LuApple, LuDumbbell, LuFileText, LuMoon, LuNotebookPen, LuPencil, LuPlus, LuScale, LuSearch, LuStethoscope, LuTag,
-  LuTrendingDown, LuTrendingUp, LuX,
+  LuTrendingDown, LuTrendingUp, LuX, LuChartColumn, LuCamera, LuImage, LuColumns2, LuFileDown, LuChevronLeft, LuChevronRight, LuLightbulb,
 } from 'react-icons/lu';
+import { deletePhoto, savePhoto } from '../photos';
+import { PhotoViewer, Thumb } from './Nutrition';
+import { buildReport, reportPdf, weekRange } from '../report';
+import { shareFile } from '../native';
+import { useSync } from '../sync';
 import { useStore } from '../store';
 import type { NoteEntry, NoteKind, SleepLog } from '../types';
 import { addDays, fmtShort, lastNDays, nf, relDay, round1, todayKey, fmtWeekdayShort } from '../utils';
@@ -11,23 +16,28 @@ import {
 } from '../components/ui';
 import { BarChart, LineChart } from '../components/charts';
 
-type View = 'peso' | 'sono' | 'diario';
+type View = 'peso' | 'sono' | 'diario' | 'resumo';
 
 export default function Metrics() {
-  const [view, setView] = useState<View>('peso');
+  const [view, setView] = useState<View>(() => {
+    try { const v = localStorage.getItem('leco-health:metrics-view') as View | null; if (v) { localStorage.removeItem('leco-health:metrics-view'); return v; } } catch { /* */ }
+    return 'peso';
+  });
   return (
     <div>
       <PageHeader title="Registros" sub="Peso, sono e diário de saúde" />
-      <div className="mb-4">
+      <div className="mb-4 overflow-x-auto no-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
         <Segmented value={view} onChange={setView} options={[
           { value: 'peso', label: <><LuScale size={15} /> Peso</> },
           { value: 'sono', label: <><LuMoon size={15} /> Sono</> },
           { value: 'diario', label: <><LuNotebookPen size={15} /> Diário</> },
+          { value: 'resumo', label: <><LuChartColumn size={15} /> Resumo</> },
         ]} />
       </div>
       {view === 'peso' && <Weight />}
       {view === 'sono' && <Sleep />}
       {view === 'diario' && <Journal />}
+      {view === 'resumo' && <ReportView />}
     </div>
   );
 }
@@ -77,6 +87,7 @@ function Weight() {
             <Delta v={last && prev ? round1(last.weight! - prev.weight!) : undefined} label="vs. anterior" />
             <Delta v={last && ago30 && ago30 !== last ? round1(last.weight! - ago30.weight!) : undefined} label="em 30 dias" />
           </div>
+          {last && <Bmi weight={last.weight!} />}
           {goal != null && last && (
             <p className="text-[13.5px] text-ink/80 mt-4">
               Meta: <b className="font-semibold">{nf(goal, 1)} kg</b> · {Math.abs(last.weight! - goal) < 0.1 ? 'meta atingida 🎉' : `faltam ${nf(Math.abs(last.weight! - goal), 1)} kg`}
@@ -104,12 +115,19 @@ function Weight() {
             <p className="text-[16px] font-semibold text-ink">Evolução</p>
             <div className="flex gap-1 bg-cream rounded-full p-1">
               {([[30, '30d'], [90, '90d'], [0, 'Tudo']] as const).map(([p, l]) => (
-                <button key={l} onClick={() => setPeriod(p)} className={cx('press h-8 px-3 rounded-full text-[12.5px] font-medium', period === p ? 'bg-ink text-white' : 'text-ink/60')}>{l}</button>
+                <button key={l} onClick={() => setPeriod(p)} className={cx('press h-8 px-3 rounded-full text-[12.5px] font-medium', period === p ? 'bg-ink text-on-ink' : 'text-ink/60')}>{l}</button>
               ))}
             </div>
           </div>
-          <LineChart data={shown.map((l) => ({ label: fmtShort(l.date), value: l.weight!, sub: relDay(l.date) }))} color="#F26B3A" unit=" kg" goal={goal} />
+          <LineChart data={shown.map((l) => ({ label: fmtShort(l.date), value: l.weight!, sub: relDay(l.date) }))} unit=" kg" goal={goal}
+            trend={shown.map((l) => {
+              const win = logs.filter((x) => x.date <= l.date && x.date > addDays(l.date, -7));
+              return win.length >= 2 ? round1(win.reduce((a, x) => a + x.weight!, 0) / win.length) : null;
+            })} />
+          <p className="text-[12px] text-muted mt-1">Linha tracejada = média dos últimos 7 dias (tendência, ignora oscilações do dia a dia).</p>
         </Card>
+
+        <ProgressPhotos lastWeight={last?.weight} />
 
         <Card className="p-2 md:p-3">
           {logs.length === 0 ? <Empty icon={<LuScale />} title="Sem registros de peso" /> : (
@@ -206,7 +224,7 @@ function Sleep() {
         <div className="grid grid-cols-5 gap-1.5">
           {QUALITY.map((q, i) => (
             <button key={q} type="button" onClick={() => setF({ ...f, quality: i + 1 })}
-              className={cx('press h-11 rounded-full text-[12.5px] font-medium transition-colors', f.quality === i + 1 ? 'bg-ink text-white' : 'bg-cream text-ink/65')}>{q}</button>
+              className={cx('press h-11 rounded-full text-[12.5px] font-medium transition-colors', f.quality === i + 1 ? 'bg-ink text-on-ink' : 'bg-cream text-ink/65')}>{q}</button>
           ))}
         </div>
 
@@ -261,11 +279,13 @@ function Sleep() {
             ))}
           </div>
           <div className="mt-5">
-            <BarChart color="#F26B3A" goal={goal} unit="h" decimals={1}
+            <BarChart color="var(--color-orange)" goal={goal} unit="h" decimals={1}
               data={days.map((d) => ({ label: fmtWeekdayShort(d).slice(0, 1).toUpperCase(), value: byDay[d]?.hours ?? 0 }))} />
           </div>
           <p className="text-[12px] text-muted">Linha tracejada = meta de {goal}h (altere em Ajustes → Metas).</p>
         </Card>
+
+        <SleepInsights />
 
         <Card className="p-2 md:p-3">
           {state.sleep.length === 0 ? <Empty icon={<LuMoon />} title="Nenhuma noite registrada" /> : (
@@ -289,6 +309,256 @@ function Sleep() {
     </div>
   );
 }
+
+/* ── IMC ──────────────────────────────────────────────────── */
+function Bmi({ weight }: { weight: number }) {
+  const { state, actions } = useStore();
+  const h = state.prefs.height;
+  const [val, setVal] = useState('');
+  if (!h) {
+    return (
+      <form className="mt-4 flex gap-2 items-end" onSubmit={(e) => { e.preventDefault(); const v = parseInt(val, 10); if (v > 100 && v < 250) actions.setPrefs({ height: v }); }}>
+        <Field label="Sua altura (cm) para calcular o IMC" className="flex-1"><Input inputMode="numeric" value={val} onChange={(e) => setVal(e.target.value.replace(/\D/g, ''))} placeholder="175" /></Field>
+        <Button type="submit" variant="dark" disabled={!val}>OK</Button>
+      </form>
+    );
+  }
+  const bmi = weight / (h / 100) ** 2;
+  const cat = bmi < 18.5 ? 'abaixo do peso' : bmi < 25 ? 'peso normal' : bmi < 30 ? 'sobrepeso' : 'obesidade';
+  const pos = Math.min(100, Math.max(0, ((bmi - 15) / 25) * 100));
+  return (
+    <div className="mt-4 rounded-2xl bg-cream px-4 py-3">
+      <div className="flex items-baseline justify-between">
+        <span className="text-[13px] text-muted">IMC · {h} cm</span>
+        <span className="text-[15px] text-ink"><b className="font-semibold tabular-nums">{nf(bmi, 1)}</b> <span className="text-muted">{cat}</span></span>
+      </div>
+      <div className="relative h-2 rounded-full mt-2.5 overflow-hidden flex">
+        <span className="bg-ink/15" style={{ width: '14%' }} /><span className="bg-good/60" style={{ width: '26%' }} /><span className="bg-orange/50" style={{ width: '20%' }} /><span className="bg-orange" style={{ width: '40%' }} />
+      </div>
+      <div className="relative h-0"><span className="absolute -top-3.5 size-3 rounded-full bg-ink border-2 border-surface" style={{ left: `calc(${pos}% - 6px)` }} /></div>
+      <p className="text-[11.5px] text-muted mt-2">O IMC é só uma referência geral e não considera massa muscular.</p>
+    </div>
+  );
+}
+
+/* ── Fotos de progresso ─────────────────────────────────────── */
+function ProgressPhotos({ lastWeight }: { lastWeight?: number }) {
+  const { state, actions, toast } = useStore();
+  const camRef = React.useRef<HTMLInputElement>(null);
+  const galRef = React.useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [viewer, setViewer] = useState<{ ids: string[]; i: number } | null>(null);
+  const [selecting, setSelecting] = useState<string[] | null>(null);
+  const [compare, setCompare] = useState<string[] | null>(null);
+  const list = [...state.progressPhotos].sort((a, b) => (a.date < b.date ? 1 : -1));
+  const add = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setBusy(true);
+    try {
+      for (const f of [...files].slice(0, 4)) actions.addProgressPhoto({ date: todayKey(), photoId: await savePhoto(f), weight: lastWeight });
+      toast('Foto de progresso salva');
+    } catch { toast('Não foi possível salvar a foto'); } finally { setBusy(false); }
+  };
+  const pick = (id: string) => {
+    if (!selecting) return;
+    const n = selecting.includes(id) ? selecting.filter((x) => x !== id) : [...selecting, id].slice(-2);
+    setSelecting(n);
+    if (n.length === 2) { setCompare(n); setSelecting(null); }
+  };
+  return (
+    <Card className="p-5 md:p-6">
+      <input ref={camRef} type="file" accept="image/*" capture="user" className="hidden" onChange={(e) => { add(e.target.files); e.target.value = ''; }} />
+      <input ref={galRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => { add(e.target.files); e.target.value = ''; }} />
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <p className="text-[16px] font-semibold text-ink">Fotos de progresso</p>
+        <div className="flex gap-1">
+          <IconButton label="Tirar foto" onClick={() => camRef.current?.click()} disabled={busy}><LuCamera size={17} /></IconButton>
+          <IconButton label="Escolher da galeria" onClick={() => galRef.current?.click()} disabled={busy}><LuImage size={17} /></IconButton>
+        </div>
+      </div>
+      <p className="text-[12.5px] text-muted mb-3">Privadas: só você vê. {list.length >= 2 && (selecting ? 'Escolha 2 fotos para comparar.' : '')}</p>
+      {list.length === 0 ? (
+        <button onClick={() => camRef.current?.click()} className="press w-full h-28 rounded-2xl border-2 border-dashed border-ink/12 text-[14px] text-ink/55 flex flex-col items-center justify-center gap-1.5">
+          <LuCamera size={22} /> Tirar a primeira foto
+        </button>
+      ) : (
+        <>
+          <div className="grid grid-cols-3 gap-2">
+            {list.map((p, i) => (
+              <button key={p.id} onClick={() => (selecting ? pick(p.id) : setViewer({ ids: list.map((x) => x.photoId), i }))} className="press relative">
+                <Thumb id={p.photoId} className={cx('w-full aspect-[3/4] rounded-2xl', selecting?.includes(p.id) && 'ring-4 ring-orange')} />
+                <span className="absolute left-1.5 bottom-1.5 h-5 px-2 rounded-full bg-surface/90 text-ink text-[10.5px] font-medium grid place-items-center">
+                  {fmtShort(p.date)}{p.weight ? ` · ${nf(p.weight, 1)}` : ''}
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2 mt-3">
+            {list.length >= 2 && (
+              <Button size="sm" variant={selecting ? 'dark' : 'soft'} onClick={() => setSelecting(selecting ? null : [])}><LuColumns2 size={14} /> {selecting ? 'Cancelar' : 'Comparar'}</Button>
+            )}
+          </div>
+        </>
+      )}
+      {viewer && <PhotoViewer ids={viewer.ids} index={viewer.i} onClose={() => setViewer(null)} />}
+      {compare && (() => {
+        const [a, b] = compare.map((id) => state.progressPhotos.find((x) => x.id === id)!).sort((x, y) => (x.date < y.date ? -1 : 1));
+        const days = Math.round((fromKeyMs(b.date) - fromKeyMs(a.date)) / 864e5);
+        return (
+          <Modal open onClose={() => setCompare(null)} title="Comparar">
+            <div className="grid grid-cols-2 gap-2">
+              {[a, b].map((p) => (
+                <div key={p.id}>
+                  <Thumb id={p.photoId} className="w-full aspect-[3/4] rounded-2xl" />
+                  <p className="text-[13.5px] text-ink mt-2 font-medium">{relDay(p.date)}</p>
+                  <p className="text-[12.5px] text-muted">{p.weight ? `${nf(p.weight, 1)} kg` : 'sem peso'}</p>
+                </div>
+              ))}
+            </div>
+            <p className="text-[14px] text-ink/80 mt-4">
+              {days} dias de diferença{a.weight && b.weight ? ` · ${b.weight - a.weight > 0 ? '+' : ''}${nf(b.weight - a.weight, 1)} kg` : ''}
+            </p>
+            <div className="flex gap-2 mt-4">
+              <DeleteButton compact={false} label="Apagar a mais antiga" onConfirm={() => { deletePhoto(a.photoId); actions.deleteProgressPhoto(a.id); setCompare(null); }} />
+            </div>
+          </Modal>
+        );
+      })()}
+    </Card>
+  );
+}
+const fromKeyMs = (k: string) => new Date(k + 'T12:00').getTime();
+
+/* ── Descobertas do sono ──────────────────────────────────── */
+function SleepInsights() {
+  const { state } = useStore();
+  const since = addDays(todayKey(), -60);
+  const nights = state.sleep.filter((s) => s.date >= since);
+  const insights = useMemo(() => {
+    const out: { text: string; weight: number }[] = [];
+    const avg = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / (arr.length || 1);
+    const tags = [...new Set(nights.flatMap((n) => n.tags ?? []))];
+    tags.forEach((t) => {
+      const w = nights.filter((n) => n.tags?.includes(t));
+      const wo = nights.filter((n) => !n.tags?.includes(t));
+      if (w.length < 2 || wo.length < 2) return;
+      const dh = avg(w.map((n) => n.hours)) - avg(wo.map((n) => n.hours));
+      const dq = avg(w.map((n) => n.quality ?? n.energy)) - avg(wo.map((n) => n.quality ?? n.energy));
+      if (Math.abs(dh) >= 0.3) out.push({ text: `Com “${t.toLowerCase()}” você dormiu ${fmtDur(Math.abs(dh))} ${dh < 0 ? 'a menos' : 'a mais'} em média.`, weight: Math.abs(dh) });
+      else if (Math.abs(dq) >= 0.5) out.push({ text: `Com “${t.toLowerCase()}” a qualidade da noite foi ${dq < 0 ? 'pior' : 'melhor'} (${nf(Math.abs(dq), 1)} ponto${Math.abs(dq) >= 1.5 ? 's' : ''}).`, weight: Math.abs(dq) / 2 });
+    });
+    const withBed = nights.filter((n) => n.bedtime);
+    const toM = (t: string) => { const m = +t.slice(0, 2) * 60 + +t.slice(3, 5); return m < 720 ? m + 1440 : m; };
+    const early = withBed.filter((n) => toM(n.bedtime!) <= 23 * 60);
+    const late = withBed.filter((n) => toM(n.bedtime!) > 23 * 60);
+    if (early.length >= 2 && late.length >= 2) {
+      const dq = avg(early.map((n) => n.quality ?? n.energy)) - avg(late.map((n) => n.quality ?? n.energy));
+      const de = avg(early.map((n) => n.energy)) - avg(late.map((n) => n.energy));
+      if (Math.abs(de) >= 0.3 || Math.abs(dq) >= 0.3)
+        out.push({ text: `Dormindo até 23h sua energia no dia seguinte foi ${de >= 0 ? 'maior' : 'menor'} (${nf(Math.abs(de), 1)} estrela${Math.abs(de) >= 1.5 ? 's' : ''}).`, weight: Math.abs(de) });
+    }
+    const workoutDays = new Set([...state.sessions.filter((s) => s.completed).map((s) => s.date), ...(state.cardio || []).map((c) => c.date)]);
+    const afterW = nights.filter((n) => workoutDays.has(addDays(n.date, -1)));
+    const afterR = nights.filter((n) => !workoutDays.has(addDays(n.date, -1)));
+    if (afterW.length >= 3 && afterR.length >= 2) {
+      const dq = avg(afterW.map((n) => n.quality ?? n.energy)) - avg(afterR.map((n) => n.quality ?? n.energy));
+      if (Math.abs(dq) >= 0.3) out.push({ text: `Depois de dias de treino, a qualidade do sono foi ${dq > 0 ? 'melhor' : 'pior'} (${nf(Math.abs(dq), 1)} ponto).`, weight: Math.abs(dq) / 2 });
+    }
+    return out.sort((a, b) => b.weight - a.weight).slice(0, 4);
+  }, [nights, state.sessions, state.cardio]);
+  return (
+    <Card className="p-5 md:p-6">
+      <p className="text-[16px] font-semibold text-ink mb-1 flex items-center gap-2"><LuLightbulb size={17} className="text-orange" /> Descobertas</p>
+      <p className="text-[12.5px] text-muted mb-3">Comparações dos últimos 60 dias. Quanto mais noites com motivos marcados, melhores ficam.</p>
+      {insights.length === 0 ? (
+        <p className="text-[14px] text-muted">Ainda não há dados suficientes. Registre algumas noites marcando o que influenciou o sono.</p>
+      ) : (
+        <ul className="space-y-2">
+          {insights.map((x, i) => <li key={i} className="rounded-2xl bg-cream px-4 py-3 text-[14.5px] text-ink leading-snug">{x.text}</li>)}
+        </ul>
+      )}
+    </Card>
+  );
+}
+const fmtDur = (h: number) => (h >= 1 ? `${nf(h, 1)}h` : `${Math.round(h * 60)} min`);
+
+/* ── Resumo semanal + PDF ─────────────────────────────────── */
+function ReportView() {
+  const { state, toast } = useStore();
+  const sync = useSync();
+  const today = todayKey();
+  const [ref, setRef] = useState(today);
+  const { from, to } = weekRange(ref);
+  const r = buildReport(state, from, to > today ? today : to);
+  const p = buildReport(state, addDays(from, -7), addDays(from, -1));
+  const [pdfDays, setPdfDays] = useState<7 | 30 | 90>(30);
+  const [busy, setBusy] = useState(false);
+  const cmp = (a: number, b: number, unit = '') => {
+    if (!b && !a) return null;
+    const d = a - b;
+    if (Math.abs(d) < 0.05) return <span className="text-muted">igual à semana anterior</span>;
+    return <span className={d > 0 ? 'text-good' : 'text-orange'}>{d > 0 ? '+' : ''}{nf(d, unit === ' L' ? 1 : 0)}{unit} vs semana anterior</span>;
+  };
+  const Row = ({ l, v, c }: { l: string; v: string; c?: React.ReactNode }) => (
+    <div className="flex items-start justify-between gap-3 py-3">
+      <span className="text-[14.5px] text-ink/80">{l}</span>
+      <span className="text-right"><span className="block text-[15px] font-semibold text-ink tabular-nums">{v}</span>{c && <span className="block text-[12px]">{c}</span>}</span>
+    </div>
+  );
+  return (
+    <div className="grid lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] gap-4 md:gap-5 items-start">
+      <Card className="p-5 md:p-6">
+        <div className="flex items-center justify-between mb-2">
+          <IconButton label="Semana anterior" onClick={() => setRef(addDays(from, -1))}><LuChevronLeft size={18} /></IconButton>
+          <div className="text-center">
+            <p className="text-[16px] font-semibold text-ink">Semana de {fmtDayMonthShort(from)} a {fmtDayMonthShort(to)}</p>
+            <p className="text-[12.5px] text-muted">{to >= today ? 'semana atual (parcial)' : ''}</p>
+          </div>
+          <IconButton label="Próxima semana" disabled={to >= today} onClick={() => setRef(addDays(to, 1))} className="disabled:opacity-25"><LuChevronRight size={18} /></IconButton>
+        </div>
+        <div className="flex items-end gap-1.5 h-24 my-4">
+          {r.scores.map((s) => (
+            <div key={s.date} className="flex-1 flex flex-col items-center gap-1">
+              <div className="w-full rounded-lg bg-cream flex items-end overflow-hidden h-20">
+                <div className="w-full rounded-lg bg-orange" style={{ height: `${Math.max(3, s.score)}%`, opacity: r.best?.date === s.date ? 1 : 0.65 }} />
+              </div>
+              <span className="text-[11px] text-muted capitalize">{fmtWeekdayShort(s.date).slice(0, 3)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="divide-y divide-line">
+          <Row l="Score médio" v={`${r.scoreAvg}%`} c={cmp(r.scoreAvg, p.scoreAvg, ' pts')} />
+          <Row l="Melhor dia" v={r.best ? `${relDay(r.best.date)} · ${r.best.score}%` : '—'} />
+          <Row l="Treinos" v={`${r.workouts} musculação${r.cardio ? ` + ${r.cardio} cardio` : ''}`} c={cmp(r.workouts + r.cardio, p.workouts + p.cardio)} />
+          <Row l="Volume levantado" v={`${nf(r.volumeT, 1)} t`} />
+          <Row l="Refeições registradas" v={`${r.meals}`} c={cmp(r.meals, p.meals)} />
+          <Row l="Água por dia" v={`${nf(r.waterAvgL, 1)} L`} c={cmp(r.waterAvgL, p.waterAvgL, ' L')} />
+          <Row l="Hábitos concluídos" v={`${r.habitPct}%`} c={cmp(r.habitPct, p.habitPct, ' pts')} />
+          {r.topHabit && <Row l="Hábito mais feito" v={`${r.topHabit.name} (${r.topHabit.done}x)`} />}
+          <Row l="Sono médio" v={r.sleepNights ? `${nf(r.sleepAvg, 1)} h` : '—'} c={r.sleepNights ? `${r.sleepNightsMet} de ${r.sleepNights} noites na meta` : undefined} />
+          <Row l="Peso" v={r.weightEnd != null ? `${nf(r.weightEnd, 1)} kg` : '—'} c={r.weightStart != null && r.weightEnd != null && r.weightStart !== r.weightEnd ? `${r.weightEnd - r.weightStart > 0 ? '+' : ''}${nf(r.weightEnd - r.weightStart, 1)} kg na semana` : undefined} />
+        </div>
+      </Card>
+      <Card className="p-5 md:p-6">
+        <p className="text-[16px] font-semibold text-ink flex items-center gap-2"><LuFileDown size={17} /> Relatório em PDF</p>
+        <p className="text-[13px] text-muted mt-1 mb-4">Para mostrar ao nutricionista, médico ou personal. Inclui score, treinos, refeições, água, hábitos, sono, peso e diário.</p>
+        <div className="flex gap-1 p-1 rounded-full bg-cream mb-4">
+          {([7, 30, 90] as const).map((d) => (
+            <button key={d} onClick={() => setPdfDays(d)} className={cx('press flex-1 h-9 rounded-full text-[13.5px] font-medium', pdfDays === d ? 'bg-ink text-on-ink' : 'text-ink/60')}>{d} dias</button>
+          ))}
+        </div>
+        <Button variant="primary" className="w-full" disabled={busy} onClick={async () => {
+          setBusy(true);
+          try {
+            const b64 = reportPdf(state, pdfDays, sync.profile?.display_name || state.profile.name || '');
+            await shareFile(`leco-health-relatorio-${pdfDays}d-${today}.pdf`, b64, 'application/pdf', 'Relatório Leco Health');
+          } catch { toast('Não foi possível gerar o PDF'); } finally { setBusy(false); }
+        }}><LuFileDown size={16} /> {busy ? 'Gerando…' : 'Gerar e compartilhar'}</Button>
+      </Card>
+    </div>
+  );
+}
+const fmtDayMonthShort = (k: string) => fmtShort(k);
 
 /* ─────────────────────────── Diário ─────────────────────────── */
 const KINDS: { id: NoteKind; icon: React.ReactNode; accent: 'bio' | 'treino' | 'nutri' | 'habito' | 'neutral' }[] = [
@@ -393,7 +663,7 @@ function NoteModal({ open, note, onClose, onSave }: { open: boolean; note?: Note
         <Field label="Data"><Input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></Field>
         <Field label="Tipo">
           <Select value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value as NoteKind })}>
-            {KINDS.map((k) => <option key={k.id} className="bg-white">{k.id}</option>)}
+            {KINDS.map((k) => <option key={k.id} className="bg-surface">{k.id}</option>)}
           </Select>
         </Field>
         <Field label="Título" className="col-span-2"><Input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="Ex: Dor no joelho esquerdo" /></Field>

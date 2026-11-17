@@ -11,7 +11,9 @@ const twDir = process.env.TW_DIR || path.join(root, 'node_modules/tailwindcss');
 const js = await build({
   entryPoints: [path.join(root, 'src/main.tsx')],
   bundle: true, minify: true, format: 'iife', target: 'es2020', write: false,
-  jsx: 'automatic', loader: { '.css': 'empty' }, define: { 'process.env.NODE_ENV': '"production"' }, logLevel: 'warning',
+  jsx: 'automatic', loader: { '.css': 'empty' },
+  plugins: [{ name: 'capacitor-stub', setup(b) { b.onResolve({ filter: /^@(capacitor|capgo)\// }, () => ({ path: path.join(root, 'src/native-stub.ts') })); } }],
+  define: { 'process.env.NODE_ENV': '"production"' }, logLevel: 'warning',
 });
 const jsCode = js.outputFiles[0].text;
 

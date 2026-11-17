@@ -1,3 +1,4 @@
+import { defaultPrefs } from './prefs';
 import type { AppState, BodyLog, FoodEntry, Habit, MealLog, NoteEntry, SleepLog, Split, WorkoutSession } from './types';
 import { addDays, round1, todayKey, uid, weekday } from './utils';
 
@@ -265,22 +266,34 @@ export function buildMockState(): AppState {
   ];
 
   return {
-    meta: { version: 1, createdAt: now, updatedAt: now },
+    meta: { version: 1, createdAt: new Date(Date.now() - 40 * 864e5).toISOString(), updatedAt: now },
     profile: { name: 'Leonardo' },
     goals: { kcal: 2600, protein: 180, carbs: 300, fat: 75, water: 3500, meals: 4, sleep: 8, weight: 80 },
     splits,
     schedule,
     sessions,
+    cardio: [
+      { id: uid(), date: addDays(today, -2), kind: 'Corrida', minutes: 32, distanceKm: 5.2 },
+      { id: uid(), date: addDays(today, -5), kind: 'Caminhada', minutes: 45, distanceKm: 4.1 },
+      { id: uid(), date: addDays(today, -9), kind: 'Bike', minutes: 50, distanceKm: 18 },
+    ],
     foods,
     meals,
+    mealFavorites: [
+      { id: uid(), kind: 'cafe', description: '3 ovos mexidos, cuscuz e café preto' },
+      { id: uid(), kind: 'treino', description: 'Whey com banana' },
+    ],
     water,
     waterLog,
     waterSizes,
     habits,
     habitLogs,
+    habitCounts: {},
     body,
+    progressPhotos: [],
     sleep,
     notes,
+    prefs: defaultPrefs(),
   };
 }
 
@@ -293,15 +306,20 @@ export function buildEmptyState(): AppState {
     splits: [],
     schedule: { 0: null, 1: null, 2: null, 3: null, 4: null, 5: null, 6: null },
     sessions: [],
+    cardio: [],
     foods: [],
     meals: [],
+    mealFavorites: [],
     water: {},
     waterLog: [],
     waterSizes: [{ id: 'copo', label: 'Copo', ml: 250 }, { id: 'garrafa', label: 'Garrafa', ml: 500 }],
     habits: [],
     habitLogs: {},
+    habitCounts: {},
     body: [],
+    progressPhotos: [],
     sleep: [],
     notes: [],
+    prefs: { ...defaultPrefs(), onboarded: false },
   };
 }

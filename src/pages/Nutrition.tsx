@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import {
-  LuCamera, LuCheck, LuChevronLeft, LuChevronRight, LuImage, LuImageOff, LuImages, LuLoaderCircle, LuMinus, LuNotebookPen, LuPencil, LuPlus, LuX,
+  LuCamera, LuCheck, LuRepeat, LuChevronLeft, LuChevronRight, LuImage, LuImageOff, LuImages, LuLoaderCircle, LuMinus, LuNotebookPen, LuPencil, LuPlus, LuX,
 } from 'react-icons/lu';
 import { useStore } from '../store';
 import type { MealKind, MealLog } from '../types';
@@ -16,11 +16,11 @@ export function WaterButtons({ onAdd, compact }: { onAdd: (ml: number) => void; 
     <div className="flex flex-wrap gap-2">
       {[250, 500].map((ml) => (
         <button key={ml} type="button" onClick={(e) => { e.stopPropagation(); onAdd(ml); }}
-          className="press h-10 px-4 rounded-full bg-white text-ink text-[14px] font-medium tabular-nums">+{ml} ml</button>
+          className="press h-10 px-4 rounded-full bg-surface text-ink text-[14px] font-medium tabular-nums">+{ml} ml</button>
       ))}
       {!compact && (
         <button type="button" onClick={() => onAdd(-250)} aria-label="Remover 250 ml"
-          className="press size-10 rounded-full bg-white grid place-items-center text-ink/60"><LuMinus size={15} /></button>
+          className="press size-10 rounded-full bg-surface grid place-items-center text-ink/60"><LuMinus size={15} /></button>
       )}
     </div>
   );
@@ -58,12 +58,12 @@ export default function Nutrition() {
         <>
           {/* navegação de dia */}
           <div className="flex items-center justify-between gap-2 mb-4">
-            <button aria-label="Dia anterior" onClick={() => setDay(addDays(day, -1))} className="press size-11 rounded-full bg-white grid place-items-center text-ink"><LuChevronLeft size={19} /></button>
+            <button aria-label="Dia anterior" onClick={() => setDay(addDays(day, -1))} className="press size-11 rounded-full bg-surface grid place-items-center text-ink"><LuChevronLeft size={19} /></button>
             <button onClick={() => setDay(todayKey())} className="text-center">
               <p className="text-[17px] font-medium text-ink">{relDay(day)}</p>
               <p className="text-[13px] text-muted">{fmtLong(day)}</p>
             </button>
-            <button aria-label="Próximo dia" disabled={isToday} onClick={() => setDay(addDays(day, 1))} className="press size-11 rounded-full bg-white grid place-items-center text-ink disabled:opacity-30"><LuChevronRight size={19} /></button>
+            <button aria-label="Próximo dia" disabled={isToday} onClick={() => setDay(addDays(day, 1))} className="press size-11 rounded-full bg-surface grid place-items-center text-ink disabled:opacity-30"><LuChevronRight size={19} /></button>
           </div>
 
           <div className="grid lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] gap-4 md:gap-5 mb-4 md:mb-5">
@@ -98,7 +98,8 @@ export default function Nutrition() {
           ) : (
             <ol className="relative space-y-3 md:space-y-4">
               {meals.map((m) => (
-                <MealCard key={m.id} meal={m} onEdit={() => setModal({ meal: m })} onOpenPhoto={(i) => setViewer({ ids: m.photos, i })} />
+                <MealCard key={m.id} meal={m} onEdit={() => setModal({ meal: m })} onOpenPhoto={(i) => setViewer({ ids: m.photos, i })}
+                  onRepeat={() => { actions.addMeal({ date: todayKey(), time: nowHHMM(), kind: m.kind, description: m.description, photos: [] }); setDay(todayKey()); toast('Refeição repetida hoje'); }} />
               ))}
             </ol>
           )}
@@ -106,7 +107,8 @@ export default function Nutrition() {
       )}
 
       <MealModal open={!!modal} meal={modal?.meal} day={day} onClose={() => setModal(null)}
-        onSave={(m) => {
+        onSave={(m, fav) => {
+          if (fav && m.description) actions.addMealFavorite({ kind: m.kind, description: m.description });
           if (modal?.meal) { actions.updateMeal(modal.meal.id, m); toast('Refeição atualizada'); }
           else { actions.addMeal(m); toast(`${mealLabel(m.kind)} registrado`); if (m.date !== day) setDay(m.date); }
           setModal(null);
@@ -122,7 +124,7 @@ export default function Nutrition() {
 }
 
 /* ── card da refeição ─────────────────────────────────────── */
-function MealCard({ meal, onEdit, onOpenPhoto }: { meal: MealLog; onEdit: () => void; onOpenPhoto: (i: number) => void }) {
+function MealCard({ meal, onEdit, onOpenPhoto, onRepeat }: { meal: MealLog; onEdit: () => void; onOpenPhoto: (i: number) => void; onRepeat: () => void }) {
   const first = meal.photos[0];
   return (
     <li>
@@ -141,9 +143,12 @@ function MealCard({ meal, onEdit, onOpenPhoto }: { meal: MealLog; onEdit: () => 
         )}
         <div className="flex-1 min-w-0 py-1">
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center h-6 px-2.5 rounded-full bg-blush/70 text-[#D9541F] text-[12px] font-medium">{mealLabel(meal.kind)}</span>
+            <span className="inline-flex items-center h-6 px-2.5 rounded-full bg-blush/70 text-orange text-[12px] font-medium">{mealLabel(meal.kind)}</span>
             <span className="text-[13px] text-muted tabular-nums">{meal.time}</span>
-            <IconButton label="Editar" className="ml-auto size-8 -mr-1 -mt-1" onClick={onEdit}><LuPencil size={14} /></IconButton>
+            <span className="ml-auto flex -mr-1 -mt-1">
+              <IconButton label="Repetir agora" className="size-8" onClick={onRepeat}><LuRepeat size={14} /></IconButton>
+              <IconButton label="Editar" className="size-8" onClick={onEdit}><LuPencil size={14} /></IconButton>
+            </span>
           </div>
           <p className="text-[15px] md:text-[16px] text-ink mt-2 leading-snug line-clamp-3">{meal.description || <span className="text-muted">Sem descrição</span>}</p>
           {meal.note && <p className="text-[13px] text-muted mt-1.5 line-clamp-2">{meal.note}</p>}
@@ -190,7 +195,7 @@ function Gallery({ onOpen, onEdit }: { onOpen: (ids: string[], i: number) => voi
                 <button key={p} onClick={() => onOpen(ids, i)} onContextMenu={(e) => { e.preventDefault(); onEdit(m); }}
                   className="press relative aspect-square">
                   <Thumb id={p} className="size-full rounded-[18px]" />
-                  <span className="absolute left-1.5 bottom-1.5 h-5 px-2 rounded-full bg-white/90 text-ink text-[10.5px] font-medium grid place-items-center">
+                  <span className="absolute left-1.5 bottom-1.5 h-5 px-2 rounded-full bg-surface/90 text-ink text-[10.5px] font-medium grid place-items-center">
                     {mealLabel(m.kind)} · {m.time}
                   </span>
                 </button>
@@ -204,13 +209,13 @@ function Gallery({ onOpen, onEdit }: { onOpen: (ids: string[], i: number) => voi
 }
 
 /* ── visualizador ─────────────────────────────────────────── */
-function PhotoViewer({ ids, index, onClose }: { ids: string[]; index: number; onClose: () => void }) {
+export function PhotoViewer({ ids, index, onClose }: { ids: string[]; index: number; onClose: () => void }) {
   const [i, setI] = useState(index);
   const { url } = usePhoto(ids[i]);
   const touch = useRef<number | null>(null);
   const go = (d: number) => setI((x) => (x + d + ids.length) % ids.length);
   return (
-    <div className="fixed inset-0 z-[80] bg-ink/95 flex items-center justify-center animate-fade" role="dialog" aria-label="Foto"
+    <div className="fixed inset-0 z-[80] bg-black/95 flex items-center justify-center animate-fade" role="dialog" aria-label="Foto"
       onClick={onClose}
       onTouchStart={(e) => { touch.current = e.touches[0].clientX; }}
       onTouchEnd={(e) => { if (touch.current == null) return; const dx = e.changedTouches[0].clientX - touch.current; if (Math.abs(dx) > 50) go(dx < 0 ? 1 : -1); touch.current = null; }}>
@@ -232,8 +237,10 @@ function PhotoViewer({ ids, index, onClose }: { ids: string[]; index: number; on
 const MAX_PHOTOS = 4;
 
 function MealModal({ open, meal, day, onClose, onSave, onDelete }: {
-  open: boolean; meal?: MealLog; day: string; onClose: () => void; onSave: (m: Omit<MealLog, 'id'>) => void; onDelete?: () => void;
+  open: boolean; meal?: MealLog; day: string; onClose: () => void; onSave: (m: Omit<MealLog, 'id'>, fav: boolean) => void; onDelete?: () => void;
 }) {
+  const { state, actions } = useStore();
+  const [fav, setFav] = useState(false);
   const [f, setF] = useState<Omit<MealLog, 'id'>>({ date: day, time: nowHHMM(), kind: 'almoco', description: '', photos: [] });
   const [added, setAdded] = useState<string[]>([]); // fotos novas desta edição (para descartar se cancelar)
   const [removed, setRemoved] = useState<string[]>([]);
@@ -250,7 +257,7 @@ function MealModal({ open, meal, day, onClose, onSave, onDelete }: {
       const isTodayDay = day === todayKey();
       setF(meal ? { date: meal.date, time: meal.time, kind: meal.kind, description: meal.description, photos: [...meal.photos], note: meal.note }
         : { date: day, time: isTodayDay ? nowHHMM() : '12:00', kind: isTodayDay ? kindForHour(new Date().getHours()) : 'almoco', description: '', photos: [] });
-      setAdded([]); setRemoved([]); setErr('');
+      setAdded([]); setRemoved([]); setErr(''); setFav(false);
     }
   }
 
@@ -274,7 +281,7 @@ function MealModal({ open, meal, day, onClose, onSave, onDelete }: {
   const cancel = () => { added.forEach((p) => void deletePhoto(p)); onClose(); };
   const save = () => {
     removed.forEach((p) => void deletePhoto(p));
-    onSave({ ...f, description: f.description.trim(), note: f.note?.trim() || undefined });
+    onSave({ ...f, description: f.description.trim(), note: f.note?.trim() || undefined }, fav);
   };
   const canSave = !busy && (f.description.trim() || f.photos.length);
 
@@ -286,6 +293,20 @@ function MealModal({ open, meal, day, onClose, onSave, onDelete }: {
         <Button variant="primary" disabled={!canSave} onClick={save}>Salvar</Button>
       </>}>
       <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); if (canSave) save(); }}>
+        {!meal && state.mealFavorites.length > 0 && (
+          <div>
+            <p className="text-[13px] text-muted mb-2">⭐ Favoritas</p>
+            <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-6 px-6">
+              {state.mealFavorites.map((x) => (
+                <span key={x.id} className={cx('shrink-0 inline-flex items-center rounded-full h-10 pl-4 pr-1 text-[13.5px] max-w-[240px]',
+                  f.description === x.description ? 'bg-ink text-on-ink' : 'bg-cream text-ink')}>
+                  <button type="button" className="truncate" onClick={() => setF({ ...f, kind: x.kind, description: x.description })}>{x.description}</button>
+                  <button type="button" aria-label="Remover favorita" onClick={() => actions.removeMealFavorite(x.id)} className="size-8 grid place-items-center opacity-50 shrink-0"><LuX size={13} /></button>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
         {/* fotos */}
         <div>
           <input ref={camRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
@@ -308,7 +329,7 @@ function MealModal({ open, meal, day, onClose, onSave, onDelete }: {
                   <Thumb id={p} className="size-full rounded-[16px]" />
                   <button type="button" aria-label="Remover foto"
                     onClick={() => { setF((x) => ({ ...x, photos: x.photos.filter((y) => y !== p) })); setRemoved((r) => [...r, p]); }}
-                    className="press absolute -top-1.5 -right-1.5 size-7 rounded-full bg-ink text-white grid place-items-center shadow"><LuX size={14} /></button>
+                    className="press absolute -top-1.5 -right-1.5 size-7 rounded-full bg-ink text-on-ink grid place-items-center shadow"><LuX size={14} /></button>
                 </div>
               ))}
               {f.photos.length < MAX_PHOTOS && (
@@ -325,7 +346,7 @@ function MealModal({ open, meal, day, onClose, onSave, onDelete }: {
               )}
             </div>
           )}
-          {err && <p className="text-[13px] text-[#D9541F] mt-2">{err}</p>}
+          {err && <p className="text-[13px] text-orange mt-2">{err}</p>}
         </div>
 
         {/* tipo */}
@@ -335,7 +356,7 @@ function MealModal({ open, meal, day, onClose, onSave, onDelete }: {
             {MEAL_KINDS.map((k) => (
               <button key={k.id} type="button" onClick={() => setF({ ...f, kind: k.id as MealKind })}
                 className={cx('press h-10 px-4 rounded-full text-[14px] font-medium transition-colors',
-                  f.kind === k.id ? 'bg-ink text-white' : 'bg-cream text-ink/70')}>
+                  f.kind === k.id ? 'bg-ink text-on-ink' : 'bg-cream text-ink/70')}>
                 {k.label}
               </button>
             ))}
@@ -354,6 +375,12 @@ function MealModal({ open, meal, day, onClose, onSave, onDelete }: {
         <Field label="Observação (opcional)">
           <Input value={f.note ?? ''} onChange={(e) => setF({ ...f, note: e.target.value })} placeholder="Ex: comi com pressa, fiquei com fome depois…" />
         </Field>
+        {f.description.trim() && !state.mealFavorites.some((x) => x.description.toLowerCase() === f.description.trim().toLowerCase()) && (
+          <button type="button" onClick={() => setFav(!fav)} className="flex items-center gap-2.5 text-[14px] text-ink">
+            <span className={cx('size-6 rounded-md border-2 grid place-items-center', fav ? 'bg-orange border-orange text-white' : 'border-ink/25')}>{fav && <LuCheck size={14} strokeWidth={3} />}</span>
+            Salvar como favorita
+          </button>
+        )}
       </form>
     </Modal>
   );

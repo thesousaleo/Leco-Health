@@ -1,8 +1,11 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type {
-  AppState, BodyLog, MealLog, WaterSize, DateKey, Exercise, FoodEntry, Goals, Habit, ID, NoteEntry, SetLog, SleepLog, Split, WorkoutSession,
+  AppState, BodyLog, MealLog, WaterSize, Prefs, HomeBlockId, CardioLog, DateKey, Exercise, FoodEntry, Goals, Habit, ID, NoteEntry, SetLog, SleepLog, Split, WorkoutSession,
 } from './types';
 import { buildEmptyState, buildMockState } from './mock';
+import { DEFAULT_HOME, defaultPrefs } from './prefs';
+import { haptic } from './native';
+export { DEFAULT_HOME, defaultPrefs };
 import { lastPerformance, todayKey, uid } from './utils';
 
 /* ─────────────────────────────────────────────────────────────
@@ -40,7 +43,18 @@ export function normalizeState(s: AppState): AppState {
   if (!Array.isArray(s.foods)) s.foods = [];
   if (!s.goals.meals) s.goals.meals = 4;
   if (!s.goals.sleep) s.goals.sleep = 8;
+  const d = defaultPrefs();
+  s.prefs = { ...d, ...(s.prefs || {}) } as Prefs;
+  s.prefs.reminders = { ...d.reminders, ...(s.prefs.reminders || {}) };
+  s.prefs.scoreWeights = { ...d.scoreWeights, ...(s.prefs.scoreWeights || {}) };
+  // blocos novos entram no fim da lista do usuário
+  const known = new Set(s.prefs.homeBlocks.map((b) => b.id));
+  s.prefs.homeBlocks = [...s.prefs.homeBlocks.filter((b) => DEFAULT_HOME.some((x) => x.id === b.id)), ...DEFAULT_HOME.filter((b) => !known.has(b.id))];
   if (!Array.isArray(s.waterLog)) s.waterLog = [];
+  if (!Array.isArray(s.cardio)) s.cardio = [];
+  if (!Array.isArray(s.progressPhotos)) s.progressPhotos = [];
+  if (!Array.isArray(s.mealFavorites)) s.mealFavorites = [];
+  if (!s.habitCounts || typeof s.habitCounts !== 'object') s.habitCounts = {};
   if (!Array.isArray(s.waterSizes) || !s.waterSizes.length)
     s.waterSizes = [{ id: 'copo', label: 'Copo', ml: 250 }, { id: 'garrafa', label: 'Garrafa', ml: 500 }];
   return s;
@@ -58,6 +72,7 @@ function makeActions(mutate: (fn: (d: AppState) => void) => void, get: () => App
     // perfil & metas
     setName: (name: string) => mutate((d) => { d.profile.name = name; }),
     setShareBody: (v: boolean) => mutate((d) => { d.profile.shareBody = v; }),
+    setPrefs: (patch: Partial<Prefs>) => mutate((d) => { d.prefs = { ...d.prefs, ...patch }; }),
     setGoals: (g: Goals) => mutate((d) => { d.goals = g; }),
     setSchedule: (day: number, splitId: ID | null) => mutate((d) => { d.schedule[day] = splitId; }),
 
@@ -121,10 +136,10 @@ function makeActions(mutate: (fn: (d: AppState) => void) => void, get: () => App
       return session.id;
     },
     updateSet: (sessionId: ID, exId: ID, setId: ID, patch: Partial<SetLog>) =>
-      mutate((d) => {
+      (patch.done && get().prefs?.haptics && haptic('light'), mutate((d) => {
         const e = d.sessions.find((s) => s.id === sessionId)!.entries.find((x) => x.exerciseId === exId)!;
         Object.assign(e.sets.find((x) => x.id === setId)!, patch);
-      }),
+      })),
     addSet: (sessionId: ID, exId: ID) =>
       mutate((d) => {
         const e = d.sessions.find((s) => s.id === sessionId)!.entries.find((x) => x.exerciseId === exId)!;
@@ -144,6 +159,11 @@ function makeActions(mutate: (fn: (d: AppState) => void) => void, get: () => App
       }),
     reopenSession: (id: ID) => mutate((d) => { d.sessions.find((x) => x.id === id)!.completed = false; }),
     deleteSession: (id: ID) => mutate((d) => { d.sessions = d.sessions.filter((x) => x.id !== id); }),
+    setExerciseNote: (sessionId: ID, exId: ID, note: string) =>
+      mutate((d) => { d.sessions.find((s) => s.id === sessionId)!.entries.find((x) => x.exerciseId === exId)!.note = note || undefined; }),
+    addCardio: (c: Omit<CardioLog, 'id'>) => mutate((d) => { d.cardio.push({ ...c, id: uid() }); }),
+    updateCardio: (id: ID, c: Partial<CardioLog>) => mutate((d) => { Object.assign(d.cardio.find((x) => x.id === id)!, c); }),
+    deleteCardio: (id: ID) => mutate((d) => { d.cardio = d.cardio.filter((x) => x.id !== id); }),
 
     // alimentação
     addFood: (f: Omit<FoodEntry, 'id'>) => mutate((d) => { d.foods.push({ ...f, id: uid() }); }),
@@ -152,6 +172,12 @@ function makeActions(mutate: (fn: (d: AppState) => void) => void, get: () => App
     addMeal: (m: Omit<MealLog, 'id'>) => mutate((d) => { d.meals.push({ ...m, id: uid() }); }),
     updateMeal: (id: ID, m: Partial<MealLog>) => mutate((d) => { Object.assign(d.meals.find((x) => x.id === id)!, m); }),
     deleteMeal: (id: ID) => mutate((d) => { d.meals = d.meals.filter((x) => x.id !== id); }),
+    addMealFavorite: (f: { kind: MealLog['kind']; description: string }) =>
+      mutate((d) => {
+        if (d.mealFavorites.some((x) => x.description.toLowerCase() === f.description.toLowerCase())) return;
+        d.mealFavorites.unshift({ ...f, id: uid() });
+      }),
+    removeMealFavorite: (id: ID) => mutate((d) => { d.mealFavorites = d.mealFavorites.filter((x) => x.id !== id); }),
     addWater: (ml: number, date: DateKey = todayKey(), label?: string) =>
       mutate((d) => {
         if (ml <= 0) return;
@@ -169,17 +195,38 @@ function makeActions(mutate: (fn: (d: AppState) => void) => void, get: () => App
     setWaterSizes: (sizes: WaterSize[]) => mutate((d) => { d.waterSizes = sizes; }),
 
     // hábitos
-    addHabit: (name: string, category: Habit['category']) =>
-      mutate((d) => { d.habits.push({ id: uid(), name, category, createdAt: todayKey() }); }),
+    addHabit: (name: string, category: Habit['category'], extra: Partial<Habit> = {}) =>
+      mutate((d) => { d.habits.push({ id: uid(), name, category, createdAt: todayKey(), ...extra }); }),
     updateHabit: (id: ID, patch: Partial<Habit>) => mutate((d) => { Object.assign(d.habits.find((h) => h.id === id)!, patch); }),
     deleteHabit: (id: ID) => mutate((d) => {
       d.habits = d.habits.filter((h) => h.id !== id);
       for (const k of Object.keys(d.habitLogs)) d.habitLogs[k] = d.habitLogs[k].filter((x) => x !== id);
     }),
-    toggleHabit: (id: ID, date: DateKey = todayKey()) =>
+    toggleHabit: (id: ID, date: DateKey = todayKey()) => {
+      if (get().prefs?.haptics) haptic('light');
       mutate((d) => {
         const list = d.habitLogs[date] || [];
         d.habitLogs[date] = list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+      });
+    },
+    setHabitCount: (id: ID, n: number, date: DateKey = todayKey()) => {
+      if (get().prefs?.haptics) haptic('light');
+      mutate((d) => {
+        const h = d.habits.find((x) => x.id === id);
+        const v = Math.max(0, n);
+        d.habitCounts[date] = { ...(d.habitCounts[date] || {}), [id]: v };
+        const list = (d.habitLogs[date] || []).filter((x) => x !== id);
+        d.habitLogs[date] = h?.target && v >= h.target ? [...list, id] : list;
+      });
+    },
+    moveHabit: (id: ID, dir: -1 | 1) =>
+      mutate((d) => {
+        const vis = d.habits.filter((h) => !h.archived);
+        const i = vis.findIndex((h) => h.id === id);
+        const j = i + dir;
+        if (j < 0 || j >= vis.length) return;
+        const a = d.habits.indexOf(vis[i]), b = d.habits.indexOf(vis[j]);
+        [d.habits[a], d.habits[b]] = [d.habits[b], d.habits[a]];
       }),
 
     // biometria / sono / notas
@@ -191,6 +238,8 @@ function makeActions(mutate: (fn: (d: AppState) => void) => void, get: () => App
         else d.body.push({ id: uid(), date, weight });
       }),
     deleteBody: (id: ID) => mutate((d) => { d.body = d.body.filter((x) => x.id !== id); }),
+    addProgressPhoto: (p: { date: DateKey; photoId: ID; weight?: number; note?: string }) => mutate((d) => { d.progressPhotos.push({ ...p, id: uid() }); }),
+    deleteProgressPhoto: (id: ID) => mutate((d) => { d.progressPhotos = d.progressPhotos.filter((x) => x.id !== id); }),
     upsertSleep: (s: Omit<SleepLog, 'id'>) =>
       mutate((d) => {
         const ex = d.sleep.find((x) => x.date === s.date);
@@ -204,7 +253,7 @@ function makeActions(mutate: (fn: (d: AppState) => void) => void, get: () => App
 
     // backup
     replaceAll: (s: AppState) => mutate((d) => { Object.assign(d, normalizeState(structuredClone(s))); }),
-    resetDemo: () => mutate((d) => { Object.assign(d, buildMockState()); }),
+    resetDemo: () => mutate((d) => { const keep = d.prefs; Object.assign(d, buildMockState()); d.prefs = { ...keep, onboarded: true }; }),
     clearAll: () => mutate((d) => { Object.assign(d, buildEmptyState()); }),
   };
 }
@@ -225,7 +274,7 @@ export function StoreProvider({ children, adapter = localAdapter }: { children: 
   const [state, setState] = useState<AppState>(() => {
     const loaded = adapter.load();
     if (loaded && validateState(loaded)) return normalizeState(loaded);
-    return buildMockState();
+    return normalizeState(buildMockState());
   });
   const ref = useRef(state);
   ref.current = state;

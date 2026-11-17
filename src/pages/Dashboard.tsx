@@ -6,11 +6,12 @@ import { useStore } from '../store';
 import type { TabId } from '../types';
 import {
   activeHabits, addDays, dayScore, fmtLong, fmtWeekdayShort, greeting, isHabitDone, lastNDays, mealLabel, mealsOn, nf,
-  overallStreak, relDay, sessionProgress, todayKey, weekday,
+  overallStreak, relDay, sessionProgress, todayKey, weekday, isHabitScheduled, habitCount, weekDoneCount, dueHabits,
 } from '../utils';
 import { Card, cx, ProgressBar, ProgressRing } from '../components/ui';
 import { Thumb } from './Nutrition';
 import { WaterCard } from '../components/Water';
+import { buildReport, summaryWeek } from '../report';
 
 /* Início: um resumo simples do dia.
    1. Seu dia (score + as 3 metas, cada uma com a próxima ação)
@@ -24,6 +25,8 @@ export default function Dashboard({ go }: { go: (t: TabId) => void }) {
   const { state } = useStore();
   const today = todayKey();
   const name = state.profile.name?.split(' ')[0];
+  const wd = new Date().getDay();
+  const showSummary = wd === 0 || wd === 1; // domingo e segunda
 
   return (
     <div className="space-y-4 md:space-y-5">
@@ -34,17 +37,19 @@ export default function Dashboard({ go }: { go: (t: TabId) => void }) {
         </h1>
       </header>
 
-      <div className="grid lg:grid-cols-2 gap-4 md:gap-5 items-start">
-        <div className="space-y-4 md:space-y-5">
-          <TodayCard go={go} />
-          <WaterCard />
-          <WeekCard />
-        </div>
-        <div className="space-y-4 md:space-y-5">
-          <HabitsCard go={go} />
-          <MealsCard go={go} />
-          <BodyCard go={go} />
-        </div>
+      <div className="lg:columns-2 gap-5 [&>*]:break-inside-avoid [&>*]:mb-4 md:[&>*]:mb-5">
+        {state.prefs.homeBlocks.filter((b) => b.on).map((b) => {
+          switch (b.id) {
+            case 'dia': return <div key={b.id}><TodayCard go={go} /></div>;
+            case 'resumo': return showSummary ? <div key={b.id}><SummaryCard go={go} /></div> : null;
+            case 'agua': return <div key={b.id}><WaterCard /></div>;
+            case 'semana': return <div key={b.id}><WeekCard /></div>;
+            case 'habitos': return <div key={b.id}><HabitsCard go={go} /></div>;
+            case 'refeicoes': return <div key={b.id}><MealsCard go={go} /></div>;
+            case 'corpo': return <div key={b.id}><BodyCard go={go} /></div>;
+            default: return null;
+          }
+        })}
       </div>
     </div>
   );
@@ -73,12 +78,15 @@ function TodayCard({ go }: { go: (t: TabId) => void }) {
   const session = state.sessions.find((s) => s.date === today);
   const meals = mealsOn(state, today);
   const mealGoal = state.goals.meals || 4;
-  const habits = activeHabits(state, today);
+  const habits = dueHabits(state, today).length ? dueHabits(state, today) : activeHabits(state, today).filter((h) => isHabitScheduled(h, today));
   const habitsDone = habits.filter((h) => isHabitDone(state, h.id, today)).length;
 
   // linha de treino
   let workout: { title: string; sub: string; done: boolean; action?: string; onAction: () => void };
-  if (!state.splits.length) {
+  const cardioToday = (state.cardio || []).filter((c) => c.date === today);
+  if (cardioToday.length) {
+    workout = { title: 'Treino', sub: `${cardioToday[0].kind} · ${cardioToday[0].minutes} min · feito`, done: true, onAction: () => go('treino') };
+  } else if (!state.splits.length) {
     workout = { title: 'Treino', sub: 'Crie sua primeira ficha de treino', done: false, action: 'Criar', onAction: () => go('treino') };
   } else if (!split) {
     workout = { title: 'Treino', sub: 'Hoje é dia de descanso', done: true, onAction: () => go('treino') };
@@ -104,7 +112,7 @@ function TodayCard({ go }: { go: (t: TabId) => void }) {
       : { icon: <LuListChecks size={18} />, title: 'Hábitos', sub: 'Adicione os hábitos que quer acompanhar', done: false, action: 'Criar', onAction: () => go('habitos') },
   ];
 
-  const color = score.total >= 80 ? '#16A34A' : '#F26B3A';
+  const color = score.total >= 80 ? 'var(--color-good)' : 'var(--color-orange)';
 
   return (
     <Card className="p-5 md:p-6">
@@ -124,7 +132,7 @@ function TodayCard({ go }: { go: (t: TabId) => void }) {
         {rows.map((r) => (
           <li key={r.title} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
             <button onClick={r.onAction} className="flex items-center gap-3 flex-1 min-w-0 text-left">
-              <span className={cx('grid place-items-center size-10 rounded-full shrink-0', r.done ? 'bg-[#E7F6EC] text-good' : 'bg-cream text-ink/70')}>
+              <span className={cx('grid place-items-center size-10 rounded-full shrink-0', r.done ? 'bg-good/15 text-good' : 'bg-cream text-ink/70')}>
                 {r.done ? <LuCheck size={18} strokeWidth={2.6} /> : r.icon}
               </span>
               <span className="min-w-0">
@@ -133,7 +141,7 @@ function TodayCard({ go }: { go: (t: TabId) => void }) {
               </span>
             </button>
             {r.action ? (
-              <button onClick={r.onAction} className="press h-9 w-[92px] rounded-full bg-ink text-white text-[13.5px] font-medium shrink-0">{r.action}</button>
+              <button onClick={r.onAction} className="press h-9 w-[92px] rounded-full bg-ink text-on-ink text-[13.5px] font-medium shrink-0">{r.action}</button>
             ) : (
               <button onClick={r.onAction} aria-label={`Abrir ${r.title}`} className="press h-9 w-[92px] rounded-full bg-cream text-ink text-[13.5px] font-medium shrink-0">Ver</button>
             )}
@@ -148,7 +156,7 @@ function TodayCard({ go }: { go: (t: TabId) => void }) {
 function HabitsCard({ go }: { go: (t: TabId) => void }) {
   const { state, actions } = useStore();
   const today = todayKey();
-  const habits = activeHabits(state, today);
+  const habits = activeHabits(state, today).filter((h) => isHabitScheduled(h, today));
   const streak = overallStreak(state);
   return (
     <Card className="p-5 md:p-6">
@@ -163,13 +171,15 @@ function HabitsCard({ go }: { go: (t: TabId) => void }) {
             const done = isHabitDone(state, h.id, today);
             return (
               <li key={h.id}>
-                <button onClick={() => actions.toggleHabit(h.id)} aria-pressed={done}
+                <button onClick={() => (h.target ? actions.setHabitCount(h.id, habitCount(state, h.id, today) + 1) : actions.toggleHabit(h.id))} aria-pressed={done}
                   className="press w-full flex items-center gap-3 h-12 px-3 rounded-2xl hover:bg-cream transition-colors text-left">
                   <span className={cx('grid place-items-center size-6 rounded-full border-2 shrink-0 transition-colors',
                     done ? 'bg-orange border-orange text-white' : 'border-ink/20')}>
                     {done && <LuCheck size={14} strokeWidth={3} />}
                   </span>
                   <span className={cx('flex-1 text-[15px] truncate', done ? 'text-muted line-through decoration-ink/25' : 'text-ink')}>{h.name}</span>
+                  {h.target ? <span className="text-[12.5px] text-muted tabular-nums shrink-0">{habitCount(state, h.id, today)}/{h.target} {h.unit}</span>
+                    : h.freq?.type === 'weekly' ? <span className="text-[12.5px] text-muted tabular-nums shrink-0">{weekDoneCount(state, h.id, today)}/{h.freq.times} na semana</span> : null}
                 </button>
               </li>
             );
@@ -266,5 +276,38 @@ function BodyCard({ go }: { go: (t: TabId) => void }) {
         </button>
       </div>
     </Card>
+  );
+}
+
+/* ── Resumo da semana (aparece domingo e segunda) ─────────── */
+function SummaryCard({ go }: { go: (t: TabId) => void }) {
+  const { state } = useStore();
+  const { from, to } = summaryWeek();
+  const r = buildReport(state, from, to);
+  const items: [string, string][] = [
+    ['Score médio', `${r.scoreAvg}%`],
+    ['Treinos', `${r.workouts + r.cardio}`],
+    ['Hábitos', `${r.habitPct}%`],
+    ['Água/dia', `${nf(r.waterAvgL, 1)} L`],
+  ];
+  return (
+    <div className="rounded-[28px] bg-ink text-on-ink p-5 md:p-6">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[13px] opacity-60">Resumo da semana</p>
+          <p className="text-[18px] font-semibold tracking-[-0.01em]">{r.best ? `Seu melhor dia: ${relDay(r.best.date).toLowerCase()} (${r.best.score}%)` : 'Sua semana'}</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-4 gap-2 mt-4">
+        {items.map(([l, v]) => (
+          <div key={l}>
+            <p className="text-[20px] font-semibold tracking-[-0.02em] tabular-nums">{v}</p>
+            <p className="text-[11.5px] opacity-60">{l}</p>
+          </div>
+        ))}
+      </div>
+      <button onClick={() => { try { localStorage.setItem('leco-health:metrics-view', 'resumo'); } catch { /* */ } go('registros'); }}
+        className="press mt-4 h-10 px-4 rounded-full bg-orange text-white text-[13.5px] font-medium">Ver resumo completo</button>
+    </div>
   );
 }

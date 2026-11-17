@@ -19,7 +19,7 @@ export function WaterCard({ day = todayKey() }: { day?: string }) {
     <>
       <Card className="p-5 md:p-6">
         <button onClick={() => setOpen(true)} className="w-full flex items-center gap-3 text-left">
-          <span className={cx('grid place-items-center size-10 rounded-full shrink-0', done ? 'bg-[#E7F6EC] text-good' : 'bg-cream text-ink/70')}>
+          <span className={cx('grid place-items-center size-10 rounded-full shrink-0', done ? 'bg-good/15 text-good' : 'bg-cream text-ink/70')}>
             <LuDroplets size={18} />
           </span>
           <span className="flex-1 min-w-0">
@@ -28,7 +28,7 @@ export function WaterCard({ day = todayKey() }: { day?: string }) {
           </span>
           <LuChevronRight size={18} className="text-ink/30 shrink-0" />
         </button>
-        <ProgressBar className="mt-4" value={water / goal} height={8} color={done ? '#16A34A' : undefined} />
+        <ProgressBar className="mt-4" value={water / goal} height={8} color={done ? 'var(--color-good)' : undefined} />
         <div className="grid gap-2 mt-4" style={{ gridTemplateColumns: `repeat(${Math.min(3, state.waterSizes.length)}, minmax(0,1fr))` }}>
           {state.waterSizes.slice(0, 3).map((s) => (
             <button key={s.id} onClick={() => { actions.addWater(s.ml, day, s.label); toast(`+${fmtL(s.ml)} de água`); }}
@@ -65,7 +65,7 @@ export function WaterSheet({ open, day, onClose }: { open: boolean; day: string;
   return (
     <Modal open={open} onClose={() => { setEditing(false); onClose(); }} title="Água">
       <div className="flex items-center gap-5">
-        <ProgressRing value={water / goal} size={104} stroke={9} color={water >= goal ? '#16A34A' : undefined}>
+        <ProgressRing value={water / goal} size={104} stroke={9} color={water >= goal ? 'var(--color-good)' : undefined}>
           <span className="text-[20px] font-semibold tracking-[-0.03em] text-ink tabular-nums">{Math.round((water / goal) * 100)}%</span>
         </ProgressRing>
         <div className="min-w-0">
@@ -101,10 +101,10 @@ export function WaterSheet({ open, day, onClose }: { open: boolean; day: string;
           <p className="text-[14px] font-medium text-ink">Seus recipientes</p>
           {sizes.map((s, i) => (
             <div key={s.id} className="flex gap-2 items-center">
-              <Input className="!bg-white" value={s.label} maxLength={14} placeholder="Nome"
+              <Input className="!bg-surface" value={s.label} maxLength={14} placeholder="Nome"
                 onChange={(e) => setSizes(sizes.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} />
               <div className="relative w-28 shrink-0">
-                <NumInput className="!bg-white pr-8" value={s.ml} onChange={(v) => setSizes(sizes.map((x, j) => (j === i ? { ...x, ml: Math.max(1, Math.round(v)) } : x)))} />
+                <NumInput className="!bg-surface pr-8" value={s.ml} onChange={(v) => setSizes(sizes.map((x, j) => (j === i ? { ...x, ml: Math.max(1, Math.round(v)) } : x)))} />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-muted pointer-events-none">ml</span>
               </div>
               <button aria-label="Remover recipiente" disabled={sizes.length <= 1} onClick={() => setSizes(sizes.filter((_, j) => j !== i))}
@@ -112,12 +112,12 @@ export function WaterSheet({ open, day, onClose }: { open: boolean; day: string;
             </div>
           ))}
           {sizes.length < 4 && (
-            <button onClick={() => setSizes([...sizes, { id: uid(), label: 'Squeeze', ml: 700 }])} className="press h-10 px-4 rounded-full bg-white text-[13.5px] text-ink font-medium">
+            <button onClick={() => setSizes([...sizes, { id: uid(), label: 'Squeeze', ml: 700 }])} className="press h-10 px-4 rounded-full bg-surface text-[13.5px] text-ink font-medium">
               + Adicionar recipiente
             </button>
           )}
           <Field label="Meta diária (ml)">
-            <NumInput className="!bg-white" value={goal} onChange={(v) => actions.setGoals({ ...state.goals, water: Math.max(250, Math.round(v)) })} />
+            <NumInput className="!bg-surface" value={goal} onChange={(v) => actions.setGoals({ ...state.goals, water: Math.max(250, Math.round(v)) })} />
           </Field>
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>Cancelar</Button>

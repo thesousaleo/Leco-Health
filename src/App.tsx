@@ -8,6 +8,9 @@ import type { TabId } from './types';
 import { dayScore } from './utils';
 import { RestTimerProvider } from './components/RestTimer';
 import { Button, cx, Modal, ProgressBar } from './components/ui';
+import { Celebration, SetupWizard } from './components/Extras';
+import { LockGate } from './components/Lock';
+import { setSystemBars, syncReminders } from './native';
 import Dashboard from './pages/Dashboard';
 import Workout from './pages/Workout';
 import Nutrition from './pages/Nutrition';
@@ -23,12 +26,52 @@ const TABS: { id: TabId; label: string; icon: React.ComponentType<{ size?: numbe
   { id: 'registros', label: 'Registros', icon: LuActivity },
   { id: 'amigos', label: 'Amigos', icon: LuUsers },
 ];
+export const TAB_INFO = TABS;
 const ALL: TabId[] = ['inicio', 'treino', 'nutricao', 'habitos', 'registros', 'amigos', 'ajustes'];
+
+/** Aplica tema, cor de destaque e tamanho do texto. */
+function useAppearance() {
+  const { state } = useStore();
+  const { theme, accent, textSize } = state.prefs;
+  useEffect(() => {
+    const root = document.documentElement;
+    const mq = window.matchMedia?.('(prefers-color-scheme: dark)');
+    const apply = () => {
+      const dark = theme === 'dark' || (theme === 'auto' && !!mq?.matches);
+      root.classList.toggle('dark', dark);
+      root.dataset.accent = accent;
+      root.style.setProperty('--ui-zoom', String(textSize || 1));
+      const bg = getComputedStyle(root).getPropertyValue('--color-canvas').trim() || (dark ? '#0F0F11' : '#E9E5DF');
+      document.querySelector('meta[name=theme-color]')?.setAttribute('content', bg);
+      setSystemBars(dark, bg);
+    };
+    apply();
+    mq?.addEventListener?.('change', apply);
+    return () => mq?.removeEventListener?.('change', apply);
+  }, [theme, accent, textSize]);
+}
+
+/** Reagenda lembretes quando hábitos/preferências mudam (só no app Android). */
+function useReminders() {
+  const { state } = useStore();
+  const key = JSON.stringify([state.prefs.reminders, state.habits.map((h) => [h.id, h.name, h.reminder, h.freq, h.archived])]);
+  useEffect(() => {
+    const t = setTimeout(() => syncReminders(state), 800);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+}
 
 const readHash = (): TabId => {
   const h = window.location.hash.replace('#', '') as TabId;
   return ALL.includes(h) ? h : 'inicio';
 };
+
+function Effects() {
+  useAppearance();
+  useReminders();
+  return null;
+}
 
 function Logo() {
   return (
@@ -47,6 +90,9 @@ function Shell() {
   const { state, toastMsg } = useStore();
   const [tab, setTab] = useState<TabId>(readHash);
   const score = dayScore(state).total;
+  const navIds = (state.prefs.navTabs || []).filter((id) => TABS.some((t) => t.id === id)).slice(0, 5);
+  const mobileTabs = [TABS[0], ...navIds.map((id) => TABS.find((t) => t.id === id)!)];
+  const sideTabs = [TABS[0], ...navIds.map((id) => TABS.find((t) => t.id === id)!), ...TABS.slice(1).filter((t) => !navIds.includes(t.id))];
 
   useEffect(() => {
     const on = () => setTab(readHash());
@@ -67,7 +113,7 @@ function Shell() {
     habitos: <Habits />,
     registros: <Metrics />,
     amigos: <Friends />,
-    ajustes: <Settings />,
+    ajustes: <Settings go={go} />,
   }[tab];
 
   const navBtn = (id: TabId, label: string, Icon: React.ComponentType<{ size?: number }>) => {
@@ -75,7 +121,7 @@ function Shell() {
     return (
       <button key={id} onClick={() => go(id)} aria-current={active ? 'page' : undefined}
         className={cx('press flex items-center gap-3 h-12 px-4 rounded-full text-[15px] font-medium transition-colors',
-          active ? 'bg-ink text-white' : 'text-ink/55 hover:text-ink hover:bg-cream')}>
+          active ? 'bg-ink text-on-ink' : 'text-ink/55 hover:text-ink hover:bg-cream')}>
         <Icon size={18} /> {label}
       </button>
     );
@@ -85,15 +131,15 @@ function Shell() {
     <RestTimerProvider visible={tab === 'treino'}>
       {/* fundo bege com arcos finos */}
       <div aria-hidden className="fixed inset-0 -z-10 overflow-hidden bg-canvas">
-        <div className="absolute -top-[40vh] left-[40%] size-[95vh] rounded-full border border-white/80" />
-        <div className="absolute top-[45vh] -left-[35vh] size-[85vh] rounded-full border border-white/70" />
-        <div className="absolute top-[15vh] -right-[45vh] size-[100vh] rounded-full border border-white/60" />
+        <div className="absolute -top-[40vh] left-[40%] size-[95vh] rounded-full border border-surface/80" />
+        <div className="absolute top-[45vh] -left-[35vh] size-[85vh] rounded-full border border-surface/70" />
+        <div className="absolute top-[15vh] -right-[45vh] size-[100vh] rounded-full border border-surface/60" />
       </div>
 
       {/* Sidebar desktop */}
-      <aside className="hidden md:flex fixed top-4 bottom-4 left-4 w-56 flex-col rounded-[28px] bg-white px-3 py-6 z-40">
+      <aside className="hidden md:flex fixed top-4 bottom-4 left-4 w-56 flex-col rounded-[28px] bg-surface px-3 py-6 z-40">
         <div className="px-3 mb-8"><Logo /></div>
-        <nav className="flex flex-col gap-1">{TABS.map((t) => navBtn(t.id, t.label, t.icon))}</nav>
+        <nav className="flex flex-col gap-1">{sideTabs.map((t) => navBtn(t.id, t.label, t.icon))}</nav>
         <div className="mt-auto space-y-3">
           <div className="rounded-[20px] bg-cream p-4">
             <div className="flex items-baseline justify-between mb-2.5">
@@ -112,7 +158,7 @@ function Shell() {
         <div className="flex items-center gap-2">
           <span className="text-[13px] font-semibold tabular-nums text-white px-3 h-8 rounded-full bg-orange grid place-items-center">{score}%</span>
           <button onClick={() => go('ajustes')} aria-label="Ajustes"
-            className={cx('press grid place-items-center size-10 rounded-full', tab === 'ajustes' ? 'text-white bg-ink' : 'text-ink bg-white')}>
+            className={cx('press grid place-items-center size-10 rounded-full', tab === 'ajustes' ? 'text-on-ink bg-ink' : 'text-ink bg-surface')}>
             <LuSettings size={18} />
           </button>
         </div>
@@ -126,13 +172,14 @@ function Shell() {
 
       {/* Bottom nav mobile */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 px-3 pb-[max(.75rem,env(safe-area-inset-bottom))] pt-2 pointer-events-none">
-        <div className="pointer-events-auto mx-auto max-w-md grid grid-cols-6 rounded-full bg-white p-1 shadow-[0_10px_30px_-10px_rgba(28,27,26,.3)]">
-          {TABS.map((t) => {
+        <div className="pointer-events-auto mx-auto max-w-md grid rounded-full bg-surface p-1 shadow-[0_10px_30px_-10px_rgba(0,0,0,.3)]"
+          style={{ gridTemplateColumns: `repeat(${mobileTabs.length}, minmax(0,1fr))` }}>
+          {mobileTabs.map((t) => {
             const Icon = t.icon;
             const active = tab === t.id;
             return (
               <button key={t.id} onClick={() => go(t.id)} aria-current={active ? 'page' : undefined}
-                className={cx('press flex flex-col items-center justify-center gap-0.5 h-14 rounded-full transition-colors min-w-0', active ? 'bg-ink text-white' : 'text-ink/45')}>
+                className={cx('press flex flex-col items-center justify-center gap-0.5 h-14 rounded-full transition-colors min-w-0', active ? 'bg-ink text-on-ink' : 'text-ink/45')}>
                 <Icon size={19} />
                 <span className="text-[9.5px] font-medium truncate max-w-full">{t.label}</span>
               </button>
@@ -142,10 +189,11 @@ function Shell() {
       </nav>
 
       <Onboarding />
+      <Celebration />
 
       {toastMsg && (
         <div key={toastMsg.id} role="status"
-          className="fixed z-[70] left-1/2 -translate-x-1/2 top-[4.5rem] md:top-6 md:left-[calc(50%+8rem)] px-5 h-11 rounded-full flex items-center text-[14px] font-medium text-white bg-ink shadow-xl animate-toast whitespace-nowrap">
+          className="fixed z-[70] left-1/2 -translate-x-1/2 top-[4.5rem] md:top-6 md:left-[calc(50%+8rem)] px-5 h-11 rounded-full flex items-center text-[14px] font-medium text-on-ink bg-ink shadow-xl animate-toast whitespace-nowrap">
           {toastMsg.msg}
         </div>
       )}
@@ -163,8 +211,12 @@ function Onboarding() {
   const done = () => { try { localStorage.setItem(WELCOME_KEY, '1'); } catch { /* */ } setWelcome(false); };
   useEffect(() => { if (sync.session) done(); }, [sync.session]);
 
+  const { state } = useStore();
+  const showSetup = !state.prefs.onboarded && !(welcome && !sync.session) && !sync.needsChoice;
+
   return (
     <>
+      <SetupWizard open={showSetup} defaultName={sync.profile?.display_name || state.profile.name || ''} />
       <Modal open={welcome && !sync.session} onClose={done} title="Bem-vindo ao Leco Health">
         <p className="text-[15px] text-muted mb-5">Crie sua conta para salvar seus dados na nuvem e acompanhar o progresso com amigos.</p>
         <AuthForm onDone={done} />
@@ -190,7 +242,10 @@ export default function App() {
   return (
     <StoreProvider>
       <SyncProvider>
-        <Shell />
+        <Effects />
+        <LockGate>
+          <Shell />
+        </LockGate>
       </SyncProvider>
     </StoreProvider>
   );

@@ -6,10 +6,10 @@ import { LuTrash2, LuX, LuStar } from 'react-icons/lu';
    permitir variações por módulo no futuro; hoje todas usam o laranja. */
 export type Accent = 'treino' | 'nutri' | 'habito' | 'bio' | 'neutral' | 'dark';
 
-export const ORANGE = '#F26B3A';
-export const PEACH = '#F59A74';
-export const BLUSH = '#FBCDB8';
-export const INK = '#1C1B1A';
+export const ORANGE = 'var(--color-orange)';
+export const PEACH = 'var(--color-peach)';
+export const BLUSH = 'var(--color-blush)';
+export const INK = 'var(--color-ink)';
 
 const O = { hex: ORANGE, text: 'text-orange', bg: 'bg-orange', soft: 'bg-blush', border: 'border-orange/30', glow: '' };
 export const ACCENT: Record<Accent, typeof O> = {
@@ -23,7 +23,7 @@ export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Bool
 /* ── Superfícies ───────────────────────────────────────────── */
 export function Card({ children, className, as: Tag = 'section', ...rest }: React.HTMLAttributes<HTMLElement> & { as?: any }) {
   return (
-    <Tag className={cx('relative rounded-[28px] bg-white shadow-[0_1px_2px_rgba(28,27,26,.04),0_8px_24px_-16px_rgba(28,27,26,.12)]', className)} {...rest}>
+    <Tag className={cx('relative rounded-[28px] bg-surface shadow-[0_1px_2px_rgba(28,27,26,.04),0_8px_24px_-16px_rgba(28,27,26,.12)]', className)} {...rest}>
       {children}
     </Tag>
   );
@@ -72,12 +72,12 @@ export function Button({ variant = 'soft', accent, size = 'md', className, child
   const base = 'press inline-flex items-center justify-center gap-2 font-medium rounded-full transition-colors duration-150 disabled:opacity-40 disabled:pointer-events-none select-none whitespace-nowrap';
   const sizes = size === 'sm' ? 'h-9 px-4 text-[13px]' : size === 'lg' ? 'h-14 px-7 text-[17px]' : 'h-11 px-5 text-[15px]';
   const v =
-    variant === 'primary' ? (accent === 'neutral' || accent === 'dark' ? 'bg-ink text-white hover:bg-ink/90' : 'bg-orange text-white hover:bg-[#E85F2E]')
-      : variant === 'dark' ? 'bg-ink text-white hover:bg-ink/90'
+    variant === 'primary' ? (accent === 'neutral' || accent === 'dark' ? 'bg-ink text-on-ink hover:bg-ink/90' : 'bg-orange text-white hover:brightness-95')
+      : variant === 'dark' ? 'bg-ink text-on-ink hover:bg-ink/90'
         : variant === 'ghost' ? 'text-ink/70 hover:text-ink hover:bg-cream'
-          : variant === 'outline' ? 'bg-white text-ink border border-line hover:bg-cream'
-            : variant === 'danger' ? 'bg-white text-orange border border-orange/40 hover:bg-blush/60'
-              : 'bg-cream text-ink hover:bg-[#ECE9E4]';
+          : variant === 'outline' ? 'bg-surface text-ink border border-line hover:bg-cream'
+            : variant === 'danger' ? 'bg-surface text-orange border border-orange/40 hover:bg-blush/60'
+              : 'bg-cream text-ink hover:brightness-95';
   return <button type="button" className={cx(base, sizes, v, className)} {...rest}>{children}</button>;
 }
 
@@ -93,7 +93,7 @@ export function IconButton({ className, label, children, ...rest }: React.Button
 export function RoundButton({ className, label, children, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
   return (
     <button type="button" aria-label={label} title={label}
-      className={cx('press grid place-items-center size-12 rounded-full border border-line bg-white text-ink hover:bg-cream transition-colors shrink-0', className)} {...rest}>
+      className={cx('press grid place-items-center size-12 rounded-full border border-line bg-surface text-ink hover:bg-cream transition-colors shrink-0', className)} {...rest}>
       {children}
     </button>
   );
@@ -122,7 +122,7 @@ export function DeleteButton({ onConfirm, label = 'Excluir', compact = true }: {
 
 /* ── Formulários ───────────────────────────────────────────── */
 export const inputCls =
-  'w-full h-12 md:h-11 rounded-2xl bg-cream border border-transparent px-4 text-base md:text-[15px] text-ink placeholder:text-ink/35 outline-none focus:border-ink/15 focus:bg-white transition-colors';
+  'w-full h-12 md:h-11 rounded-2xl bg-cream border border-transparent px-4 text-base md:text-[15px] text-ink placeholder:text-ink/35 outline-none focus:border-ink/15 focus:bg-surface transition-colors';
 
 export function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   return (
@@ -173,7 +173,7 @@ export function NumInput({ value, onChange, step = 1, className, ...p }: {
 export function Tag({ children, accent = 'treino', className }: { children: React.ReactNode; accent?: Accent; className?: string }) {
   return (
     <span className={cx('inline-flex items-center gap-1 h-6 px-2.5 rounded-full text-[12px] font-medium whitespace-nowrap',
-      accent === 'dark' ? 'bg-ink text-white' : accent === 'neutral' ? 'bg-cream text-ink/70' : 'bg-blush/70 text-[#D9541F]', className)}>
+      accent === 'dark' ? 'bg-ink text-on-ink' : accent === 'neutral' ? 'bg-cream text-ink/70' : 'bg-blush/70 text-orange', className)}>
       {children}
     </span>
   );
@@ -183,7 +183,7 @@ export function Delta({ value, suffix = '%', dark, goodWhenDown }: { value: numb
   const up = value >= 0;
   return (
     <span className={cx('inline-flex items-center gap-1 h-7 px-3 rounded-full text-[13px] font-medium tabular-nums whitespace-nowrap',
-      dark ? 'bg-ink text-white' : 'bg-orange text-white')} title={goodWhenDown ? 'menor é melhor' : undefined}>
+      dark ? 'bg-ink text-on-ink' : 'bg-orange text-white')} title={goodWhenDown ? 'menor é melhor' : undefined}>
       {up ? '+' : '−'}{Math.abs(value).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}{suffix}
       <svg viewBox="0 0 12 12" className="size-3" style={{ transform: up ? undefined : 'rotate(90deg)' }}>
         <path d="M3.5 8.5l5-5M4.5 3.5h4v4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -196,14 +196,14 @@ export function Chip({ active, onClick, children }: { active?: boolean; onClick?
   return (
     <button type="button" onClick={onClick}
       className={cx('press h-11 px-5 rounded-full text-[15px] font-medium transition-colors whitespace-nowrap shrink-0',
-        active ? 'bg-ink text-white' : 'bg-white text-ink/70 hover:text-ink')}>
+        active ? 'bg-ink text-on-ink' : 'bg-surface text-ink/70 hover:text-ink')}>
       {children}
     </button>
   );
 }
 
 /* ── Progresso ─────────────────────────────────────────────── */
-export function ProgressRing({ value, size = 120, stroke = 10, color = ORANGE, track = '#F1EEEA', children }: {
+export function ProgressRing({ value, size = 120, stroke = 10, color = ORANGE, track = 'var(--color-cream)', children }: {
   value: number; size?: number; stroke?: number; color?: string; track?: string; children?: React.ReactNode;
 }) {
   const r = (size - stroke) / 2;
@@ -212,9 +212,9 @@ export function ProgressRing({ value, size = 120, stroke = 10, color = ORANGE, t
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={track} strokeWidth={stroke} />
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round"
-          strokeDasharray={c} strokeDashoffset={c * (1 - v)} style={{ transition: 'stroke-dashoffset .8s cubic-bezier(.2,.8,.2,1)' }} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" style={{ stroke: track }} strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke} strokeLinecap="round"
+          strokeDasharray={c} strokeDashoffset={c * (1 - v)} style={{ stroke: color, transition: 'stroke-dashoffset .8s cubic-bezier(.2,.8,.2,1)' }} />
       </svg>
       <div className="absolute inset-0 grid place-items-center text-center">{children}</div>
     </div>
@@ -224,7 +224,7 @@ export function ProgressRing({ value, size = 120, stroke = 10, color = ORANGE, t
 export function ProgressBar({ value, color = ORANGE, height = 8, className }: { value: number; color?: string; height?: number; className?: string }) {
   const v = Math.max(0, Math.min(1, value));
   return (
-    <div className={cx('w-full rounded-full bg-[#EFEBE6] overflow-hidden', className)} style={{ height }}>
+    <div className={cx('w-full rounded-full bg-cream overflow-hidden', className)} style={{ height }}>
       <div className="h-full rounded-full" style={{ width: `${v * 100}%`, background: color, transition: 'width .7s cubic-bezier(.2,.8,.2,1)' }} />
     </div>
   );
@@ -236,7 +236,7 @@ export function Stars({ value, onChange, size = 22, color = ORANGE }: { value: n
       {[1, 2, 3, 4, 5].map((n) => (
         <button key={n} type="button" disabled={!onChange} onClick={() => onChange?.(n)} aria-label={`${n} de 5`}
           className={cx('press transition', onChange && 'hover:scale-110')}>
-          <LuStar size={size} fill={n <= value ? color : 'transparent'} color={n <= value ? color : 'rgba(28,27,26,.2)'} strokeWidth={1.6} />
+          <LuStar size={size} strokeWidth={1.6} style={{ fill: n <= value ? color : 'transparent', color: n <= value ? color : 'color-mix(in srgb, var(--color-ink) 22%, transparent)' }} />
         </button>
       ))}
     </div>
@@ -259,7 +259,7 @@ export function Modal({ open, onClose, title, children, footer }: {
   return (
     <div className="fixed inset-0 z-[60] flex items-end md:items-center justify-center" role="dialog" aria-modal="true" aria-label={title}>
       <div className="absolute inset-0 bg-ink/30 animate-fade" onClick={onClose} />
-      <div className="relative w-full md:max-w-lg max-h-[92dvh] flex flex-col rounded-t-[28px] md:rounded-[28px] bg-white shadow-2xl animate-sheet">
+      <div className="relative w-full md:max-w-lg max-h-[92dvh] flex flex-col rounded-t-[28px] md:rounded-[28px] bg-surface shadow-2xl animate-sheet">
         <div className="md:hidden mx-auto mt-3 h-1 w-10 rounded-full bg-ink/15" />
         <div className="flex items-center justify-between px-6 pt-5 pb-3">
           <h2 className="text-xl font-semibold tracking-[-0.02em] text-ink">{title}</h2>
@@ -287,11 +287,11 @@ export function Segmented<T extends string>({ value, onChange, options }: {
   value: T; onChange: (v: T) => void; options: { value: T; label: React.ReactNode }[]; accent?: Accent;
 }) {
   return (
-    <div className="inline-flex p-1 rounded-full bg-white gap-1 w-full md:w-auto">
+    <div className="inline-flex p-1 rounded-full bg-surface gap-1 w-full md:w-auto">
       {options.map((o) => (
         <button key={o.value} type="button" onClick={() => onChange(o.value)}
           className={cx('press flex-1 md:flex-none h-10 px-5 rounded-full text-[14px] font-medium transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap',
-            value === o.value ? 'bg-ink text-white' : 'text-ink/55 hover:text-ink')}>
+            value === o.value ? 'bg-ink text-on-ink' : 'text-ink/55 hover:text-ink')}>
           {o.label}
         </button>
       ))}
@@ -327,8 +327,8 @@ export function SegmentGauge({ value, segments = 15 }: { value: number; segments
         const a0 = Math.PI + (i / segments) * Math.PI + gap / 2;
         const a1 = Math.PI + ((i + 1) / segments) * Math.PI - gap / 2;
         const d = `M${p(R, a0)} A${R},${R} 0 0 1 ${p(R, a1)} L${p(r, a1)} A${r},${r} 0 0 0 ${p(r, a0)} Z`;
-        const fill = i + 1 <= filled ? ORANGE : i < filled ? PEACH : '#F1EEEA';
-        return <path key={i} d={d} fill={fill} stroke={fill} strokeWidth={9} strokeLinejoin="round" style={{ transition: 'fill .4s' }} />;
+        const fill = i + 1 <= filled ? ORANGE : i < filled ? PEACH : 'var(--color-cream)';
+        return <path key={i} d={d} strokeWidth={9} strokeLinejoin="round" style={{ fill, stroke: fill, transition: 'fill .4s' }} />;
       })}
     </svg>
   );
@@ -351,7 +351,7 @@ export function DotDial({ value, label, sub, size = 240 }: { value: number; labe
   return (
     <div className="relative rounded-full bg-ink shrink-0" style={{ width: size, height: size }}>
       <svg viewBox={`0 0 ${size} ${size}`} className="absolute inset-0">
-        {v > 0.005 && <path d={arc} fill="none" stroke={ORANGE} strokeWidth={size * 0.05} strokeLinecap="round" />}
+        {v > 0.005 && <path d={arc} fill="none" style={{ stroke: ORANGE }} strokeWidth={size * 0.05} strokeLinecap="round" />}
         {rest > 0.7 && dots.map((a, i) => { const [x, y] = pt(a); return <circle key={i} cx={x} cy={y} r={size * 0.032} fill="#fff" />; })}
       </svg>
       <div className="absolute inset-0 grid place-items-center text-center">
@@ -364,7 +364,7 @@ export function DotDial({ value, label, sub, size = 240 }: { value: number; labe
   );
 }
 
-const HEAT = ['#FBEDE6', BLUSH, PEACH, '#F4895F', ORANGE];
+const HEAT = ['color-mix(in srgb, var(--color-orange) 10%, var(--color-surface))', BLUSH, PEACH, 'color-mix(in srgb, var(--color-orange) 82%, var(--color-surface))', ORANGE];
 export const heatColor = (v: number | null) =>
   v == null ? 'transparent' : v >= 0.85 ? HEAT[4] : v >= 0.6 ? HEAT[3] : v >= 0.4 ? HEAT[2] : v >= 0.15 ? HEAT[1] : HEAT[0];
 
@@ -395,9 +395,9 @@ export function HatchColumns({ items, height = 150 }: {
             )}
             <div className="relative w-full rounded-[16px] bg-cream overflow-hidden" style={{ height }}>
               <div className={cx('absolute inset-x-0 bottom-0 rounded-[16px]', !hi && 'hatch')}
-                style={{ height: `${h * 100}%`, background: hi ? `linear-gradient(180deg, ${ORANGE}, #EE5A28)` : undefined, transition: 'height .6s' }} />
+                style={{ height: `${h * 100}%`, background: hi ? `linear-gradient(180deg, ${ORANGE}, ${ORANGE})` : undefined, transition: 'height .6s' }} />
               <span className={cx('absolute left-1/2 -translate-x-1/2 px-2 h-6 rounded-full text-[11.5px] font-semibold grid place-items-center tabular-nums whitespace-nowrap',
-                hi ? 'bg-ink text-white top-3' : 'bg-white text-ink')}
+                hi ? 'bg-ink text-on-ink top-3' : 'bg-surface text-ink')}
                 style={hi ? undefined : { bottom: `min(calc(${h * 100}% + 8px), calc(100% - 32px))` }}>
                 {it.display}
               </span>
