@@ -185,6 +185,9 @@ export function buildMockState(): AppState {
   const water: Record<string, number> = {};
   for (let d = 13; d >= 1; d--) water[addDays(today, -d)] = Math.round((2600 + r() * 1300) / 250) * 250;
   water[today] = 1250;
+  const waterSizes = [{ id: 'copo', label: 'Copo', ml: 250 }, { id: 'garrafa', label: 'Garrafa', ml: 500 }];
+  const waterLog = [['07:40', 250, 'Copo'], ['10:15', 500, 'Garrafa'], ['13:05', 500, 'Garrafa']]
+    .map(([time, ml, label]) => ({ id: uid(), date: today, time: time as string, ml: ml as number, label: label as string }));
 
   /* ── hábitos ── */
   const habitDefs: [string, Habit['category'], number][] = [
@@ -229,11 +232,17 @@ export function buildMockState(): AppState {
   }
 
   const sleep: SleepLog[] = [];
+  const TAGS = ['Cafeína à tarde', 'Telas antes de dormir', 'Acordei à noite', 'Treino pesado', 'Dormi cedo'];
   for (let d = 13; d >= 1; d--) {
+    const bedMin = 22 * 60 + 30 + Math.round((r() - 0.3) * 90); // ~22h–00h
     const hours = round1(5.8 + r() * 2.6);
+    const wakeMin = (bedMin + Math.round(hours * 60)) % (24 * 60);
+    const hhmm = (m: number) => `${String(Math.floor((m % 1440) / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+    const q = Math.max(1, Math.min(5, Math.round((hours - 4.6) / 0.8 + (r() - 0.5))));
     sleep.push({
-      id: uid(), date: addDays(today, -d), hours,
-      energy: Math.max(1, Math.min(5, Math.round((hours - 4.5) / 0.85 + (r() - 0.5)))),
+      id: uid(), date: addDays(today, -d), hours, bedtime: hhmm(bedMin), wake: hhmm(wakeMin), quality: q,
+      energy: Math.max(1, Math.min(5, q + (r() > 0.6 ? 1 : 0) - (r() > 0.8 ? 1 : 0))),
+      tags: r() > 0.6 ? [TAGS[Math.floor(r() * TAGS.length)]] : [],
     });
   }
 
@@ -258,13 +267,15 @@ export function buildMockState(): AppState {
   return {
     meta: { version: 1, createdAt: now, updatedAt: now },
     profile: { name: 'Leonardo' },
-    goals: { kcal: 2600, protein: 180, carbs: 300, fat: 75, water: 3500, meals: 4 },
+    goals: { kcal: 2600, protein: 180, carbs: 300, fat: 75, water: 3500, meals: 4, sleep: 8, weight: 80 },
     splits,
     schedule,
     sessions,
     foods,
     meals,
     water,
+    waterLog,
+    waterSizes,
     habits,
     habitLogs,
     body,
@@ -278,13 +289,15 @@ export function buildEmptyState(): AppState {
   return {
     meta: { version: 1, createdAt: now, updatedAt: now },
     profile: { name: '' },
-    goals: { kcal: 2400, protein: 160, carbs: 280, fat: 70, water: 3000, meals: 4 },
+    goals: { kcal: 2400, protein: 160, carbs: 280, fat: 70, water: 3000, meals: 4, sleep: 8 },
     splits: [],
     schedule: { 0: null, 1: null, 2: null, 3: null, 4: null, 5: null, 6: null },
     sessions: [],
     foods: [],
     meals: [],
     water: {},
+    waterLog: [],
+    waterSizes: [{ id: 'copo', label: 'Copo', ml: 250 }, { id: 'garrafa', label: 'Garrafa', ml: 500 }],
     habits: [],
     habitLogs: {},
     body: [],

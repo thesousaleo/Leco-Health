@@ -1,235 +1,291 @@
 import React, { useMemo, useState } from 'react';
 import {
-  LuActivity, LuBedDouble, LuFileText, LuMoon, LuNotebookPen, LuPencil, LuPlus, LuRuler, LuScale, LuSearch, LuStethoscope,
-  LuTag, LuTrendingDown, LuTrendingUp, LuZap, LuDumbbell, LuApple,
+  LuActivity, LuApple, LuDumbbell, LuFileText, LuMoon, LuNotebookPen, LuPencil, LuPlus, LuScale, LuSearch, LuStethoscope, LuTag,
+  LuTrendingDown, LuTrendingUp, LuX,
 } from 'react-icons/lu';
 import { useStore } from '../store';
-import type { BodyLog, NoteEntry, NoteKind } from '../types';
-import { fmtShort, lastNDays, nf, relDay, todayKey, fmtWeekdayShort, round1 } from '../utils';
+import type { NoteEntry, NoteKind, SleepLog } from '../types';
+import { addDays, fmtShort, lastNDays, nf, relDay, round1, todayKey, fmtWeekdayShort } from '../utils';
 import {
-  ACCENT, Button, Card, CardHeader, Chip, cx, DeleteButton, Empty, Field, IconButton, Input, Modal, NumInput, PageHeader,
-  Segmented, Select, Stars, Tag, TextArea,
+  Button, Card, Chip, cx, DeleteButton, Empty, Field, IconButton, Input, Modal, NumInput, PageHeader, Segmented, Select, Stars, Tag, TextArea,
 } from '../components/ui';
 import { BarChart, LineChart } from '../components/charts';
 
-type View = 'corpo' | 'sono' | 'diario';
+type View = 'peso' | 'sono' | 'diario';
 
 export default function Metrics() {
-  const [view, setView] = useState<View>('corpo');
+  const [view, setView] = useState<View>('peso');
   return (
     <div>
-      <PageHeader title="Registros" sub="Biometria, sono e diário de saúde" accent="bio" icon={<LuActivity size={20} />} />
+      <PageHeader title="Registros" sub="Peso, sono e diário de saúde" />
       <div className="mb-4">
-        <Segmented accent="bio" value={view} onChange={setView} options={[
-          { value: 'corpo', label: <><LuScale size={14} /> Corpo</> },
-          { value: 'sono', label: <><LuMoon size={14} /> Sono</> },
-          { value: 'diario', label: <><LuNotebookPen size={14} /> Diário</> },
+        <Segmented value={view} onChange={setView} options={[
+          { value: 'peso', label: <><LuScale size={15} /> Peso</> },
+          { value: 'sono', label: <><LuMoon size={15} /> Sono</> },
+          { value: 'diario', label: <><LuNotebookPen size={15} /> Diário</> },
         ]} />
       </div>
-      {view === 'corpo' && <Body />}
+      {view === 'peso' && <Weight />}
       {view === 'sono' && <Sleep />}
       {view === 'diario' && <Journal />}
     </div>
   );
 }
 
-/* ─────────────────────────── Corpo ─────────────────────────── */
-const METRICS: { key: keyof Omit<BodyLog, 'id' | 'date'>; label: string; unit: string; lowerIsBetter: boolean }[] = [
-  { key: 'weight', label: 'Peso', unit: 'kg', lowerIsBetter: true },
-  { key: 'bodyFat', label: 'BF%', unit: '%', lowerIsBetter: true },
-  { key: 'waist', label: 'Cintura', unit: 'cm', lowerIsBetter: true },
-  { key: 'arm', label: 'Braço', unit: 'cm', lowerIsBetter: false },
-  { key: 'chest', label: 'Peitoral', unit: 'cm', lowerIsBetter: false },
-  { key: 'hip', label: 'Quadril', unit: 'cm', lowerIsBetter: true },
-];
-
-function Body() {
+/* ─────────────────────────── Peso ─────────────────────────── */
+function Weight() {
   const { state, actions, toast } = useStore();
-  const [metric, setMetric] = useState<(typeof METRICS)[number]['key']>('weight');
-  const [open, setOpen] = useState(false);
-  const logs = [...state.body].sort((a, b) => (a.date < b.date ? -1 : 1));
-  const meta = METRICS.find((m) => m.key === metric)!;
-  const series = logs.filter((l) => l[metric] != null).map((l) => ({ label: fmtShort(l.date), value: l[metric] as number, sub: relDay(l.date) }));
-  const latest = (k: typeof metric) => [...logs].reverse().find((l) => l[k] != null)?.[k] as number | undefined;
-  const first = (k: typeof metric) => logs.find((l) => l[k] != null)?.[k] as number | undefined;
+  const today = todayKey();
+  const [period, setPeriod] = useState<30 | 90 | 0>(90);
+  const [date, setDate] = useState(today);
+  const [val, setVal] = useState('');
+  const logs = state.body.filter((b) => b.weight != null).sort((a, b) => (a.date < b.date ? -1 : 1));
+  const last = logs[logs.length - 1];
+  const prev = logs[logs.length - 2];
+  const ago30 = [...logs].reverse().find((l) => l.date <= addDays(today, -30)) ?? logs[0];
+  const goal = state.goals.weight;
+  const shown = period ? logs.filter((l) => l.date >= addDays(today, -period)) : logs;
 
-  // massa magra estimada
-  const w = latest('weight');
-  const bf = latest('bodyFat');
-  const lean = w && bf ? w * (1 - bf / 100) : undefined;
+  const save = () => {
+    const w = round1(parseFloat(val.replace(',', '.')));
+    if (!w || w < 20 || w > 400) return;
+    actions.upsertWeight(date, w);
+    setVal('');
+    setDate(today);
+    toast(`${nf(w, 1)} kg registrado`);
+  };
+
+  const Delta = ({ v, label }: { v?: number; label: string }) => (
+    <div className="rounded-2xl bg-cream px-4 py-3">
+      <p className="text-[12.5px] text-muted">{label}</p>
+      <p className="text-[18px] font-semibold tracking-[-0.02em] text-ink tabular-nums flex items-center gap-1">
+        {v == null ? '—' : <>{v < 0 ? <LuTrendingDown size={16} className="text-good" /> : v > 0 ? <LuTrendingUp size={16} className="text-orange" /> : null}{v > 0 ? '+' : ''}{nf(v, 1)} kg</>}
+      </p>
+    </div>
+  );
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5">
-        {METRICS.map((m) => {
-          const l = latest(m.key);
-          const f = first(m.key);
-          const diff = l != null && f != null ? l - f : 0;
-          const good = m.lowerIsBetter ? diff < 0 : diff > 0;
-          return (
-            <Card as="button" key={m.key} onClick={() => setMetric(m.key)}
-              className={cx('p-3.5 text-left press transition', metric === m.key ? 'border-orange/40 bg-blush/50' : 'hover:bg-cream')}>
-              <p className="text-[11px] uppercase tracking-wider text-ink/45">{m.label}</p>
-              <p className="font-display text-xl font-semibold text-ink tabular-nums">{l != null ? nf(l, 1) : '—'}<span className="text-xs text-ink/40 ml-0.5">{m.unit}</span></p>
-              {diff !== 0 && (
-                <p className={cx('text-[11px] tabular-nums flex items-center gap-0.5', good ? 'text-orange' : 'text-orange')}>
-                  {diff > 0 ? <LuTrendingUp size={11} /> : <LuTrendingDown size={11} />}{diff > 0 ? '+' : ''}{nf(diff, 1)} no período
-                </p>
-              )}
-            </Card>
-          );
-        })}
-      </div>
-
-      <div className="grid lg:grid-cols-3 gap-4">
-        <Card className="p-5 lg:col-span-2">
-          <CardHeader icon={<LuTrendingUp size={16} />} accent="bio" title={`Evolução — ${meta.label}`} sub={`${series.length} registros`}
-            right={<Button size="sm" variant="primary" accent="bio" onClick={() => setOpen(true)}><LuPlus size={14} /> Registrar</Button>} />
-          <LineChart data={series} color={ACCENT.bio.hex} unit={` ${meta.unit}`} />
+    <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] gap-4 md:gap-5 items-start">
+      <div className="space-y-4 md:space-y-5">
+        <Card className="p-5 md:p-6">
+          <p className="text-[14px] text-muted">Peso atual</p>
+          <p className="text-[48px] font-semibold tracking-[-0.045em] text-ink tabular-nums leading-none mt-1">
+            {last ? nf(last.weight!, 1) : '—'}<span className="text-[18px] font-normal text-muted tracking-normal ml-1.5">kg</span>
+          </p>
+          <p className="text-[13px] text-muted mt-1.5">{last ? `registrado ${relDay(last.date).toLowerCase()}` : 'Nenhum registro ainda'}</p>
+          <div className="grid grid-cols-2 gap-2 mt-5">
+            <Delta v={last && prev ? round1(last.weight! - prev.weight!) : undefined} label="vs. anterior" />
+            <Delta v={last && ago30 && ago30 !== last ? round1(last.weight! - ago30.weight!) : undefined} label="em 30 dias" />
+          </div>
+          {goal != null && last && (
+            <p className="text-[13.5px] text-ink/80 mt-4">
+              Meta: <b className="font-semibold">{nf(goal, 1)} kg</b> · {Math.abs(last.weight! - goal) < 0.1 ? 'meta atingida 🎉' : `faltam ${nf(Math.abs(last.weight! - goal), 1)} kg`}
+            </p>
+          )}
         </Card>
-        <Card className="p-5">
-          <CardHeader icon={<LuRuler size={16} />} accent="bio" title="Composição estimada" />
-          {lean ? (
-            <div className="space-y-3">
-              <div>
-                <div className="flex justify-between text-sm mb-1.5"><span className="text-ink/70">Massa magra</span><b className="text-ink tabular-nums">{nf(lean, 1)} kg</b></div>
-                <div className="h-3 rounded-full overflow-hidden flex bg-cream">
-                  <div className="bg-orange" style={{ width: `${100 - bf!}%` }} />
-                  <div className="bg-ink/15" style={{ width: `${bf}%` }} />
-                </div>
-                <div className="flex justify-between text-[11px] text-ink/40 mt-1.5"><span>{nf(100 - bf!, 1)}% magra</span><span>{nf(bf!, 1)}% gordura · {nf(w! - lean, 1)} kg</span></div>
-              </div>
-              <p className="text-xs text-ink/40">Calculada a partir do último peso e BF% registrados.</p>
+
+        <Card className="p-5 md:p-6">
+          <p className="text-[16px] font-semibold text-ink mb-4">Registrar peso</p>
+          <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); save(); }}>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Peso (kg)">
+                <Input inputMode="decimal" value={val} onChange={(e) => setVal(e.target.value)} placeholder={last ? nf(last.weight!, 1) : '80,0'} className="text-[18px] font-medium" />
+              </Field>
+              <Field label="Dia"><Input type="date" className="min-w-0 px-3" value={date} max={today} onChange={(e) => setDate(e.target.value || today)} /></Field>
             </div>
-          ) : <p className="text-sm text-ink/40">Registre peso e BF% para ver a composição.</p>}
+            <Button type="submit" variant="primary" className="w-full" disabled={!val.trim()}>Salvar peso</Button>
+          </form>
         </Card>
       </div>
 
-      <Card className="p-2 md:p-3">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[520px]">
-            <thead>
-              <tr className="text-[10.5px] uppercase tracking-wider text-ink/40 text-right">
-                <th className="text-left font-medium px-3 py-2">Data</th>
-                {METRICS.map((m) => <th key={m.key} className="font-medium px-2 py-2">{m.label}</th>)}
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {[...logs].reverse().map((l) => (
-                <tr key={l.id} className="border-t border-line text-right tabular-nums text-ink/80">
-                  <td className="text-left px-3 py-2.5 text-ink/60">{relDay(l.date)}</td>
-                  {METRICS.map((m) => <td key={m.key} className="px-2">{l[m.key] != null ? nf(l[m.key] as number, 1) : '—'}</td>)}
-                  <td className="pr-1"><DeleteButton onConfirm={() => { actions.deleteBody(l.id); toast('Registro removido'); }} /></td>
-                </tr>
+      <div className="space-y-4 md:space-y-5">
+        <Card className="p-5 md:p-6">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <p className="text-[16px] font-semibold text-ink">Evolução</p>
+            <div className="flex gap-1 bg-cream rounded-full p-1">
+              {([[30, '30d'], [90, '90d'], [0, 'Tudo']] as const).map(([p, l]) => (
+                <button key={l} onClick={() => setPeriod(p)} className={cx('press h-8 px-3 rounded-full text-[12.5px] font-medium', period === p ? 'bg-ink text-white' : 'text-ink/60')}>{l}</button>
               ))}
-            </tbody>
-          </table>
-          {!logs.length && <Empty icon={<LuScale />} title="Sem registros de biometria" />}
-        </div>
-      </Card>
+            </div>
+          </div>
+          <LineChart data={shown.map((l) => ({ label: fmtShort(l.date), value: l.weight!, sub: relDay(l.date) }))} color="#F26B3A" unit=" kg" goal={goal} />
+        </Card>
 
-      <BodyModal open={open} onClose={() => setOpen(false)} last={logs[logs.length - 1]}
-        onSave={(b) => { actions.addBody(b); setOpen(false); toast('Medidas registradas'); }} />
+        <Card className="p-2 md:p-3">
+          {logs.length === 0 ? <Empty icon={<LuScale />} title="Sem registros de peso" /> : (
+            <ul className="divide-y divide-line">
+              {[...logs].reverse().slice(0, 30).map((l, i, arr) => {
+                const before = arr[i + 1];
+                const d = before ? round1(l.weight! - before.weight!) : null;
+                return (
+                  <li key={l.id} className="flex items-center gap-3 px-3 py-3">
+                    <span className="flex-1 text-[14.5px] text-ink/80">{relDay(l.date)}</span>
+                    {d != null && d !== 0 && <span className={cx('text-[12.5px] tabular-nums', d < 0 ? 'text-good' : 'text-orange')}>{d > 0 ? '+' : ''}{nf(d, 1)}</span>}
+                    <span className="text-[15px] font-semibold text-ink tabular-nums w-20 text-right">{nf(l.weight!, 1)} kg</span>
+                    <DeleteButton onConfirm={() => actions.deleteBody(l.id)} />
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Card>
+      </div>
     </div>
   );
 }
 
-function BodyModal({ open, onClose, onSave, last }: { open: boolean; onClose: () => void; onSave: (b: Omit<BodyLog, 'id'>) => void; last?: BodyLog }) {
-  const [date, setDate] = useState(todayKey());
-  const [vals, setVals] = useState<Record<string, string>>({});
-  const [was, setWas] = useState(false);
-  if (open !== was) {
-    setWas(open);
-    if (open) { setDate(todayKey()); setVals({}); }
-  }
-  const parsed = Object.fromEntries(
-    METRICS.map((m) => [m.key, vals[m.key] ? round1(parseFloat(vals[m.key].replace(',', '.'))) : undefined]).filter(([, v]) => v != null && !isNaN(v as number)),
-  );
-  return (
-    <Modal open={open} onClose={onClose} accent="bio" title="Registrar biometria"
-      footer={<>
-        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-        <Button variant="primary" accent="bio" disabled={!Object.keys(parsed).length} onClick={() => onSave({ date, ...parsed })}>Salvar</Button>
-      </>}>
-      <form className="grid grid-cols-2 gap-3" onSubmit={(e) => e.preventDefault()}>
-        <Field label="Data" className="col-span-2"><Input type="date" value={date} max={todayKey()} onChange={(e) => setDate(e.target.value)} /></Field>
-        {METRICS.map((m) => (
-          <Field key={m.key} label={`${m.label} (${m.unit})`}>
-            <Input inputMode="decimal" value={vals[m.key] ?? ''} placeholder={last?.[m.key] != null ? nf(last[m.key] as number, 1) : '—'}
-              onChange={(e) => setVals({ ...vals, [m.key]: e.target.value })} />
-          </Field>
-        ))}
-        <p className="col-span-2 text-[11px] text-ink/40">Preencha só o que mediu. O valor em cinza é o último registro.</p>
-      </form>
-    </Modal>
-  );
-}
-
 /* ─────────────────────────── Sono ─────────────────────────── */
+const QUALITY = ['Péssima', 'Ruim', 'Ok', 'Boa', 'Ótima'];
 const ENERGY = ['Exausto', 'Cansado', 'Ok', 'Bem', 'Elétrico'];
+const SLEEP_TAGS = ['Cafeína à tarde', 'Telas antes de dormir', 'Acordei à noite', 'Treino pesado', 'Jantei tarde', 'Álcool', 'Dormi cedo', 'Cochilo à tarde', 'Estresse', 'Calor'];
+const toMin = (t?: string) => (t ? +t.slice(0, 2) * 60 + +t.slice(3, 5) : NaN);
+const hoursBetween = (bed: string, wake: string) => {
+  let d = toMin(wake) - toMin(bed);
+  if (d <= 0) d += 1440;
+  return round1(d / 60);
+};
+const avgClock = (times: string[], night: boolean) => {
+  const mins = times.map(toMin).filter((m) => !isNaN(m)).map((m) => (night && m < 12 * 60 ? m + 1440 : m));
+  if (!mins.length) return '—';
+  const a = Math.round(mins.reduce((x, y) => x + y, 0) / mins.length) % 1440;
+  return `${String(Math.floor(a / 60)).padStart(2, '0')}:${String(a % 60).padStart(2, '0')}`;
+};
 
 function Sleep() {
   const { state, actions, toast } = useStore();
   const today = todayKey();
-  const existing = state.sleep.find((s) => s.date === today);
-  const [hours, setHours] = useState(existing?.hours ?? 7.5);
-  const [energy, setEnergy] = useState(existing?.energy ?? 4);
+  const goal = state.goals.sleep || 8;
+  const [date, setDate] = useState(today);
+  const existing = state.sleep.find((s) => s.date === date);
+  const blank = { bedtime: '23:00', wake: '07:00', quality: 4, energy: 4, tags: [] as string[], note: '' };
+  const [f, setF] = useState(blank);
+  const [loadedFor, setLoadedFor] = useState('');
+  const [customTag, setCustomTag] = useState('');
+  if (loadedFor !== date + (existing?.id ?? '')) {
+    setLoadedFor(date + (existing?.id ?? ''));
+    setF(existing ? {
+      bedtime: existing.bedtime ?? '23:00', wake: existing.wake ?? '07:00', quality: existing.quality ?? existing.energy,
+      energy: existing.energy, tags: existing.tags ?? [], note: existing.note ?? '',
+    } : blank);
+  }
+  const hours = hoursBetween(f.bedtime, f.wake);
+  const allTags = [...new Set([...SLEEP_TAGS, ...state.sleep.flatMap((s) => s.tags ?? [])])];
+
   const days = lastNDays(14);
   const byDay = Object.fromEntries(state.sleep.map((s) => [s.date, s]));
-  const recent = state.sleep.filter((s) => days.includes(s.date));
+  const recent = state.sleep.filter((s) => s.date > addDays(today, -7));
   const avgH = recent.length ? recent.reduce((a, s) => a + s.hours, 0) / recent.length : 0;
-  const avgE = recent.length ? recent.reduce((a, s) => a + s.energy, 0) / recent.length : 0;
-  const good = recent.filter((s) => s.hours >= 7).length;
+  const hit = recent.filter((s) => s.hours >= goal).length;
+
+  const save = () => {
+    actions.upsertSleep({ date, hours, bedtime: f.bedtime, wake: f.wake, quality: f.quality, energy: f.energy, tags: f.tags, note: f.note.trim() || undefined });
+    toast(existing ? 'Sono atualizado' : 'Sono registrado');
+  };
 
   return (
-    <div className="space-y-4">
-      <div className="grid lg:grid-cols-3 gap-4">
-        <Card className="p-5">
-          <CardHeader icon={<LuBedDouble size={16} />} accent="bio" title="Registro de hoje" sub="Como foi a noite passada?" />
-          <p className="text-[11px] uppercase tracking-wider text-ink/45 mb-2">Horas dormidas</p>
-          <div className="flex items-center gap-3 mb-5">
-            <button className="press size-11 rounded-xl border border-line text-ink/70 text-xl" onClick={() => setHours(Math.max(0, round1(hours - 0.5)))} aria-label="Menos meia hora">−</button>
-            <div className="flex-1 text-center">
-              <span className="font-display text-4xl font-bold text-ink tabular-nums">{nf(hours, 1)}</span><span className="text-ink/45 ml-1">h</span>
-            </div>
-            <button className="press size-11 rounded-xl border border-line text-ink/70 text-xl" onClick={() => setHours(Math.min(14, round1(hours + 0.5)))} aria-label="Mais meia hora">+</button>
-          </div>
-          <p className="text-[11px] uppercase tracking-wider text-ink/45 mb-2">Nível de energia</p>
-          <div className="flex items-center justify-between mb-5">
-            <Stars value={energy} onChange={setEnergy} size={28} />
-            <span className="text-sm text-orange font-medium">{ENERGY[energy - 1]}</span>
-          </div>
-          <Button variant="primary" accent="bio" className="w-full" onClick={() => { actions.upsertSleep({ date: today, hours, energy }); toast(existing ? 'Sono atualizado' : 'Sono registrado'); }}>
-            {existing ? 'Atualizar registro' : 'Salvar registro'}
+    <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-4 md:gap-5 items-start">
+      <Card className="p-5 md:p-6">
+        <p className="text-[16px] font-semibold text-ink">{existing ? 'Editar noite' : 'Registrar noite'}</p>
+        <Field label="Dia em que acordei" className="mt-4 mb-3">
+          <Input type="date" className="min-w-0 px-3" value={date} max={today} onChange={(e) => setDate(e.target.value || today)} />
+        </Field>
+
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Dormi às"><Input type="time" className="min-w-0 px-3 text-[18px] font-medium" value={f.bedtime} onChange={(e) => setF({ ...f, bedtime: e.target.value || f.bedtime })} /></Field>
+          <Field label="Acordei às"><Input type="time" className="min-w-0 px-3 text-[18px] font-medium" value={f.wake} onChange={(e) => setF({ ...f, wake: e.target.value || f.wake })} /></Field>
+        </div>
+        <div className="mt-3 rounded-2xl bg-cream px-4 py-3 flex items-baseline justify-between">
+          <span className="text-[13.5px] text-muted">Tempo de sono</span>
+          <span className="text-[22px] font-semibold tracking-[-0.02em] text-ink tabular-nums">
+            {Math.floor(hours)}h{String(Math.round((hours % 1) * 60)).padStart(2, '0')}
+            <span className={cx('text-[12.5px] font-normal ml-2', hours >= goal ? 'text-good' : 'text-muted')}>{hours >= goal ? 'meta ✓' : `meta ${goal}h`}</span>
+          </span>
+        </div>
+
+        <p className="text-[13px] text-muted mt-5 mb-2">Como foi a noite?</p>
+        <div className="grid grid-cols-5 gap-1.5">
+          {QUALITY.map((q, i) => (
+            <button key={q} type="button" onClick={() => setF({ ...f, quality: i + 1 })}
+              className={cx('press h-11 rounded-full text-[12.5px] font-medium transition-colors', f.quality === i + 1 ? 'bg-ink text-white' : 'bg-cream text-ink/65')}>{q}</button>
+          ))}
+        </div>
+
+        <p className="text-[13px] text-muted mt-5 mb-2">Energia durante o dia</p>
+        <div className="flex items-center justify-between">
+          <Stars value={f.energy} onChange={(v) => setF({ ...f, energy: v })} size={28} />
+          <span className="text-[14px] text-orange font-medium">{ENERGY[f.energy - 1]}</span>
+        </div>
+
+        <p className="text-[13px] text-muted mt-5 mb-2">O que influenciou? <span className="text-ink/40">(opcional)</span></p>
+        <div className="flex flex-wrap gap-1.5">
+          {allTags.map((t) => {
+            const on = f.tags.includes(t);
+            return (
+              <button key={t} type="button" onClick={() => setF({ ...f, tags: on ? f.tags.filter((x) => x !== t) : [...f.tags, t] })}
+                className={cx('press h-9 px-3.5 rounded-full text-[13px] transition-colors', on ? 'bg-orange text-white' : 'bg-cream text-ink/70')}>{t}</button>
+            );
+          })}
+        </div>
+        <div className="flex gap-2 mt-2">
+          <Input value={customTag} onChange={(e) => setCustomTag(e.target.value)} placeholder="Outro motivo…" maxLength={24} className="h-10" />
+          <Button size="sm" variant="soft" className="h-10" disabled={!customTag.trim()}
+            onClick={() => { const t = customTag.trim(); if (!f.tags.includes(t)) setF({ ...f, tags: [...f.tags, t] }); setCustomTag(''); }}>
+            <LuPlus size={14} /> Incluir
           </Button>
+        </div>
+
+        <Field label="Observação (opcional)" className="mt-5">
+          <Input value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} placeholder="Ex: sonhei muito, acordei com dor de cabeça…" />
+        </Field>
+
+        <div className="flex gap-2 mt-6">
+          {existing && <DeleteButton compact={false} onConfirm={() => { actions.deleteSleep(existing.id); toast('Registro apagado'); }} />}
+          <Button variant="primary" className="flex-1" onClick={save}>{existing ? 'Salvar alterações' : 'Salvar noite'}</Button>
+        </div>
+      </Card>
+
+      <div className="space-y-4 md:space-y-5">
+        <Card className="p-5 md:p-6">
+          <p className="text-[16px] font-semibold text-ink mb-4">Últimos 7 dias</p>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              ['Média por noite', `${nf(avgH, 1)} h`],
+              ['Noites na meta', `${hit} de ${recent.length}`],
+              ['Dorme em média', avgClock(recent.map((s) => s.bedtime ?? ''), true)],
+              ['Acorda em média', avgClock(recent.map((s) => s.wake ?? ''), false)],
+            ].map(([l, v]) => (
+              <div key={l} className="rounded-2xl bg-cream px-4 py-3">
+                <p className="text-[12.5px] text-muted">{l}</p>
+                <p className="text-[19px] font-semibold tracking-[-0.02em] text-ink tabular-nums">{v}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-5">
+            <BarChart color="#F26B3A" goal={goal} unit="h" decimals={1}
+              data={days.map((d) => ({ label: fmtWeekdayShort(d).slice(0, 1).toUpperCase(), value: byDay[d]?.hours ?? 0 }))} />
+          </div>
+          <p className="text-[12px] text-muted">Linha tracejada = meta de {goal}h (altere em Ajustes → Metas).</p>
         </Card>
 
-        <Card className="p-5 lg:col-span-2">
-          <CardHeader icon={<LuMoon size={16} />} accent="bio" title="Sono — 14 dias" sub="Barras = horas · pontos = energia" />
-          <div className="grid grid-cols-3 gap-3 mb-3">
-            <div><p className="text-[11px] uppercase tracking-wider text-ink/40">Média</p><p className="font-display text-lg font-semibold text-ink tabular-nums">{nf(avgH, 1)} h</p></div>
-            <div><p className="text-[11px] uppercase tracking-wider text-ink/40">Energia</p><p className="font-display text-lg font-semibold text-ink tabular-nums">{nf(avgE, 1)}/5</p></div>
-            <div><p className="text-[11px] uppercase tracking-wider text-ink/40">Noites 7h+</p><p className="font-display text-lg font-semibold text-ink tabular-nums">{good}/{recent.length}</p></div>
-          </div>
-          <BarChart color={ACCENT.bio.hex} goal={7} unit="h" decimals={1}
-            data={days.map((d) => ({ label: fmtWeekdayShort(d).slice(0, 1), value: byDay[d]?.hours ?? 0 }))}
-            dots={days.map((d) => ({ value: byDay[d]?.energy ?? 0, max: 5, color: '#1C1B1A' }))} />
+        <Card className="p-2 md:p-3">
+          {state.sleep.length === 0 ? <Empty icon={<LuMoon />} title="Nenhuma noite registrada" /> : (
+            <ul className="divide-y divide-line">
+              {[...state.sleep].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 21).map((s) => (
+                <li key={s.id}>
+                  <button onClick={() => { setDate(s.date); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="w-full flex items-center gap-3 px-3 py-3 text-left hover:bg-cream rounded-2xl">
+                    <span className="w-16 text-[14px] text-ink/80 shrink-0">{relDay(s.date)}</span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-[13.5px] text-muted tabular-nums">{s.bedtime && s.wake ? `${s.bedtime} → ${s.wake}` : '—'}{s.quality ? ` · ${QUALITY[s.quality - 1].toLowerCase()}` : ''}</span>
+                      {!!s.tags?.length && <span className="block text-[12px] text-orange truncate">{s.tags.join(' · ')}</span>}
+                    </span>
+                    <span className={cx('text-[15px] font-semibold tabular-nums shrink-0', s.hours >= goal ? 'text-good' : 'text-ink')}>{nf(s.hours, 1)} h</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
       </div>
-
-      <Card className="p-2 md:p-3">
-        <ul className="divide-y divide-line">
-          {[...state.sleep].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 14).map((s) => (
-            <li key={s.id} className="flex items-center gap-3 px-3 py-2.5">
-              <span className="text-sm text-ink/60 w-20">{relDay(s.date)}</span>
-              <span className="text-sm font-semibold text-ink tabular-nums w-14">{nf(s.hours, 1)} h</span>
-              <div className="flex-1"><Stars value={s.energy} size={14} /></div>
-              <DeleteButton onConfirm={() => actions.deleteSleep(s.id)} />
-            </li>
-          ))}
-        </ul>
-      </Card>
     </div>
   );
 }

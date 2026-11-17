@@ -6,6 +6,7 @@ import { useStore } from '../store';
 import type { MealKind, MealLog } from '../types';
 import { addDays, fmtLong, kindForHour, MEAL_KINDS, mealLabel, mealsOn, nf, relDay, todayKey, fmtDayMonth } from '../utils';
 import { deletePhoto, savePhoto, usePhoto } from '../photos';
+import { WaterCard } from '../components/Water';
 import {
   Button, Card, cx, DeleteButton, DotDial, Empty, Field, IconButton, Input, Modal, PageHeader, Segmented, TextArea, Tile,
 } from '../components/ui';
@@ -85,15 +86,7 @@ export default function Nutrition() {
               </Button>
             </Card>
 
-            <div className="rounded-[28px] p-5 md:p-6 flex items-center gap-4 md:gap-5 bg-ink min-w-0">
-              <DotDial value={water / state.goals.water} label={`${Math.round((water / state.goals.water) * 100)}%`}
-                sub={`${nf(water / 1000, 2)} L`} size={124} />
-              <div className="flex-1 min-w-0">
-                <p className="text-[17px] text-white">Hidratação</p>
-                <p className="text-[13px] text-white/60 mb-4">Meta {nf(state.goals.water / 1000, 1)} L</p>
-                <WaterButtons onAdd={(ml) => actions.addWater(ml, day)} />
-              </div>
-            </div>
+            <WaterCard day={day} />
           </div>
 
           {meals.length === 0 ? (

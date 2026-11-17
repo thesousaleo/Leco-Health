@@ -88,6 +88,8 @@ export interface Goals {
   fat: number;
   water: number; // ml
   meals?: number; // refeições registradas por dia (meta)
+  sleep?: number; // horas de sono (meta)
+  weight?: number; // peso desejado (kg)
 }
 
 /* ── Hábitos ───────────────────────────────────────────────── */
@@ -115,10 +117,18 @@ export interface BodyLog {
 
 export interface SleepLog {
   id: ID;
-  date: DateKey;
+  date: DateKey; // dia em que acordou
   hours: number;
-  energy: number; // 1-5
+  energy: number; // 1-5 (disposição ao longo do dia)
+  bedtime?: string; // 'HH:MM'
+  wake?: string; // 'HH:MM'
+  quality?: number; // 1-5 (como foi a noite)
+  tags?: string[];
+  note?: string;
 }
+
+export interface WaterEntry { id: ID; date: DateKey; time: string; ml: number; label?: string }
+export interface WaterSize { id: ID; label: string; ml: number }
 
 export type NoteKind = 'Nota' | 'Sintoma' | 'Exame' | 'Treino' | 'Dieta';
 
@@ -141,7 +151,9 @@ export interface AppState {
   sessions: WorkoutSession[];
   foods: FoodEntry[]; // legado (contagem de macros) — mantido para backups antigos
   meals: MealLog[];
-  water: Record<DateKey, number>;
+  water: Record<DateKey, number>; // total do dia
+  waterLog: WaterEntry[];
+  waterSizes: WaterSize[];
   habits: Habit[];
   habitLogs: Record<DateKey, ID[]>;
   body: BodyLog[];

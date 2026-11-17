@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type {
-  AppState, BodyLog, MealLog, DateKey, Exercise, FoodEntry, Goals, Habit, ID, NoteEntry, SetLog, SleepLog, Split, WorkoutSession,
+  AppState, BodyLog, MealLog, WaterSize, DateKey, Exercise, FoodEntry, Goals, Habit, ID, NoteEntry, SetLog, SleepLog, Split, WorkoutSession,
 } from './types';
 import { buildEmptyState, buildMockState } from './mock';
 import { lastPerformance, todayKey, uid } from './utils';
@@ -39,6 +39,10 @@ export function normalizeState(s: AppState): AppState {
   if (!Array.isArray(s.meals)) s.meals = [];
   if (!Array.isArray(s.foods)) s.foods = [];
   if (!s.goals.meals) s.goals.meals = 4;
+  if (!s.goals.sleep) s.goals.sleep = 8;
+  if (!Array.isArray(s.waterLog)) s.waterLog = [];
+  if (!Array.isArray(s.waterSizes) || !s.waterSizes.length)
+    s.waterSizes = [{ id: 'copo', label: 'Copo', ml: 250 }, { id: 'garrafa', label: 'Garrafa', ml: 500 }];
   return s;
 }
 
@@ -148,8 +152,21 @@ function makeActions(mutate: (fn: (d: AppState) => void) => void, get: () => App
     addMeal: (m: Omit<MealLog, 'id'>) => mutate((d) => { d.meals.push({ ...m, id: uid() }); }),
     updateMeal: (id: ID, m: Partial<MealLog>) => mutate((d) => { Object.assign(d.meals.find((x) => x.id === id)!, m); }),
     deleteMeal: (id: ID) => mutate((d) => { d.meals = d.meals.filter((x) => x.id !== id); }),
-    addWater: (ml: number, date: DateKey = todayKey()) =>
-      mutate((d) => { d.water[date] = Math.max(0, (d.water[date] || 0) + ml); }),
+    addWater: (ml: number, date: DateKey = todayKey(), label?: string) =>
+      mutate((d) => {
+        if (ml <= 0) return;
+        d.water[date] = (d.water[date] || 0) + ml;
+        const time = date === todayKey() ? new Date().toTimeString().slice(0, 5) : '12:00';
+        d.waterLog.push({ id: uid(), date, time, ml, label });
+      }),
+    removeWater: (id: ID) =>
+      mutate((d) => {
+        const e = d.waterLog.find((x) => x.id === id);
+        if (!e) return;
+        d.waterLog = d.waterLog.filter((x) => x.id !== id);
+        d.water[e.date] = Math.max(0, (d.water[e.date] || 0) - e.ml);
+      }),
+    setWaterSizes: (sizes: WaterSize[]) => mutate((d) => { d.waterSizes = sizes; }),
 
     // hábitos
     addHabit: (name: string, category: Habit['category']) =>
@@ -167,6 +184,12 @@ function makeActions(mutate: (fn: (d: AppState) => void) => void, get: () => App
 
     // biometria / sono / notas
     addBody: (b: Omit<BodyLog, 'id'>) => mutate((d) => { d.body.push({ ...b, id: uid() }); }),
+    upsertWeight: (date: DateKey, weight: number) =>
+      mutate((d) => {
+        const ex = d.body.find((x) => x.date === date);
+        if (ex) ex.weight = weight;
+        else d.body.push({ id: uid(), date, weight });
+      }),
     deleteBody: (id: ID) => mutate((d) => { d.body = d.body.filter((x) => x.id !== id); }),
     upsertSleep: (s: Omit<SleepLog, 'id'>) =>
       mutate((d) => {

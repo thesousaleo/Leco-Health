@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  LuApple, LuCheck, LuChevronRight, LuDroplets, LuDumbbell, LuListChecks, LuMoon, LuPlus, LuScale, LuCamera,
+  LuApple, LuCheck, LuChevronRight, LuDumbbell, LuListChecks, LuMoon, LuPlus, LuScale, LuCamera,
 } from 'react-icons/lu';
 import { useStore } from '../store';
 import type { TabId } from '../types';
@@ -10,6 +10,7 @@ import {
 } from '../utils';
 import { Card, cx, ProgressBar, ProgressRing } from '../components/ui';
 import { Thumb } from './Nutrition';
+import { WaterCard } from '../components/Water';
 
 /* Início: um resumo simples do dia.
    1. Seu dia (score + as 3 metas, cada uma com a próxima ação)
@@ -132,38 +133,13 @@ function TodayCard({ go }: { go: (t: TabId) => void }) {
               </span>
             </button>
             {r.action ? (
-              <button onClick={r.onAction} className="press h-9 px-4 rounded-full bg-ink text-white text-[13.5px] font-medium shrink-0">{r.action}</button>
+              <button onClick={r.onAction} className="press h-9 w-[92px] rounded-full bg-ink text-white text-[13.5px] font-medium shrink-0">{r.action}</button>
             ) : (
-              <button onClick={r.onAction} aria-label={`Abrir ${r.title}`} className="press size-9 grid place-items-center text-ink/30"><LuChevronRight size={18} /></button>
+              <button onClick={r.onAction} aria-label={`Abrir ${r.title}`} className="press h-9 w-[92px] rounded-full bg-cream text-ink text-[13.5px] font-medium shrink-0">Ver</button>
             )}
           </li>
         ))}
       </ul>
-    </Card>
-  );
-}
-
-/* ── 2. Água ──────────────────────────────────────────────── */
-function WaterCard() {
-  const { state, actions } = useStore();
-  const water = state.water[todayKey()] || 0;
-  const goal = state.goals.water || 3000;
-  return (
-    <Card className="p-5 md:p-6">
-      <div className="flex items-center gap-3">
-        <span className="grid place-items-center size-10 rounded-full bg-cream text-ink/70 shrink-0"><LuDroplets size={18} /></span>
-        <div className="flex-1 min-w-0">
-          <p className="text-[15px] font-medium text-ink">Água</p>
-          <p className="text-[13px] text-muted tabular-nums">{nf(water / 1000, 2)} de {nf(goal / 1000, 1)} L</p>
-        </div>
-        <div className="flex gap-1.5">
-          {[250, 500].map((ml) => (
-            <button key={ml} onClick={() => actions.addWater(ml)}
-              className="press h-9 px-3 rounded-full bg-cream text-ink text-[13px] font-medium tabular-nums">+{ml}</button>
-          ))}
-        </div>
-      </div>
-      <ProgressBar className="mt-4" value={water / goal} height={8} />
     </Card>
   );
 }
@@ -277,8 +253,8 @@ function BodyCard({ go }: { go: (t: TabId) => void }) {
           <p className="text-[24px] font-semibold tracking-[-0.03em] text-ink tabular-nums mt-1">
             {w0 != null ? nf(w0, 1) : '—'}<span className="text-[13px] font-normal text-muted ml-1">kg</span>
           </p>
-          <p className="text-[12px] text-muted mt-0.5">
-            {diff != null ? `${diff > 0 ? '+' : ''}${nf(diff, 1)} kg desde ${relDay(body[1].date).toLowerCase()}` : body[0] ? relDay(body[0].date) : 'Toque para registrar'}
+          <p className="text-[12px] text-muted mt-0.5 truncate">
+            {diff != null ? `${diff > 0 ? '+' : ''}${nf(diff, 1)} kg vs anterior` : body[0] ? relDay(body[0].date) : 'Toque para registrar'}
           </p>
         </button>
         <button onClick={() => go('registros')} className="press rounded-2xl bg-cream p-4 text-left">
@@ -286,7 +262,7 @@ function BodyCard({ go }: { go: (t: TabId) => void }) {
           <p className="text-[24px] font-semibold tracking-[-0.03em] text-ink tabular-nums mt-1">
             {sleep ? nf(sleep.hours, 1) : '—'}<span className="text-[13px] font-normal text-muted ml-1">h</span>
           </p>
-          <p className="text-[12px] text-muted mt-0.5">{sleep ? `energia ${sleep.energy}/5 · ${relDay(sleep.date).toLowerCase()}` : 'Toque para registrar'}</p>
+          <p className="text-[12px] text-muted mt-0.5 truncate">{sleep ? relDay(sleep.date) : 'Toque para registrar'}</p>
         </button>
       </div>
     </Card>
