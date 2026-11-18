@@ -131,10 +131,10 @@ function Shell() {
     <RestTimerProvider visible={tab === 'treino'}>
       {/* fundo bege com arcos finos */}
       <div aria-hidden className="fixed inset-0 -z-10 overflow-hidden bg-canvas">
-        {/* manchas suaves de cor: é o que aparece "através" dos blocos de vidro */}
-        <div className="glow absolute -top-[12vh] -right-[20vw] size-[75vh] rounded-full bg-orange/25" />
-        <div className="glow absolute top-[38vh] -left-[30vw] size-[65vh] rounded-full bg-peach/35" />
-        <div className="glow absolute -bottom-[18vh] right-[-10vw] size-[60vh] rounded-full bg-orange/15" />
+        {/* manchas neutras (claro e sombra): é o que aparece "através" dos blocos de vidro */}
+        <div className="glow absolute -top-[12vh] -right-[20vw] size-[75vh] rounded-full bg-white/80" />
+        <div className="glow absolute top-[38vh] -left-[30vw] size-[65vh] rounded-full bg-ink/10" />
+        <div className="glow absolute -bottom-[18vh] right-[-10vw] size-[60vh] rounded-full bg-white/60" />
         <div className="absolute -top-[40vh] left-[40%] size-[95vh] rounded-full border border-surface/80" />
         <div className="absolute top-[45vh] -left-[35vh] size-[85vh] rounded-full border border-surface/70" />
         <div className="absolute top-[15vh] -right-[45vh] size-[100vh] rounded-full border border-surface/60" />

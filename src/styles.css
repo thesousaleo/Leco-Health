@@ -126,7 +126,8 @@ button > svg, a > svg { flex-shrink: 0; }
   border-color: color-mix(in srgb, white 9%, transparent);
   box-shadow: inset 0 1px 0 color-mix(in srgb, white 12%, transparent), 0 12px 30px -18px rgba(0, 0, 0, .6);
 }
-:root.dark .glow { opacity: .35; }
+:root.dark .glow { opacity: .5; }
+:root.dark .glow.bg-white\/80, :root.dark .glow.bg-white\/60 { background: rgb(255 255 255 / .07); }
 .nav-glass {
   background: color-mix(in srgb, var(--color-surface) 62%, transparent);
   -webkit-backdrop-filter: blur(24px) saturate(170%);
