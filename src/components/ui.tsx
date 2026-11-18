@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { pushBack } from '../back';
 import { LuTrash2, LuX, LuStar } from 'react-icons/lu';
 
 /* ── Paleta: bege quente + laranja + preto ─────────────────────
@@ -288,13 +289,16 @@ export function Modal({ open, onClose, title, children, footer }: {
     if (open) { setShown(true); setLeaving(false); return; }
     if (!shown) return;
     setLeaving(true);
-    const t = setTimeout(() => { setShown(false); setLeaving(false); setDy(0); }, 300);
+    // fechou arrastando: a janela já está fora da tela, desmonta logo (não fica bloqueando toques)
+    const t = setTimeout(() => { setShown(false); setLeaving(false); setDy(0); }, dy > 0 ? 0 : 300);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+  useEffect(() => { if (open) setDy(0); }, [open]);
+  const closeRef = useRef(onClose); closeRef.current = onClose;
+  useEffect(() => (open ? pushBack(() => closeRef.current()) : undefined), [open]);
   useEffect(() => {
     if (!open) return;
-    setDy(0);
     const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', k);
     const prev = document.body.style.overflow;
@@ -314,12 +318,12 @@ export function Modal({ open, onClose, title, children, footer }: {
     if (!drag.current) return;
     const fast = dy / Math.max(1, Date.now() - drag.current.t) > 0.6;
     drag.current = null;
-    if (dy > 120 || (fast && dy > 40)) { setDy(window.innerHeight); setTimeout(onClose, 200); } else setDy(0);
+    if (dy > 120 || (fast && dy > 40)) { setDy(window.innerHeight); setTimeout(onClose, 160); } else setDy(0);
   };
   return (
     <div className="fixed inset-0 z-[60] flex items-end md:items-center justify-center" role="dialog" aria-modal="true" aria-label={view.title}>
       <div className={cx('absolute inset-0 bg-ink/35', leaving ? 'animate-fade-out' : 'animate-fade')} style={{ opacity: Math.max(0, 1 - dy / 400) }} onClick={onClose} />
-      <div className={cx('relative w-full md:max-w-lg max-h-[92dvh] flex flex-col rounded-t-[30px] md:rounded-[30px] bg-surface shadow-[var(--shadow-3)]', leaving ? 'animate-sheet-out' : 'animate-sheet')}
+      <div className={cx('relative w-full md:max-w-lg max-h-[92dvh] flex flex-col rounded-t-[30px] md:rounded-[30px] bg-surface shadow-[var(--shadow-3)]', leaving ? (dy > 0 ? '' : 'animate-sheet-out') : 'animate-sheet')}
         style={{ transform: dy ? `translateY(${dy}px)` : undefined, transition: drag.current ? 'none' : 'transform .45s var(--spring)' }}>
         <div className="touch-none select-none" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
           <div className="md:hidden mx-auto mt-2.5 h-1.5 w-11 rounded-full bg-ink/15" />

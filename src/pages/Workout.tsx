@@ -198,7 +198,9 @@ function ExerciseCard({ session, entry, locked, nextSetId, focus }: { session: W
   const { state, actions } = useStore();
   const timer = useRestTimer();
   const exDef = state.splits.find((s) => s.id === session.splitId)?.exercises.find((e) => e.id === entry.exerciseId);
-  const last = useMemo(() => lastPerformance(state, entry.exerciseId, session.date), [state.sessions, entry.exerciseId, session.date]);
+  // só sessões anteriores importam: não recalcula a cada série marcada hoje
+  const pastKey = state.sessions.filter((x) => x.date < session.date).length;
+  const last = useMemo(() => lastPerformance(state, entry.exerciseId, session.date), [pastKey, entry.exerciseId, session.date]); // eslint-disable-line react-hooks/exhaustive-deps
   const [noteOpen, setNoteOpen] = useState(false);
   const [note, setNote] = useState(entry.note ?? '');
   const done = entry.sets.filter((s) => s.done);

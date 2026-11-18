@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useRipple, staggerIn } from './motion';
 import { LuActivity, LuApple, LuCircleX, LuCircleCheck, LuDumbbell, LuHouse, LuListChecks, LuSettings, LuUsers, LuCloudUpload, LuSparkles } from 'react-icons/lu';
 import { SyncProvider, useSync } from './sync';
@@ -11,7 +11,8 @@ import { RestTimerProvider } from './components/RestTimer';
 import { Button, cx, Modal, ProgressBar } from './components/ui';
 import { Celebration, SetupWizard } from './components/Extras';
 import { LockGate } from './components/Lock';
-import { setSystemBars, syncReminders } from './native';
+import { leaveApp, onBackButton, setSystemBars, syncReminders } from './native';
+import { popBack } from './back';
 import Dashboard from './pages/Dashboard';
 import Workout from './pages/Workout';
 import Nutrition from './pages/Nutrition';
@@ -87,38 +88,53 @@ function Logo() {
 
 function Shell() {
   const { state, toastMsg } = useStore();
-  const [tab, setTab] = useState<TabId>(readHash);
-  const prevTab = useRef<TabId>(tab);
-  const dir = ALL.indexOf(tab) >= ALL.indexOf(prevTab.current) ? 'r' : 'l';
-  useEffect(() => { prevTab.current = tab; }, [tab]);
+  const [tab, setTab] = useState<TabId>(readHash);       // página exibida
+  const [navTab, setNavTab] = useState<TabId>(tab);       // aba destacada: muda no instante do toque
+  const tabRef = useRef(tab); tabRef.current = tab;
+  const dirRef = useRef<'r' | 'l'>('r');
   const score = dayScore(state).total;
   const navIds = (state.prefs.navTabs || []).filter((id) => TABS.some((t) => t.id === id)).slice(0, 5);
   const mobileTabs = [TABS[0], ...navIds.map((id) => TABS.find((t) => t.id === id)!)];
   const sideTabs = [TABS[0], ...navIds.map((id) => TABS.find((t) => t.id === id)!), ...TABS.slice(1).filter((t) => !navIds.includes(t.id))];
 
   useEffect(() => {
-    const on = () => setTab(readHash());
+    const on = () => { const t = readHash(); setNavTab(t); setTab(t); };
     window.addEventListener('hashchange', on);
     return () => window.removeEventListener('hashchange', on);
   }, []);
 
   useRipple();
-  const go = (t: TabId) => {
-    if (t === tab) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
-    const apply = () => {
-      setTab(t);
-      try { if (window.location.hash !== '#' + t) history.replaceState(null, '', '#' + t); } catch { /* frame */ }
-      window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
-    };
-    // Só a página anima (CSS). Não usamos a "foto da tela" do navegador:
-    // no Android ela não reproduz o vidro e a barra de abas sumia na troca.
-    apply();
-  };
-  // blocos da página entram em sequência, de leve
-  const mainRef = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => { if (mainRef.current) staggerIn(mainRef.current); }, [tab]);
+  const go = useCallback((t: TabId) => {
+    if (t === tabRef.current) { window.scrollTo({ top: 0, behavior: 'smooth' }); setNavTab(t); return; }
+    dirRef.current = ALL.indexOf(t) >= ALL.indexOf(tabRef.current) ? 'r' : 'l';
+    // 1) a barra reage na hora; 2) a página nova é montada logo depois, sem travar a animação da barra
+    setNavTab(t);
+    startTransition(() => setTab(t));
+    try { if (window.location.hash !== '#' + t) history.replaceState(null, '', '#' + t); } catch { /* frame */ }
+  }, []);
+  // Botão "voltar" do Android: fecha a janela aberta; senão volta ao Início; no Início, sai para a tela do celular
+  const navRef = useRef(navTab); navRef.current = navTab;
+  useEffect(() => onBackButton(() => {
+    if (popBack()) return;
+    if (navRef.current !== 'inicio') { go('inicio'); return; }
+    void leaveApp();
+  }), [go]);
 
-  const page = {
+  // Ao trocar de página: volta ao topo e os blocos entram em sequência.
+  // (A página inteira não é animada: no Android isso fazia a barra de abas sumir por alguns quadros.)
+  const mainRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+    if (mainRef.current) staggerIn(mainRef.current, dirRef.current);
+  }, [tab]);
+  // quando a tela de abertura some, os blocos do Início entram (antes ficavam escondidos atrás dela)
+  useEffect(() => {
+    const on = () => { if (mainRef.current) staggerIn(mainRef.current, 'r'); };
+    window.addEventListener('leco:splash-out', on);
+    return () => window.removeEventListener('leco:splash-out', on);
+  }, []);
+
+  const page = useMemo(() => ({
     inicio: <Dashboard go={go} />,
     treino: <Workout />,
     nutricao: <Nutrition />,
@@ -126,10 +142,10 @@ function Shell() {
     registros: <Metrics />,
     amigos: <Friends />,
     ajustes: <Settings go={go} />,
-  }[tab];
+  }[tab]), [tab, go]);
 
   const navBtn = (id: TabId, label: string, Icon: Ico) => {
-    const active = tab === id;
+    const active = navTab === id;
     return (
       <button key={id} onClick={() => go(id)} aria-current={active ? 'page' : undefined}
         className={cx('press flex items-center gap-3 h-12 px-4 rounded-full text-[15px] font-medium transition-colors',
@@ -138,7 +154,7 @@ function Shell() {
       </button>
     );
   };
-  const activeIdx = mobileTabs.findIndex((t) => t.id === tab);
+  const activeIdx = mobileTabs.findIndex((t) => t.id === navTab);
 
   return (
     <RestTimerProvider visible={tab === 'treino'}>
@@ -175,16 +191,17 @@ function Shell() {
         <div className="flex items-center gap-2">
           <span className="text-[13px] font-semibold tabular-nums text-white px-3 h-8 rounded-full bg-orange grid place-items-center">{score}%</span>
           <button onClick={() => go('ajustes')} aria-label="Ajustes"
-            className={cx('press grid place-items-center size-10 rounded-full', tab === 'ajustes' ? 'text-on-ink bg-ink' : 'text-ink bg-surface')}>
+            className={cx('press grid place-items-center size-10 rounded-full', navTab === 'ajustes' ? 'text-on-ink bg-ink' : 'text-ink bg-surface')}>
             <LuSettings size={18} />
           </button>
         </div>
       </header>
 
-      <main className="md:pl-64">
+      {/* overflow-x-clip: blocos que entram deslizando nunca alargam a tela */}
+      <main className="md:pl-64 overflow-x-clip">
         <PullToRefresh />
         <div key={tab} ref={mainRef}
-          className={cx('mx-auto max-w-[1280px] px-4 md:px-8 pt-3 md:pt-8 md:pb-12', tab === 'treino' ? 'pb-[calc(11rem+var(--sab))]' : 'pb-[calc(6.5rem+var(--sab))]', dir === 'r' ? 'animate-page-r' : 'animate-page-l')}>
+          className={cx('mx-auto max-w-[1280px] px-4 md:px-8 pt-3 md:pt-8 md:pb-12', tab === 'treino' ? 'pb-[calc(11rem+var(--sab))]' : 'pb-[calc(6.5rem+var(--sab))]')}>
           {page}
         </div>
       </main>
@@ -202,11 +219,11 @@ function Shell() {
           )}
           {mobileTabs.map((t) => {
             const Icon = t.icon;
-            const active = tab === t.id;
+            const active = navTab === t.id;
             return (
               <button key={t.id} onClick={() => go(t.id)} aria-current={active ? 'page' : undefined}
                 className={cx('press relative flex flex-col items-center justify-center gap-0.5 h-14 rounded-full transition-colors duration-300 min-w-0', active ? 'text-white' : 'text-ink/50')}>
-                <span key={active ? 'on' : 'off'} className={active ? 'nav-bounce' : undefined}>
+                <span key={active ? 'on' : 'off'} className={cx('inline-flex', active && 'nav-bounce')}>
                   <Icon size={20} strokeWidth={active ? 2.2 : 1.9} {...(active ? { fill: 'currentColor', fillOpacity: 0.22 } : {})} />
                 </span>
                 <span className={cx('text-[10px] truncate max-w-full', active ? 'font-semibold' : 'font-medium')}>{t.label}</span>
@@ -223,7 +240,7 @@ function Shell() {
         const bad = /^(erro|não|falh|sem )/i.test(toastMsg.msg);
         return (
           <div key={toastMsg.id} role="status"
-            className="fixed z-[70] left-1/2 top-[calc(4.6rem+var(--sat))] md:top-6 md:left-[calc(50%+8rem)] pl-2 pr-5 h-12 max-w-[calc(100vw-2rem)] rounded-full flex items-center gap-2.5 text-[14px] font-medium text-on-ink bg-ink shadow-[var(--shadow-3)] animate-toast">
+            className="fixed z-[70] left-1/2 top-[calc(4.6rem+var(--sat))] md:top-6 md:left-[calc(50%+8rem)] pl-2 pr-5 h-12 max-w-[calc(100vw-2rem)] rounded-full flex items-center gap-2.5 text-[14px] font-medium text-on-ink bg-ink shadow-[var(--shadow-3)] animate-toast pointer-events-none">
             <span className={cx('grid place-items-center size-8 rounded-full shrink-0', bad ? 'bg-bad/90' : 'bg-good/90')}>
               {bad ? <LuCircleX size={17} className="text-white" /> : <LuCircleCheck size={17} className="text-white" />}
             </span>
@@ -254,7 +271,7 @@ function Splash() {
   useEffect(() => {
     if (phase !== 'in') return;
     try { sessionStorage.setItem('leco-splash', '1'); } catch { /* */ }
-    const a = setTimeout(() => setPhase('out'), 1000);
+    const a = setTimeout(() => { setPhase('out'); window.dispatchEvent(new Event('leco:splash-out')); }, 1000);
     const b = setTimeout(() => setPhase('done'), 1450);
     return () => { clearTimeout(a); clearTimeout(b); };
     // eslint-disable-next-line react-hooks/exhaustive-deps

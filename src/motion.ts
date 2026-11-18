@@ -33,18 +33,21 @@ export function useRipple() {
   }, []);
 }
 
-/** Os blocos visíveis da página entram um após o outro (só deslocamento, sem sumir). */
-export function staggerIn(root: HTMLElement) {
+/** Transição de página: o título e os blocos visíveis entram em sequência, vindo do lado da aba.
+ *  Começam já 65% visíveis (nada "some"); só os primeiros da tela animam. */
+export function staggerIn(root: HTMLElement, dir: 'r' | 'l' = 'r') {
   if (reduce()) return;
   const vh = window.innerHeight;
-  const items = [...root.querySelectorAll<HTMLElement>('.glass, [data-stagger]')]
-    .filter((el) => !el.parentElement?.closest('.glass'))
+  const all = [...root.querySelectorAll<HTMLElement>('header, .glass, [data-stagger]')];
+  const items = all
+    .filter((el) => !all.some((o) => o !== el && o.contains(el)))
     .filter((el) => el.getBoundingClientRect().top < vh)
     .slice(0, 8);
   items.forEach((el, i) => {
     el.classList.remove('stagger-in');
     void el.offsetWidth;
-    el.style.animationDelay = `${60 + i * 45}ms`;
+    el.style.setProperty('--dx', dir === 'r' ? '22px' : '-22px');
+    el.style.animationDelay = `${i * 40}ms`;
     el.classList.add('stagger-in');
     el.addEventListener('animationend', () => { el.classList.remove('stagger-in'); el.style.animationDelay = ''; }, { once: true });
   });

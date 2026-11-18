@@ -354,8 +354,8 @@ function NightBands() {
                 <div className="relative h-6 rounded-full bg-cream overflow-hidden">
                   {[0.25, 0.5, 0.75].map((x) => <span key={x} className="absolute top-0 bottom-0 w-px bg-ink/[0.06]" style={{ left: `${x * 100}%` }} />)}
                   {a != null && b != null && b > a && (
-                    <span className="absolute top-1 bottom-1 rounded-full rise origin-left"
-                      style={{ left: `${a * 100}%`, width: `${(b - a) * 100}%`, background: ok ? 'var(--color-good)' : 'var(--color-orange)', opacity: 0.55 + ((s?.quality ?? 3) / 5) * 0.45, animationName: 'none', transition: 'width .8s var(--spring)', transitionDelay: `${i * 40}ms` }} />
+                    <span className="absolute top-1 bottom-1 rounded-full band-in"
+                      style={{ left: `${a * 100}%`, width: `${(b - a) * 100}%`, background: ok ? 'var(--color-good)' : 'var(--color-orange)', opacity: 0.55 + ((s?.quality ?? 3) / 5) * 0.45, animationDelay: `${i * 45}ms` }} />
                   )}
                 </div>
                 <span className={cx('num text-[12.5px] text-right', ok ? 'text-good' : 'text-ink')}>{s ? `${nf(s.hours, 1)}h` : '—'}</span>

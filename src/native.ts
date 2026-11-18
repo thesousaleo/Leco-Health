@@ -9,6 +9,7 @@ import { Directory, Filesystem } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { NativeBiometric } from '@capgo/capacitor-native-biometric';
 import { StatusBar, Style } from '@capacitor/status-bar';
+import { App } from '@capacitor/app';
 import type { AppState } from './types';
 
 export const isNative = () => {
@@ -109,6 +110,19 @@ export async function verifyBiometric() {
     await NativeBiometric.verifyIdentity({ reason: 'Desbloquear o Leco Health', title: 'Leco Health', subtitle: 'Use sua digital ou rosto', negativeButtonText: 'Usar PIN' });
     return true;
   } catch { return false; }
+}
+
+/* ── botão voltar do Android ─────────────────────────────────── */
+export function onBackButton(cb: () => void) {
+  if (!isNative()) return () => {};
+  let handle: { remove: () => void } | undefined;
+  let gone = false;
+  App.addListener('backButton', cb).then((h) => { if (gone) h.remove(); else handle = h; }).catch(() => {});
+  return () => { gone = true; handle?.remove(); };
+}
+/** Sai para a tela inicial do celular (o app continua aberto em segundo plano). */
+export async function leaveApp() {
+  try { await (App as any).minimizeApp(); } catch { try { await App.exitApp(); } catch { /* */ } }
 }
 
 /* ── barra de status ───────────────────────────────────────── */

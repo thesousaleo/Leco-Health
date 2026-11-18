@@ -25,7 +25,14 @@ export const weekday = (k: DateKey) => fromKey(k).getDay();
 export const lastNDays = (n: number, end: DateKey = todayKey()): DateKey[] =>
   Array.from({ length: n }, (_, i) => addDays(end, i - (n - 1)));
 
-const fmt = (o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('pt-BR', o);
+// Formatadores guardados em cache: criar um Intl.DateTimeFormat é caro e isso roda em toda tela.
+const fmtCache = new Map<string, Intl.DateTimeFormat>();
+const fmt = (o: Intl.DateTimeFormatOptions) => {
+  const k = JSON.stringify(o);
+  let f = fmtCache.get(k);
+  if (!f) { f = new Intl.DateTimeFormat('pt-BR', o); fmtCache.set(k, f); }
+  return f;
+};
 export const fmtLong = (k: DateKey) => {
   const s = fmt({ weekday: 'long', day: 'numeric', month: 'long' }).format(fromKey(k));
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -54,8 +61,9 @@ export const greeting = () => {
 /* ── números ───────────────────────────────────────────────── */
 export const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
 export const round1 = (v: number) => Math.round(v * 10) / 10;
+const nfCache: Intl.NumberFormat[] = [];
 export const nf = (v: number, d = 0) =>
-  v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
+  (nfCache[d] ??= new Intl.NumberFormat('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d })).format(v);
 
 /* ── nutrição ──────────────────────────────────────────────── */
 export const MEALS: { id: MealType; label: string }[] = [

@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 /** Largura real do contêiner, para o texto do gráfico não encolher no celular. */
 function useWidth(fallback = 600) {
   const [el, setEl] = useState<HTMLDivElement | null>(null);
   const [w, setW] = useState(fallback);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!el) return;
     const upd = () => { const cw = Math.round(el.clientWidth); if (cw > 0) setW(Math.max(260, cw)); };
     upd();

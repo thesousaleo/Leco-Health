@@ -1,4 +1,5 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { pushBack } from '../back';
 import {
   LuCamera, LuCheck, LuRepeat, LuChevronLeft, LuChevronRight, LuImage, LuImageOff, LuImages, LuLoaderCircle, LuMinus, LuNotebookPen, LuPencil, LuPlus, LuX,
 } from 'react-icons/lu';
@@ -216,6 +217,8 @@ export function PhotoViewer({ ids, index, onClose }: { ids: string[]; index: num
   const { url } = usePhoto(ids[i]);
   const touch = useRef<number | null>(null);
   const go = (d: number) => setI((x) => (x + d + ids.length) % ids.length);
+  const closeRef = useRef(onClose); closeRef.current = onClose;
+  useEffect(() => pushBack(() => closeRef.current()), []);
   return (
     <div className="fixed inset-0 z-[80] bg-black/95 flex items-center justify-center animate-fade" role="dialog" aria-label="Foto"
       onClick={onClose}

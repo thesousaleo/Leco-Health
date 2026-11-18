@@ -15,3 +15,4 @@ export const Share = { share: noop };
 export const NativeBiometric = { isAvailable: async () => ({ isAvailable: false }), verifyIdentity: noop };
 export const StatusBar = { setStyle: noop, setBackgroundColor: noop };
 export const Style = { Dark: 'DARK', Light: 'LIGHT' } as const;
+export const App = { addListener: async () => ({ remove: () => {} }), minimizeApp: noop, exitApp: noop };
