@@ -128,7 +128,7 @@ export default function Nutrition() {
 function MealCard({ meal, onEdit, onOpenPhoto, onRepeat }: { meal: MealLog; onEdit: () => void; onOpenPhoto: (i: number) => void; onRepeat: () => void }) {
   const first = meal.photos[0];
   return (
-    <li className="relative grid grid-cols-[52px_minmax(0,1fr)] gap-2.5 animate-pop">
+    <li className="relative grid grid-cols-[52px_minmax(0,1fr)] gap-2.5">
       {/* linha do tempo: hora + ponto */}
       <div className="flex flex-col items-center pt-3">
         <span className="relative z-10 size-3.5 rounded-full bg-orange ring-4 ring-canvas" />

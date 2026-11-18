@@ -213,7 +213,7 @@ function ExerciseCard({ session, entry, locked, nextSetId, focus }: { session: W
   // modo foco: exercício concluído vira uma linha compacta (toque para abrir)
   if (focus && allDone && !open) {
     return (
-      <button onClick={() => setOpen(true)} className="press w-full glass rounded-[22px] px-4 py-3 flex items-center gap-3 text-left animate-pop">
+      <button onClick={() => setOpen(true)} className="press w-full glass rounded-[22px] px-4 py-3 flex items-center gap-3 text-left">
         <span className="grid place-items-center size-8 rounded-full bg-good text-white shrink-0 check-pop"><LuCheck size={16} strokeWidth={3} /></span>
         <span className="flex-1 min-w-0">
           <span className="block text-[15px] font-medium text-ink truncate line-through decoration-ink/25">{entry.name}</span>
@@ -363,7 +363,7 @@ function WorkoutSummary({ session }: { session: WorkoutSession }) {
     } catch { toast('Não foi possível compartilhar'); }
   };
   return (
-    <section className="rounded-[28px] bg-[#1C1B1A] text-white ring-1 ring-white/10 p-5 shadow-[var(--shadow-3)] relative overflow-hidden animate-pop">
+    <section className="rounded-[28px] bg-[#1C1B1A] text-white ring-1 ring-white/10 p-5 shadow-[var(--shadow-3)] relative overflow-hidden">
       <div aria-hidden className="absolute -right-16 -top-20 size-56 rounded-full bg-good/25 blur-3xl" />
       <div className="relative">
         <p className="eyebrow !text-good flex items-center gap-1.5"><LuTrophy size={12} /> Treino concluído</p>

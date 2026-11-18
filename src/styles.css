@@ -108,11 +108,11 @@
 @keyframes wave { 0%, 60%, 100% { transform: rotate(0); } 10%, 30% { transform: rotate(14deg); } 20% { transform: rotate(-8deg); } }
 @keyframes wave-x { 0%, 100% { transform: translateX(-6%) scaleX(1.1); } 50% { transform: translateX(6%) scaleX(1.1); } }
 
-@keyframes page-l { from { opacity: 0; transform: translateX(-18px); } to { opacity: 1; transform: none; } }
-@keyframes page-r { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
-@utility animate-page { animation: page .5s var(--spring); }
-@utility animate-page-l { animation: page-l .5s var(--spring); }
-@utility animate-page-r { animation: page-r .5s var(--spring); }
+@keyframes page-l { from { opacity: .6; transform: translate3d(-10px, 0, 0); } to { opacity: 1; transform: none; } }
+@keyframes page-r { from { opacity: .6; transform: translate3d(10px, 0, 0); } to { opacity: 1; transform: none; } }
+@utility animate-page { animation: page .28s var(--ease-out); }
+@utility animate-page-l { animation: page-l .28s var(--ease-out); }
+@utility animate-page-r { animation: page-r .28s var(--ease-out); }
 @utility animate-fade { animation: fade .25s ease-out; }
 @utility animate-sheet { animation: sheet .55s var(--spring); }
 @utility animate-pop { animation: pop .45s var(--spring); }
@@ -135,22 +135,23 @@ button > svg, a > svg { flex-shrink: 0; }
 /* ── Liquid glass ─────────────────────────────────────────────
    Como a Apple recomenda: vidro forte só no que flutua (barra de abas,
    cabeçalho, timer). Os blocos de conteúdo ficam quase sólidos. */
-.glow { filter: blur(60px); }
+/* manchas do fundo: degradê radial (sem filtro de desfoque, que pesa no celular) */
+:root { --glow-a: rgb(255 255 255 / .85); --glow-b: rgb(28 27 26 / .09); --glow-c: rgb(255 255 255 / .6); }
 .glass {
-  background: color-mix(in srgb, var(--color-surface) 84%, transparent);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-  backdrop-filter: blur(14px) saturate(140%);
+  /* sem desfoque nos blocos: no Android o desfoque piscava ao trocar de aba */
+  background: color-mix(in srgb, var(--color-surface) 90%, transparent);
   border: 1px solid color-mix(in srgb, white 75%, transparent);
   box-shadow: inset 0 1px 0 color-mix(in srgb, white 90%, transparent), var(--shadow-2);
 }
 :root.dark .glass {
-  background: color-mix(in srgb, var(--color-surface) 86%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
   border-color: color-mix(in srgb, white 7%, transparent);
   box-shadow: inset 0 1px 0 color-mix(in srgb, white 8%, transparent), var(--shadow-2);
 }
-:root.dark .glow { opacity: .5; }
-:root.dark .glow.bg-white\/80, :root.dark .glow.bg-white\/60 { background: rgb(255 255 255 / .07); }
+:root.dark { --glow-a: rgb(255 255 255 / .05); --glow-b: rgb(0 0 0 / .25); --glow-c: rgb(255 255 255 / .035); }
 .nav-glass {
+  /* camada própria: evita que a barra pisque enquanto a página troca */
+  transform: translateZ(0); -webkit-backface-visibility: hidden; backface-visibility: hidden; will-change: transform; isolation: isolate;
   background: color-mix(in srgb, var(--color-surface) 58%, transparent);
   -webkit-backdrop-filter: blur(28px) saturate(180%);
   backdrop-filter: blur(28px) saturate(180%);
@@ -200,3 +201,5 @@ button > svg, a > svg { flex-shrink: 0; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .spin { animation: spin .9s linear infinite; }
 .empty-ico > svg { width: 26px; height: 26px; }
+
+.gpu { transform: translateZ(0); -webkit-backface-visibility: hidden; backface-visibility: hidden; will-change: transform; }

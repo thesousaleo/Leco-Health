@@ -134,9 +134,9 @@ function Shell() {
       {/* fundo bege com arcos finos */}
       <div aria-hidden className="fixed inset-0 -z-10 overflow-hidden bg-canvas">
         {/* manchas neutras (claro e sombra): é o que aparece "através" dos blocos de vidro */}
-        <div className="glow absolute -top-[12vh] -right-[20vw] size-[75vh] rounded-full bg-white/80" />
-        <div className="glow absolute top-[38vh] -left-[30vw] size-[65vh] rounded-full bg-ink/10" />
-        <div className="glow absolute -bottom-[18vh] right-[-10vw] size-[60vh] rounded-full bg-white/60" />
+        <div className="glow absolute -top-[12vh] -right-[20vw] size-[75vh] rounded-full" style={{ background: 'radial-gradient(closest-side, var(--glow-a), transparent)' }} />
+        <div className="glow absolute top-[38vh] -left-[30vw] size-[65vh] rounded-full" style={{ background: 'radial-gradient(closest-side, var(--glow-b), transparent)' }} />
+        <div className="glow absolute -bottom-[18vh] right-[-10vw] size-[60vh] rounded-full" style={{ background: 'radial-gradient(closest-side, var(--glow-c), transparent)' }} />
         <div className="absolute -top-[40vh] left-[40%] size-[95vh] rounded-full border border-surface/80" />
         <div className="absolute top-[45vh] -left-[35vh] size-[85vh] rounded-full border border-surface/70" />
         <div className="absolute top-[15vh] -right-[45vh] size-[100vh] rounded-full border border-surface/60" />
@@ -159,7 +159,7 @@ function Shell() {
       </aside>
 
       {/* Top bar mobile */}
-      <header className="md:hidden sticky top-0 z-40 flex items-center justify-between px-4 pt-[var(--sat)] h-[calc(4rem+var(--sat))] bg-canvas/40 backdrop-blur-xl backdrop-saturate-150">
+      <header className="gpu md:hidden sticky top-0 z-40 flex items-center justify-between px-4 pt-[var(--sat)] h-[calc(4rem+var(--sat))] bg-canvas/40 backdrop-blur-xl backdrop-saturate-150">
         <Logo />
         <div className="flex items-center gap-2">
           <span className="text-[13px] font-semibold tabular-nums text-white px-3 h-8 rounded-full bg-orange grid place-items-center">{score}%</span>
@@ -178,7 +178,7 @@ function Shell() {
       </main>
 
       {/* Bottom nav mobile */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 px-3 pb-[max(.75rem,var(--sab))] pt-2 pointer-events-none">
+      <nav className="gpu md:hidden fixed bottom-0 inset-x-0 z-40 px-3 pb-[max(.75rem,var(--sab))] pt-2 pointer-events-none">
         <div className="pointer-events-auto relative mx-auto max-w-md grid rounded-full nav-glass p-1"
           style={{ gridTemplateColumns: `repeat(${mobileTabs.length}, minmax(0,1fr))` }}>
           {/* pílula que desliza até a aba ativa */}
