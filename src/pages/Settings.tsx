@@ -362,6 +362,9 @@ function AppearanceTab({ go }: { go?: (t: TabId) => void }) {
           ))}
         </div>
       </Section>
+      <Section title="Efeito vidro">
+        <Toggle checked={p.glass !== false} onChange={(v) => set({ glass: v })} label="Blocos translúcidos" sub="Estilo liquid glass. Desligue se o celular ficar lento." />
+      </Section>
       <Section title="Tamanho do texto">
         <Choice value={p.textSize} onChange={(v) => set({ textSize: v })} options={[{ v: 1, l: 'Normal' }, { v: 1.1, l: 'Grande' }, { v: 1.2, l: 'Maior' }]} />
       </Section>

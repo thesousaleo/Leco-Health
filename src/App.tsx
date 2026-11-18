@@ -32,7 +32,7 @@ const ALL: TabId[] = ['inicio', 'treino', 'nutricao', 'habitos', 'registros', 'a
 /** Aplica tema, cor de destaque e tamanho do texto. */
 function useAppearance() {
   const { state } = useStore();
-  const { theme, accent, textSize } = state.prefs;
+  const { theme, accent, textSize, glass } = state.prefs;
   useEffect(() => {
     const root = document.documentElement;
     const mq = window.matchMedia?.('(prefers-color-scheme: dark)');
@@ -40,6 +40,7 @@ function useAppearance() {
       const dark = theme === 'dark' || (theme === 'auto' && !!mq?.matches);
       root.classList.toggle('dark', dark);
       root.dataset.accent = accent;
+      root.classList.toggle('no-glass', glass === false);
       root.style.setProperty('--ui-zoom', String(textSize || 1));
       const bg = getComputedStyle(root).getPropertyValue('--color-canvas').trim() || (dark ? '#0F0F11' : '#E9E5DF');
       document.querySelector('meta[name=theme-color]')?.setAttribute('content', bg);
@@ -48,7 +49,7 @@ function useAppearance() {
     apply();
     mq?.addEventListener?.('change', apply);
     return () => mq?.removeEventListener?.('change', apply);
-  }, [theme, accent, textSize]);
+  }, [theme, accent, textSize, glass]);
 }
 
 /** Reagenda lembretes quando hábitos/preferências mudam (só no app Android). */
@@ -130,13 +131,17 @@ function Shell() {
     <RestTimerProvider visible={tab === 'treino'}>
       {/* fundo bege com arcos finos */}
       <div aria-hidden className="fixed inset-0 -z-10 overflow-hidden bg-canvas">
+        {/* manchas suaves de cor: é o que aparece "através" dos blocos de vidro */}
+        <div className="glow absolute -top-[12vh] -right-[20vw] size-[75vh] rounded-full bg-orange/25" />
+        <div className="glow absolute top-[38vh] -left-[30vw] size-[65vh] rounded-full bg-peach/35" />
+        <div className="glow absolute -bottom-[18vh] right-[-10vw] size-[60vh] rounded-full bg-orange/15" />
         <div className="absolute -top-[40vh] left-[40%] size-[95vh] rounded-full border border-surface/80" />
         <div className="absolute top-[45vh] -left-[35vh] size-[85vh] rounded-full border border-surface/70" />
         <div className="absolute top-[15vh] -right-[45vh] size-[100vh] rounded-full border border-surface/60" />
       </div>
 
       {/* Sidebar desktop */}
-      <aside className="hidden md:flex fixed top-4 bottom-4 left-4 w-56 flex-col rounded-[28px] bg-surface px-3 py-6 z-40">
+      <aside className="hidden md:flex fixed top-4 bottom-4 left-4 w-56 flex-col rounded-[28px] nav-glass px-3 py-6 z-40">
         <div className="px-3 mb-8"><Logo /></div>
         <nav className="flex flex-col gap-1">{sideTabs.map((t) => navBtn(t.id, t.label, t.icon))}</nav>
         <div className="mt-auto space-y-3">
@@ -152,7 +157,7 @@ function Shell() {
       </aside>
 
       {/* Top bar mobile */}
-      <header className="md:hidden sticky top-0 z-40 flex items-center justify-between px-4 pt-[var(--sat)] h-[calc(4rem+var(--sat))] bg-canvas/85 backdrop-blur-xl">
+      <header className="md:hidden sticky top-0 z-40 flex items-center justify-between px-4 pt-[var(--sat)] h-[calc(4rem+var(--sat))] bg-canvas/40 backdrop-blur-xl backdrop-saturate-150">
         <Logo />
         <div className="flex items-center gap-2">
           <span className="text-[13px] font-semibold tabular-nums text-white px-3 h-8 rounded-full bg-orange grid place-items-center">{score}%</span>
@@ -171,7 +176,7 @@ function Shell() {
 
       {/* Bottom nav mobile */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 px-3 pb-[max(.75rem,var(--sab))] pt-2 pointer-events-none">
-        <div className="pointer-events-auto mx-auto max-w-md grid rounded-full bg-surface p-1 shadow-[0_10px_30px_-10px_rgba(0,0,0,.3)]"
+        <div className="pointer-events-auto mx-auto max-w-md grid rounded-full nav-glass p-1 shadow-[0_10px_30px_-10px_rgba(0,0,0,.3)]"
           style={{ gridTemplateColumns: `repeat(${mobileTabs.length}, minmax(0,1fr))` }}>
           {mobileTabs.map((t) => {
             const Icon = t.icon;

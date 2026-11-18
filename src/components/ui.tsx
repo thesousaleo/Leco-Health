@@ -23,7 +23,7 @@ export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Bool
 /* ── Superfícies ───────────────────────────────────────────── */
 export function Card({ children, className, as: Tag = 'section', ...rest }: React.HTMLAttributes<HTMLElement> & { as?: any }) {
   return (
-    <Tag className={cx('relative rounded-[28px] bg-surface shadow-[0_1px_2px_rgba(28,27,26,.04),0_8px_24px_-16px_rgba(28,27,26,.12)]', className)} {...rest}>
+    <Tag className={cx('glass relative rounded-[28px]', className)} {...rest}>
       {children}
     </Tag>
   );

@@ -168,6 +168,7 @@ export interface Prefs {
   textSize: 1 | 1.1 | 1.2;
   haptics: boolean;
   celebrate: boolean;
+  glass?: boolean; // efeito vidro (liquid glass) nos blocos
   homeBlocks: { id: HomeBlockId; on: boolean }[];
   navTabs: TabId[]; // abas da barra inferior (além do Início)
   scoreWeights: { treino: number; refeicoes: number; habitos: number };
