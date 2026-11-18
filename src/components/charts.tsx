@@ -77,7 +77,7 @@ export function LineChart({ data, color = 'var(--color-orange)', unit = '', heig
         onPointerMove={onMove} onPointerDown={onMove} onPointerLeave={() => setHover(null)}>
         <defs>
           <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" style={{ stopColor: color, stopOpacity: 0.28 }} />
+            <stop offset="0%" style={{ stopColor: color, stopOpacity: 0.32 }} />
             <stop offset="100%" style={{ stopColor: color, stopOpacity: 0 }} />
           </linearGradient>
         </defs>
@@ -90,24 +90,34 @@ export function LineChart({ data, color = 'var(--color-orange)', unit = '', heig
         {goal != null && (
           <g>
             <line x1={P.l} x2={W - P.r} y1={y(goal)} y2={y(goal)} style={{ stroke: color, strokeOpacity: 0.5 }} strokeDasharray="6 6" />
-            <text x={W - P.r} y={y(goal) - 6} textAnchor="end" fontSize="10.5" style={{ fill: color }}>meta {nf(goal, decimals)}{unit}</text>
+            <rect x={W - P.r - 74} y={y(goal) - 19} width="74" height="15" rx="7.5" style={{ fill: 'var(--color-surface)' }} />
+            <text x={W - P.r - 37} y={y(goal) - 8} textAnchor="middle" fontSize="10" fontWeight="600" style={{ fill: color }}>meta {nf(goal, decimals)}{unit}</text>
           </g>
         )}
-        <path d={area} fill={`url(#${gid})`} />
+        <path d={area} fill={`url(#${gid})`} className="animate-fade" />
         {tpts.length > 1 && <path d={smooth(tpts)} fill="none" style={{ stroke: INK(55) }} strokeWidth="2" strokeDasharray="5 5" strokeLinecap="round" />}
-        <path d={path} fill="none" style={{ stroke: color }} strokeWidth="2.5" strokeLinecap="round" />
-        {pts.map(([px, py], i) => (
-          <circle key={i} cx={px} cy={py} r={hover === i ? 5.5 : 3} style={{ fill: hover === i ? color : 'var(--color-surface)', stroke: color }} strokeWidth="2" />
+        <path d={path} fill="none" style={{ stroke: color, ['--len' as string]: 1 } as React.CSSProperties} pathLength={1} className="draw" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round" />
+        {data.length <= 12 && pts.map(([px, py], i) => i < pts.length - 1 && hover !== i && (
+          <circle key={i} cx={px} cy={py} r={2.5} style={{ fill: 'var(--color-surface)', stroke: color }} strokeWidth="1.75" />
         ))}
+        {/* último valor em destaque, com halo */}
+        {(() => { const [lx, ly] = pts[pts.length - 1]; return (
+          <g className="animate-fade">
+            <circle cx={lx} cy={ly} r={9} style={{ fill: color, fillOpacity: 0.18 }} />
+            <circle cx={lx} cy={ly} r={4.5} style={{ fill: color, stroke: 'var(--color-surface)' }} strokeWidth="2" />
+          </g>); })()}
+        {hover != null && hover !== pts.length - 1 && (
+          <circle cx={pts[hover][0]} cy={pts[hover][1]} r={5} style={{ fill: color, stroke: 'var(--color-surface)' }} strokeWidth="2" />
+        )}
         {data.map((d, i) =>
           i % labelEvery === 0 || i === data.length - 1 ? (
             <text key={i} x={x(i)} y={H - 6} textAnchor="middle" fontSize="11" style={{ fill: INK(45) }}>{d.label}</text>
           ) : null,
         )}
-        {hover != null && <line x1={x(hover)} x2={x(hover)} y1={P.t} y2={H - P.b} style={{ stroke: INK(18) }} />}
+        {hover != null && <line x1={x(hover)} x2={x(hover)} y1={P.t} y2={H - P.b} style={{ stroke: INK(22) }} strokeDasharray="2 3" />}
       </svg>
       {h && (
-        <div className="pointer-events-none absolute top-0 -translate-x-1/2 rounded-xl bg-ink px-2.5 py-1.5 text-xs shadow-xl whitespace-nowrap"
+        <div className="pointer-events-none absolute -top-2 -translate-x-1/2 rounded-full bg-ink px-3 py-1.5 text-xs shadow-[var(--shadow-3)] whitespace-nowrap"
           style={{ left: `${(x(hover!) / W) * 100}%` }}>
           <span className="font-semibold text-on-ink tabular-nums">{nf(h.value, decimals)}{unit}</span>
           <span className="text-on-ink/60 ml-1.5">{h.sub ?? h.label}</span>
@@ -142,8 +152,8 @@ export function BarChart({ data, color = 'var(--color-orange)', unit = '', heigh
           <g key={i} onPointerEnter={() => setHover(i)} onPointerDown={() => setHover(i)}>
             <rect x={P.l + i * bw} y={P.t} width={bw} height={H - P.t - P.b} fill="transparent" />
             <rect x={bx} y={P.t} width={w} height={H - P.t - P.b} rx={Math.min(8, w / 2)} style={{ fill: 'var(--color-cream)' }} />
-            <rect x={bx} y={by} width={w} height={Math.max(0, H - P.b - by)} rx={Math.min(8, w / 2)}
-              style={{ fill: color, fillOpacity: hover === i ? 1 : met ? 0.9 : 0.45, transition: 'y .5s, height .5s' }} />
+            <rect x={bx} y={by} width={w} height={Math.max(0, H - P.b - by)} rx={Math.min(8, w / 2)} className="rise"
+              style={{ fill: color, fillOpacity: hover === i ? 1 : met ? 0.92 : 0.45, animationDelay: `${i * 40}ms`, transition: 'fill-opacity .2s' }} />
             {hover === i && (
               <text x={bx + w / 2} y={Math.max(12, by - 8)} textAnchor="middle" fontSize="12" fontWeight="600" style={{ fill: 'var(--color-ink)' }}>
                 {nf(d.value, decimals)}{unit}
@@ -155,5 +165,22 @@ export function BarChart({ data, color = 'var(--color-orange)', unit = '', heigh
       })}
     </svg>
     </div>
+  );
+}
+
+/** Mini-gráfico de tendência para os blocos do Início. */
+export function Sparkline({ values, color = 'var(--color-orange)', width = 84, height = 30 }: { values: number[]; color?: string; width?: number; height?: number }) {
+  const v = values.filter((n) => Number.isFinite(n));
+  if (v.length < 2) return null;
+  const lo = Math.min(...v), hi = Math.max(...v), span = hi - lo || 1;
+  const pts = v.map((n, i) => [2 + (i / (v.length - 1)) * (width - 4), 3 + (1 - (n - lo) / span) * (height - 6)] as const);
+  const d = smooth(pts);
+  const [lx, ly] = pts[pts.length - 1];
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height} aria-hidden className="shrink-0 overflow-visible">
+      <path d={`${d} L${lx},${height} L${pts[0][0]},${height} Z`} style={{ fill: color, fillOpacity: 0.12 }} />
+      <path d={d} fill="none" style={{ stroke: color, ['--len' as string]: 1 } as React.CSSProperties} strokeWidth="2" strokeLinecap="round" pathLength={1} className="draw" />
+      <circle cx={lx} cy={ly} r="2.8" style={{ fill: color }} />
+    </svg>
   );
 }

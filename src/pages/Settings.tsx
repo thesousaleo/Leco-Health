@@ -8,7 +8,7 @@ import { DEFAULT_HOME } from '../prefs';
 import { biometricAvailable, notificationsAllowed, isNative } from '../native';
 import { hashPin, loadLock, PinPad, saveLock } from '../components/Lock';
 import { LuArrowDown, LuArrowUp, LuEye, LuEyeOff, LuTrash2 } from 'react-icons/lu';
-import { nf } from '../utils';
+import { nf, overallStreak } from '../utils';
 import { Button, Card, cx, Field, Input, Modal, NumInput, PageHeader, TextArea } from '../components/ui';
 
 type Tab = 'conta' | 'perfil' | 'metas' | 'aparencia' | 'lembretes' | 'seguranca' | 'dados';
@@ -27,11 +27,12 @@ export default function Settings({ go }: { go?: (t: TabId) => void }) {
   return (
     <div>
       <PageHeader title="Ajustes" />
-      <div className="grid grid-cols-3 min-[360px]:grid-cols-4 gap-1 p-1 rounded-[24px] bg-surface mb-5 md:flex md:w-fit md:rounded-full">
+      <ProfileHeader onEdit={() => setTab('perfil')} />
+      <div className="grid grid-cols-3 min-[360px]:grid-cols-4 gap-1 p-1 rounded-[24px] glass mb-5 md:flex md:w-fit md:rounded-full">
         {TABS.map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={cx('press min-w-0 h-10 px-1 md:px-4 rounded-full text-[13px] md:text-[14px] font-medium transition-colors whitespace-nowrap truncate',
-              tab === t.id ? 'bg-ink text-on-ink' : 'text-ink/55')}>
+              tab === t.id ? 'bg-ink text-on-ink shadow-[var(--shadow-1)]' : 'text-ink/55')}>
             {t.label}
           </button>
         ))}
@@ -49,13 +50,44 @@ export default function Settings({ go }: { go?: (t: TabId) => void }) {
   );
 }
 
+/** Cabeçalho de perfil: inicial, nome, nível e estado da conta. */
+function ProfileHeader({ onEdit }: { onEdit: () => void }) {
+  const { state } = useStore();
+  const sync = useSync();
+  const name = sync.profile?.display_name || state.profile.name || 'Você';
+  const xp = state.sessions.filter((x) => x.completed).length * 10
+    + Object.values(state.habitLogs).reduce((a, l) => a + l.length, 0) * 2
+    + (state.meals?.length ?? 0) + state.sleep.length + state.body.length;
+  const level = Math.floor(Math.sqrt(xp / 20)) + 1;
+  const nextAt = 20 * level * level, prevAt = 20 * (level - 1) * (level - 1);
+  const pct = Math.min(1, (xp - prevAt) / Math.max(1, nextAt - prevAt));
+  const streak = overallStreak(state);
+  return (
+    <button onClick={onEdit} className="press w-full glass rounded-[28px] p-4 mb-4 flex items-center gap-4 text-left">
+      <span className="relative grid place-items-center size-16 rounded-full bg-orange text-white text-[24px] font-semibold shrink-0 shadow-[var(--shadow-2)]">
+        {name.trim().charAt(0).toUpperCase()}
+        <span className="absolute -bottom-1 -right-1 h-6 min-w-6 px-1.5 rounded-full bg-ink text-on-ink text-[11px] font-bold grid place-items-center ring-2 ring-surface">{level}</span>
+      </span>
+      <span className="flex-1 min-w-0">
+        <span className="block text-[19px] font-[650] tracking-[-0.02em] text-ink truncate">{name}</span>
+        <span className="block text-[12.5px] text-muted truncate">
+          Nível {level}{streak > 1 ? ` · ${streak} dias seguidos` : ''}
+        </span>
+        <span className="block h-1.5 rounded-full bg-cream overflow-hidden mt-2 max-w-[220px]">
+          <span className="block h-full rounded-full bg-orange" style={{ width: `${pct * 100}%` }} />
+        </span>
+      </span>
+    </button>
+  );
+}
+
 function Section({ title, sub, children, right }: { title: string; sub?: string; children?: React.ReactNode; right?: React.ReactNode }) {
   return (
     <Card className="p-5 md:p-6">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-[16px] font-semibold text-ink">{title}</h2>
-          {sub && <p className="text-[13px] text-muted mt-0.5">{sub}</p>}
+          <h2 className="t-section text-ink">{title}</h2>
+          {sub && <p className="t-caption mt-0.5">{sub}</p>}
         </div>
         {right}
       </div>
@@ -221,7 +253,7 @@ function DataTab() {
         <div className="grid grid-cols-3 gap-2">
           {counts.map(([l, n]) => (
             <div key={l} className="rounded-2xl bg-cream px-3 py-2.5">
-              <p className="text-[19px] font-semibold text-ink tabular-nums leading-tight">{n}</p>
+              <p className="text-[19px] num text-ink leading-tight">{n}</p>
               <p className="text-[12px] text-muted">{l}</p>
             </div>
           ))}

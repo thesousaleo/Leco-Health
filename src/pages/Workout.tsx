@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   LuBike, LuCalendarDays, LuCheck, LuChevronDown, LuChevronLeft, LuChevronRight, LuChevronUp, LuClipboardList, LuClock, LuDumbbell,
-  LuFootprints, LuHistory, LuNotebookPen, LuPencil, LuPlay, LuPlus, LuRotateCcw, LuSearch, LuTimer, LuTrendingUp, LuTrophy, LuWaves, LuX,
+  LuFootprints, LuHistory, LuNotebookPen, LuPencil, LuPlay, LuPlus, LuRotateCcw, LuSearch, LuShare2, LuTimer, LuTrendingUp, LuTrophy, LuWaves, LuX,
 } from 'react-icons/lu';
 import { useStore } from '../store';
 import type { CardioKind, CardioLog, Exercise, ExerciseLog, Split, WorkoutSession } from '../types';
@@ -14,6 +14,7 @@ import {
 } from '../components/ui';
 import { BarChart, LineChart } from '../components/charts';
 import { useRestTimer } from '../components/RestTimer';
+import { shareFile } from '../native';
 
 type View = 'sessao' | 'cardio' | 'fichas' | 'historico';
 
@@ -114,38 +115,70 @@ function SessionEditor({ session, past }: { session: WorkoutSession; past?: bool
   const { state, actions, toast } = useStore();
   const split = state.splits.find((x) => x.id === session.splitId);
   const [tick, setTick] = useState(Date.now());
+  const live = !session.completed && !past;
   useEffect(() => {
     if (session.completed) return;
-    const t = setInterval(() => setTick(Date.now()), 30000);
+    const t = setInterval(() => setTick(Date.now()), live ? 1000 : 30000);
     return () => clearInterval(t);
-  }, [session.completed]);
+  }, [session.completed, live]);
   const all = session.entries.flatMap((e) => e.sets);
   const done = all.filter((s) => s.done).length;
-  const mins = Math.round(((session.finishedAt ?? tick) - session.startedAt) / 60000);
+  const secs = Math.max(0, Math.round(((session.finishedAt ?? tick) - session.startedAt) / 1000));
+  const mins = Math.round(secs / 60);
+  const clock = `${Math.floor(secs / 3600) ? Math.floor(secs / 3600) + ':' : ''}${String(Math.floor((secs % 3600) / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`;
   const locked = session.completed && !past;
+  // próxima série a fazer (modo foco)
+  const nextEntry = live ? session.entries.find((e) => e.sets.some((x) => !x.done)) : undefined;
+  const nextSetId = nextEntry?.sets.find((x) => !x.done)?.id;
 
   return (
     <div className="space-y-3 md:space-y-4">
+      {live ? (
+        <section className="rounded-[28px] bg-[#1C1B1A] text-white ring-1 ring-white/10 p-5 shadow-[var(--shadow-3)] relative overflow-hidden">
+          <div aria-hidden className="absolute -right-16 -top-20 size-56 rounded-full bg-orange/25 blur-3xl" />
+          <div className="relative">
+            <div className="flex items-center justify-between gap-3">
+              <p className="eyebrow !text-white/60 flex items-center gap-1.5"><span className="size-2 rounded-full bg-orange animate-pulse" /> Em andamento</p>
+              <p className="text-[13px] text-white/60 truncate">Treino {split?.letter ?? ''} · {split?.name ?? ''}</p>
+            </div>
+            <p className="num text-[56px] leading-none mt-3 tracking-[-0.05em]">{clock}</p>
+            <div className="grid grid-cols-3 gap-2 mt-4">
+              {[['Séries', `${done}/${all.length}`], ['Volume', `${nf(sessionVolume(session) / 1000, 1)} t`], ['Exercícios', `${session.entries.filter((e) => e.sets.length && e.sets.every((x) => x.done)).length}/${session.entries.length}`]].map(([l, v]) => (
+                <div key={l} className="rounded-2xl bg-white/[0.08] px-3 py-2.5">
+                  <p className="text-[11.5px] text-white/55">{l}</p>
+                  <p className="num text-[18px]">{v}</p>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 h-1.5 rounded-full bg-white/10 overflow-hidden">
+              <div className="h-full rounded-full bg-orange" style={{ width: `${sessionProgress(session) * 100}%`, transition: 'width .8s var(--spring)' }} />
+            </div>
+            {nextEntry && <p className="text-[13px] text-white/70 mt-3">Próximo: <b className="text-white font-semibold">{nextEntry.name}</b></p>}
+          </div>
+        </section>
+      ) : session.completed && !past ? (
+        <WorkoutSummary session={session} />
+      ) : (
       <Card className="p-5">
         <div className="flex items-center gap-3">
           <div className="flex-1 min-w-0">
-            <p className="text-[13px] text-muted">{past ? `Editando · ${relDay(session.date)}` : session.completed ? 'Treino concluído' : 'Em andamento'}</p>
-            <p className="text-[18px] font-semibold text-ink truncate">Treino {split?.letter ?? ''} · {split?.name ?? 'Ficha removida'}</p>
+            <p className="eyebrow">{past ? `Editando · ${relDay(session.date)}` : 'Treino'}</p>
+            <p className="t-section text-ink truncate mt-1">Treino {split?.letter ?? ''} · {split?.name ?? 'Ficha removida'}</p>
           </div>
-          {session.completed && !past && <Tag accent="treino" className="h-7 px-3 text-[12.5px]"><LuCheck size={13} /> Feito</Tag>}
         </div>
         <div className="grid grid-cols-3 gap-2 mt-4">
           {[['Séries', `${done}/${all.length}`], ['Volume', `${nf(sessionVolume(session) / 1000, 1)} t`], ['Duração', `${Math.max(0, mins)} min`]].map(([l, v]) => (
             <div key={l} className="rounded-2xl bg-cream px-3 py-2.5">
               <p className="text-[12px] text-muted">{l}</p>
-              <p className="text-[17px] font-semibold text-ink tabular-nums">{v}</p>
+              <p className="num text-[17px] text-ink">{v}</p>
             </div>
           ))}
         </div>
         <ProgressBar className="mt-4" value={sessionProgress(session)} height={6} />
       </Card>
+      )}
 
-      {session.entries.map((entry) => <ExerciseCard key={entry.exerciseId} session={session} entry={entry} locked={locked} />)}
+      {session.entries.map((entry) => <ExerciseCard key={entry.exerciseId} session={session} entry={entry} locked={locked} nextSetId={nextSetId} focus={live} />)}
 
       <div className="flex flex-wrap gap-2 justify-between pt-1">
         <DeleteButton compact={false} label={past ? 'Excluir treino' : 'Descartar'} onConfirm={() => { actions.deleteSession(session.id); toast('Treino removido'); }} />
@@ -161,7 +194,7 @@ function SessionEditor({ session, past }: { session: WorkoutSession; past?: bool
   );
 }
 
-function ExerciseCard({ session, entry, locked }: { session: WorkoutSession; entry: ExerciseLog; locked: boolean }) {
+function ExerciseCard({ session, entry, locked, nextSetId, focus }: { session: WorkoutSession; entry: ExerciseLog; locked: boolean; nextSetId?: string; focus?: boolean }) {
   const { state, actions } = useStore();
   const timer = useRestTimer();
   const exDef = state.splits.find((s) => s.id === session.splitId)?.exercises.find((e) => e.id === entry.exerciseId);
@@ -174,9 +207,25 @@ function ExerciseCard({ session, entry, locked }: { session: WorkoutSession; ent
   const isPR = last && bestNow > last.best.weight;
   const allDone = entry.sets.length > 0 && done.length === entry.sets.length;
   const rest = exDef?.rest;
+  const isCurrent = !!nextSetId && entry.sets.some((x) => x.id === nextSetId);
+  const [open, setOpen] = useState(false);
+
+  // modo foco: exercício concluído vira uma linha compacta (toque para abrir)
+  if (focus && allDone && !open) {
+    return (
+      <button onClick={() => setOpen(true)} className="press w-full glass rounded-[22px] px-4 py-3 flex items-center gap-3 text-left animate-pop">
+        <span className="grid place-items-center size-8 rounded-full bg-good text-white shrink-0 check-pop"><LuCheck size={16} strokeWidth={3} /></span>
+        <span className="flex-1 min-w-0">
+          <span className="block text-[15px] font-medium text-ink truncate line-through decoration-ink/25">{entry.name}</span>
+          <span className="block text-[12.5px] text-muted tabular-nums">{entry.sets.length} séries · melhor {nf(bestNow, 1)} kg{isPR ? ' · recorde!' : ''}</span>
+        </span>
+        <LuChevronDown size={16} className="text-muted" />
+      </button>
+    );
+  }
 
   return (
-    <Card className={cx('p-4 md:p-5', allDone && 'ring-2 ring-orange/30')}>
+    <Card className={cx('p-4 md:p-5 transition-shadow', isCurrent && 'ring-2 ring-orange/60', !focus && allDone && 'ring-2 ring-good/30')}>
       <div className="flex items-start gap-3 mb-3">
         <div className="flex-1 min-w-0">
           <p className="text-[16px] font-medium text-ink">{entry.name}</p>
@@ -203,8 +252,9 @@ function ExerciseCard({ session, entry, locked }: { session: WorkoutSession; ent
       </div>
       <div className="space-y-1.5">
         {entry.sets.map((s, i) => (
-          <div key={s.id} className={cx('grid grid-cols-[26px_1fr_1fr_1fr_44px] gap-1.5 items-center rounded-2xl', s.done && 'bg-blush/40')}>
-            <span className={cx('text-center text-[14px] font-semibold', s.done ? 'text-orange' : 'text-muted')}>{i + 1}</span>
+          <div key={s.id} className={cx('grid grid-cols-[26px_1fr_1fr_1fr_44px] gap-1.5 items-center rounded-2xl transition-all duration-300',
+            s.done && 'bg-blush/40 opacity-80', s.id === nextSetId && 'bg-surface ring-2 ring-orange shadow-[var(--shadow-1)]')}>
+            <span className={cx('text-center text-[14px] font-semibold', s.done ? 'text-orange line-through' : s.id === nextSetId ? 'text-orange' : 'text-muted')}>{i + 1}</span>
             <NumInput disabled={locked} value={s.weight} onChange={(v) => actions.updateSet(session.id, entry.exerciseId, s.id, { weight: v })} aria-label={`Peso série ${i + 1}`} />
             <NumInput disabled={locked} value={s.reps} onChange={(v) => actions.updateSet(session.id, entry.exerciseId, s.id, { reps: Math.round(v) })} aria-label={`Repetições série ${i + 1}`} />
             <select disabled={locked} value={s.rpe} aria-label={`RPE série ${i + 1}`}
@@ -214,8 +264,8 @@ function ExerciseCard({ session, entry, locked }: { session: WorkoutSession; ent
             </select>
             <button disabled={locked} aria-label={`Concluir série ${i + 1}`} aria-pressed={s.done}
               onClick={() => { actions.updateSet(session.id, entry.exerciseId, s.id, { done: !s.done }); if (!s.done && !session.completed) timer.start(rest); }}
-              className={cx('press size-11 rounded-full grid place-items-center transition-colors disabled:opacity-60', s.done ? 'bg-orange text-white' : 'bg-cream text-ink/30')}>
-              <LuCheck size={18} strokeWidth={3} />
+              className={cx('press size-11 rounded-full grid place-items-center transition-colors disabled:opacity-60', s.done ? 'bg-orange text-white' : s.id === nextSetId ? 'bg-orange/15 text-orange' : 'bg-cream text-ink/30')}>
+              <LuCheck size={18} strokeWidth={3} className={s.done ? 'check-pop' : undefined} key={String(s.done)} />
             </button>
           </div>
         ))}
@@ -230,6 +280,9 @@ function ExerciseCard({ session, entry, locked }: { session: WorkoutSession; ent
         ) : <p className="mt-3 text-[13.5px] text-ink/75 bg-cream rounded-2xl px-4 py-2.5">📝 {entry.note}</p>
       )}
 
+      {focus && allDone && open && (
+        <button onClick={() => setOpen(false)} className="press mt-3 text-[13px] text-muted flex items-center gap-1"><LuChevronUp size={14} /> Recolher</button>
+      )}
       {!locked && (
         <div className="flex flex-wrap gap-1 mt-3">
           <Button size="sm" variant="ghost" onClick={() => actions.addSet(session.id, entry.exerciseId)}><LuPlus size={14} /> Série</Button>
@@ -242,6 +295,102 @@ function ExerciseCard({ session, entry, locked }: { session: WorkoutSession; ent
         return prevNote ? <p className="mt-2 text-[12.5px] text-muted">Nota da última vez: {prevNote}</p> : null;
       })()}
     </Card>
+  );
+}
+
+/* ─────────────────────────── Resumo pós-treino ─────────────────────────── */
+function workoutStats(state: ReturnType<typeof useStore>['state'], session: WorkoutSession) {
+  const sets = session.entries.flatMap((e) => e.sets).filter((x) => x.done);
+  const mins = Math.max(1, Math.round(((session.finishedAt ?? Date.now()) - session.startedAt) / 60000));
+  const prs = session.entries.filter((e) => {
+    const best = e.sets.filter((x) => x.done).reduce((b, x) => Math.max(b, x.weight), 0);
+    const last = lastPerformance(state, e.exerciseId, session.date);
+    return last && best > last.best.weight;
+  });
+  const tops = session.entries.map((e) => {
+    const d = e.sets.filter((x) => x.done);
+    const b = d.reduce<(typeof d)[number] | null>((m, x) => (!m || x.weight > m.weight ? x : m), null);
+    return { name: e.name, best: b, pr: prs.includes(e) };
+  }).filter((x) => x.best);
+  return { sets: sets.length, mins, volume: sessionVolume(session), prs: prs.length, tops };
+}
+
+async function workoutImage(title: string, date: string, st: ReturnType<typeof workoutStats>) {
+  const W = 1080, H = 1350;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d')!;
+  const css = getComputedStyle(document.documentElement);
+  const accent = css.getPropertyValue('--color-orange').trim() || '#F26B3A';
+  g.fillStyle = '#1C1B1A'; g.fillRect(0, 0, W, H);
+  const grd = g.createRadialGradient(W - 120, 120, 40, W - 120, 120, 700);
+  grd.addColorStop(0, accent + '66'); grd.addColorStop(1, 'transparent');
+  g.fillStyle = grd; g.fillRect(0, 0, W, H);
+  // logo
+  g.fillStyle = accent; g.beginPath(); g.roundRect(80, 80, 96, 96, 26); g.fill();
+  g.strokeStyle = '#fff'; g.lineWidth = 9; g.lineCap = 'round'; g.lineJoin = 'round';
+  g.beginPath(); const L = (x: number, y: number) => [80 + x * 0.96, 80 + y * 0.96] as const;
+  g.moveTo(...L(28, 22)); [[28, 68], [42, 68], [48, 56], [56, 78], [62, 62], [72, 62]].forEach(([x, y]) => g.lineTo(...L(x, y))); g.stroke();
+  const font = (w: number, s: number) => `${w} ${s}px Inter, system-ui, sans-serif`;
+  g.fillStyle = '#fff'; g.font = font(600, 40); g.fillText('Leco Health', 200, 142);
+  g.fillStyle = 'rgba(255,255,255,.55)'; g.font = font(500, 34); g.fillText(date.toUpperCase(), 80, 300);
+  g.fillStyle = '#fff'; g.font = font(700, 84); g.fillText(title, 80, 395);
+  const stats: [string, string][] = [['Duração', `${st.mins} min`], ['Volume', `${nf(st.volume / 1000, 1)} t`], ['Séries', `${st.sets}`], ['Recordes', `${st.prs}`]];
+  stats.forEach(([l, v], i) => {
+    const x = 80 + (i % 2) * 470, y = 470 + Math.floor(i / 2) * 210;
+    g.fillStyle = 'rgba(255,255,255,.07)'; g.beginPath(); g.roundRect(x, y, 450, 180, 36); g.fill();
+    g.fillStyle = 'rgba(255,255,255,.55)'; g.font = font(500, 32); g.fillText(l, x + 36, y + 62);
+    g.fillStyle = i === 3 && st.prs ? accent : '#fff'; g.font = font(700, 72); g.fillText(v, x + 36, y + 145);
+  });
+  g.font = font(500, 34);
+  st.tops.slice(0, 5).forEach((t, i) => {
+    const y = 960 + i * 64;
+    g.fillStyle = 'rgba(255,255,255,.85)'; g.fillText(t.name.length > 26 ? t.name.slice(0, 25) + '…' : t.name, 80, y);
+    g.fillStyle = t.pr ? accent : 'rgba(255,255,255,.55)'; g.textAlign = 'right';
+    g.fillText(`${nf(t.best!.weight, 1)} kg × ${t.best!.reps}${t.pr ? '  ★' : ''}`, W - 80, y); g.textAlign = 'left';
+  });
+  return c.toDataURL('image/png').split(',')[1];
+}
+
+function WorkoutSummary({ session }: { session: WorkoutSession }) {
+  const { state, toast } = useStore();
+  const split = state.splits.find((x) => x.id === session.splitId);
+  const st = workoutStats(state, session);
+  const title = `Treino ${split?.letter ?? ''}${split?.name ? ' · ' + split.name : ''}`;
+  const share = async () => {
+    try {
+      const b64 = await workoutImage(title, new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).format(fromKey(session.date)), st);
+      await shareFile(`treino-${session.date}.png`, b64, 'image/png', title);
+    } catch { toast('Não foi possível compartilhar'); }
+  };
+  return (
+    <section className="rounded-[28px] bg-[#1C1B1A] text-white ring-1 ring-white/10 p-5 shadow-[var(--shadow-3)] relative overflow-hidden animate-pop">
+      <div aria-hidden className="absolute -right-16 -top-20 size-56 rounded-full bg-good/25 blur-3xl" />
+      <div className="relative">
+        <p className="eyebrow !text-good flex items-center gap-1.5"><LuTrophy size={12} /> Treino concluído</p>
+        <p className="text-[22px] font-[650] tracking-[-0.03em] mt-1.5">{title}</p>
+        <div className="grid grid-cols-4 gap-2 mt-4">
+          {[['Min', `${st.mins}`], ['Volume', `${nf(st.volume / 1000, 1)}t`], ['Séries', `${st.sets}`], ['PRs', `${st.prs}`]].map(([l, v], i) => (
+            <div key={l} className="rounded-2xl bg-white/[0.08] px-2.5 py-2.5 min-w-0">
+              <p className={cx('num text-[20px]', i === 3 && st.prs ? 'text-orange' : '')}>{v}</p>
+              <p className="text-[11px] text-white/55 truncate">{l}</p>
+            </div>
+          ))}
+        </div>
+        {st.tops.length > 0 && (
+          <ul className="mt-4 space-y-1.5">
+            {st.tops.slice(0, 4).map((t) => (
+              <li key={t.name} className="flex items-center justify-between gap-3 text-[13.5px]">
+                <span className="truncate text-white/80">{t.name}</span>
+                <span className={cx('tabular-nums shrink-0', t.pr ? 'text-orange font-semibold' : 'text-white/55')}>{nf(t.best!.weight, 1)} kg × {t.best!.reps}{t.pr ? ' ★' : ''}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <button onClick={share} className="press mt-5 h-11 px-5 rounded-full bg-orange text-white text-[14.5px] font-medium flex items-center gap-2">
+          <LuShare2 size={16} /> Compartilhar resumo
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -267,7 +416,7 @@ function CardioView() {
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-[13.5px] text-muted">Últimos 30 dias</p>
-            <p className="text-[30px] font-semibold tracking-[-0.03em] text-ink tabular-nums leading-tight">{last30.length} <span className="text-[15px] font-normal text-muted">sessões</span></p>
+            <p className="text-[30px] num text-ink leading-tight">{last30.length} <span className="text-[15px] font-normal text-muted">sessões</span></p>
             <p className="text-[13.5px] text-muted">{last30.reduce((a, c) => a + c.minutes, 0)} min · {nf(last30.reduce((a, c) => a + (c.distanceKm || 0), 0), 1)} km</p>
           </div>
           <Button variant="primary" onClick={() => setModal({})}><LuPlus size={16} /> Registrar</Button>

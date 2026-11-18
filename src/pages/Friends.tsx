@@ -51,12 +51,14 @@ export default function Friends() {
   const [reactions, setReactions] = useState<Reaction[]>([]);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [cloudErr, setCloudErr] = useState('');
+  const [loaded, setLoaded] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!sync.session) return;
     await sync.refreshFriends();
     try { setReactions(await sync.call((s) => cloud.listReactions(s, addDays(todayKey(), -7)))); } catch (e: any) { setCloudErr(e.message); }
     try { setChallenges(await sync.call((s) => cloud.listChallenges(s))); } catch (e: any) { setCloudErr(e.message); }
+    setLoaded(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sync.session?.user.id]);
 
@@ -192,7 +194,16 @@ export default function Friends() {
               </div>
             )}
           </Card>
-          {accepted.length === 0 ? (
+          {!loaded && accepted.length === 0 ? (
+            <div className="grid md:grid-cols-2 gap-4" aria-label="Carregando amigos">
+              {[0, 1].map((i) => (
+                <Card key={i} className="p-5">
+                  <div className="flex items-center gap-3"><div className="skeleton size-11 !rounded-full" /><div className="flex-1 space-y-2"><div className="skeleton h-4 w-2/5" /><div className="skeleton h-3 w-1/4" /></div></div>
+                  <div className="flex items-center gap-4 mt-5"><div className="skeleton size-[88px] !rounded-full" /><div className="flex-1 grid grid-cols-2 gap-2">{[0, 1, 2, 3].map((k) => <div key={k} className="skeleton h-12" />)}</div></div>
+                </Card>
+              ))}
+            </div>
+          ) : accepted.length === 0 ? (
             <Card className="p-5"><Empty icon={<LuUsers />} title="Nenhum amigo ainda" text="Troque códigos com alguém. Quando ele aceitar, o progresso de vocês aparece aqui." /></Card>
           ) : (
             <div className="grid md:grid-cols-2 gap-4 md:gap-5">
@@ -221,11 +232,20 @@ export default function Friends() {
 const groupReactions = (rs: Reaction[], friends: Friend[]) =>
   rs.slice(0, 12).map((r) => ({ key: r.id, emoji: r.emoji, day: r.day, name: friends.find((f) => f.userId === r.from_user)?.name ?? 'Amigo' }));
 
-function Avatar({ name, me, muted }: { name: string; me?: boolean; muted?: boolean }) {
-  return (
-    <span className={cx('grid place-items-center size-10 rounded-full text-[14px] font-semibold shrink-0',
-      me ? 'bg-orange text-white' : muted ? 'bg-cream text-muted' : 'bg-ink text-on-ink')}>{initials(name)}</span>
+const AV_COLORS = ['#F26B3A', '#12A594', '#8E4EC6', '#2563EB', '#E5484D', '#E2A336', '#0EA5E9', '#DB2777'];
+const avColor = (name: string) => AV_COLORS[[...name].reduce((a, c) => a + c.charCodeAt(0), 0) % AV_COLORS.length];
+
+/** Avatar com iniciais coloridas e, opcionalmente, o anel do score do dia em volta. */
+function Avatar({ name, me, muted, ring, size = 40 }: { name: string; me?: boolean; muted?: boolean; ring?: number | null; size?: number }) {
+  const col = me ? 'var(--color-orange)' : avColor(name);
+  const inner = (
+    <span className="grid place-items-center rounded-full font-semibold shrink-0 text-white"
+      style={{ width: size, height: size, fontSize: size * 0.36, background: muted ? 'var(--color-cream)' : col, color: muted ? 'var(--color-muted)' : undefined }}>
+      {initials(name)}
+    </span>
   );
+  if (ring == null) return inner;
+  return <ProgressRing value={ring / 100} size={size + 10} stroke={3} color={col}>{inner}</ProgressRing>;
 }
 
 /* ── card do amigo ─────────────────────────────────────────── */
@@ -234,6 +254,7 @@ function FriendCard({ f, sent, onReact, onRemove, onSharesSaved }: {
 }) {
   const s = view(f.stats);
   const [sharesOpen, setSharesOpen] = useState(false);
+  const [burst, setBurst] = useState<{ e: string; k: number } | null>(null);
   const tiles: [string, string][] = [];
   if (s?.habitos) tiles.push(['Hábitos hoje', s.habitos.today], ['Sequência', `${s.habitos.streak ?? 0} dias`]);
   if (s?.treino) tiles.push(['Treinos 7d', String(s.treino.week)]);
@@ -243,7 +264,7 @@ function FriendCard({ f, sent, onReact, onRemove, onSharesSaved }: {
   return (
     <Card className="p-5 md:p-6">
       <div className="flex items-center gap-3">
-        <Avatar name={f.name} />
+        <Avatar name={f.name} ring={s?.score?.today ?? null} size={42} />
         <div className="flex-1 min-w-0">
           <p className="text-[17px] font-medium text-ink truncate">{f.name}</p>
           <p className="text-[12.5px] text-muted">atualizado {ago(f.updatedAt)}</p>
@@ -257,7 +278,7 @@ function FriendCard({ f, sent, onReact, onRemove, onSharesSaved }: {
           <div className="flex items-center gap-4 mt-5">
             {s.score && (
               <ProgressRing value={s.score.today / 100} size={88} stroke={8}>
-                <div><p className="text-[22px] font-semibold tracking-[-0.03em] text-ink tabular-nums leading-none">{s.score.today}%</p><p className="text-[10.5px] text-muted mt-0.5">hoje</p></div>
+                <div><p className="text-[22px] num text-ink leading-none">{s.score.today}%</p><p className="text-[10.5px] text-muted mt-0.5">hoje</p></div>
               </ProgressRing>
             )}
             <div className="grid grid-cols-2 gap-2 flex-1">
@@ -293,8 +314,11 @@ function FriendCard({ f, sent, onReact, onRemove, onSharesSaved }: {
         {EMOJIS.map((e) => {
           const ex = sent.find((r) => r.emoji === e);
           return (
-            <button key={e} onClick={() => onReact(e, ex)} aria-pressed={!!ex}
-              className={cx('press size-10 rounded-full grid place-items-center text-[18px] transition-colors', ex ? 'bg-blush' : 'bg-cream')}>{e}</button>
+            <button key={e} onClick={() => { if (!ex) setBurst({ e, k: Date.now() }); onReact(e, ex); }} aria-pressed={!!ex}
+              className={cx('press relative size-10 rounded-full grid place-items-center text-[18px] transition-colors', ex ? 'bg-blush ring-2 ring-orange/40' : 'bg-cream')}>
+              {e}
+              {burst?.e === e && <span key={burst.k} aria-hidden className="float-up absolute left-1/2 -top-1 text-[26px] pointer-events-none">{e}</span>}
+            </button>
           );
         })}
         <span className="ml-auto"><DeleteButton label="Remover amigo" onConfirm={onRemove} /></span>
@@ -360,6 +384,26 @@ function Ranking({ me, friends, myName }: { me: any; friends: Friend[]; myName: 
         ))}
       </div>
       <p className="text-[13px] text-muted mb-4">Média dos últimos 7 dias.</p>
+      {rows.length >= 2 && (
+        <div className="flex items-end justify-center gap-3 mb-6">
+          {[1, 0, 2].map((idx) => {
+            const r = rows[idx]; if (!r) return <div key={idx} className="w-[30%]" />;
+            const h = idx === 0 ? 92 : idx === 1 ? 68 : 52;
+            return (
+              <div key={r.id} className="w-[30%] flex flex-col items-center min-w-0">
+                {idx === 0 && <LuCrown size={20} className="text-orange mb-1 check-pop" />}
+                <Avatar name={r.name} me={r.me} size={idx === 0 ? 50 : 42} />
+                <p className="text-[12.5px] font-medium text-ink truncate max-w-full mt-1.5">{r.me ? 'Você' : r.name.split(' ')[0]}</p>
+                <p className="text-[11.5px] text-muted tabular-nums">{c.fmt(r.v!)}</p>
+                <div className={cx('w-full mt-2 rounded-t-2xl grid place-items-start justify-center pt-2 rise', idx === 0 ? 'bg-orange text-white' : 'bg-cream text-ink')}
+                  style={{ height: h, animationDelay: `${idx * 90}ms` }}>
+                  <span className="num text-[22px]">{idx + 1}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
       <ul className="space-y-3.5">
         {rows.map((r, i) => (
           <li key={r.id} className="flex items-center gap-3">

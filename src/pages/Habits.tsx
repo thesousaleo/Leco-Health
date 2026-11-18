@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   LuArchive, LuArchiveRestore, LuArrowDown, LuArrowUp, LuBell, LuBrain, LuCheck, LuChevronLeft, LuChevronRight, LuFlame, LuHeartPulse,
   LuMinus, LuPencil, LuPill, LuPlus, LuSun,
@@ -9,7 +9,7 @@ import {
   activeHabits, addDays, dueHabits, fmtWeekdayShort, freqLabel, fromKey, habitCount, habitStreak, isHabitDone, isHabitScheduled, lastNDays,
   overallStreak, todayKey, toKey, weekDoneCount,
 } from '../utils';
-import { Button, Card, cx, DeleteButton, Empty, Field, heatColor, HeatLegend, IconButton, Input, Modal, NumInput, PageHeader, ProgressBar, Segmented } from '../components/ui';
+import { Button, Card, cx, DeleteButton, Empty, Field, heatColor, HeatLegend, IconButton, Input, Modal, NumInput, PageHeader, ProgressBar, ProgressRing, Segmented } from '../components/ui';
 
 const CATS: { id: HabitCategory; icon: React.ReactNode }[] = [
   { id: 'Saúde', icon: <LuHeartPulse size={15} /> },
@@ -17,6 +17,14 @@ const CATS: { id: HabitCategory; icon: React.ReactNode }[] = [
   { id: 'Suplementação', icon: <LuPill size={15} /> },
   { id: 'Rotina', icon: <LuSun size={15} /> },
 ];
+/** Cor e ícone de cada categoria. */
+export const CAT_STYLE: Record<string, { color: string; Icon: React.ComponentType<{ size?: number }> }> = {
+  'Saúde': { color: '#E5484D', Icon: LuHeartPulse },
+  'Mente': { color: '#8E4EC6', Icon: LuBrain },
+  'Suplementação': { color: '#12A594', Icon: LuPill },
+  'Rotina': { color: '#E2A336', Icon: LuSun },
+};
+const MILESTONES = [7, 30, 100];
 
 export default function Habits() {
   const { state, actions, toast } = useStore();
@@ -112,6 +120,14 @@ function HabitRow({ h, organize, onEdit, onMonth, onUp, onDown }: {
   const count = habitCount(state, h.id, today);
   const weekly = h.freq?.type === 'weekly';
   const sub = h.target ? `${count} de ${h.target} ${h.unit ?? ''}` : weekly ? `${weekDoneCount(state, h.id, today)} de ${(h.freq as { times: number }).times} nesta semana` : freqLabel(h);
+  const cat = CAT_STYLE[h.category] ?? CAT_STYLE['Rotina'];
+  // comemora 7, 30 e 100 dias seguidos
+  const prevSt = useRef(st);
+  const [milestone, setMilestone] = useState<number | null>(null);
+  useEffect(() => {
+    if (on && st > prevSt.current && MILESTONES.includes(st)) { setMilestone(st); const t = setTimeout(() => setMilestone(null), 2600); prevSt.current = st; return () => clearTimeout(t); }
+    prevSt.current = st;
+  }, [st, on]);
 
   if (organize) {
     return (
@@ -126,16 +142,29 @@ function HabitRow({ h, organize, onEdit, onMonth, onUp, onDown }: {
     <li className="flex items-center gap-1.5">
       <button onClick={() => (h.target ? actions.setHabitCount(h.id, on ? 0 : h.target) : actions.toggleHabit(h.id))} aria-pressed={on}
         aria-label={on ? `Desmarcar ${h.name}` : `Marcar ${h.name}`} className="press shrink-0 grid place-items-center size-11">
-        <span className={cx('grid place-items-center size-7 rounded-full border-2 transition-colors', on ? 'bg-orange border-orange text-white' : 'border-ink/20')}>
-          {on && <LuCheck size={16} strokeWidth={3} />}
-        </span>
+        {h.target && !on ? (
+          <ProgressRing value={count / h.target} size={30} stroke={3.5}>
+            <span className="text-[10px] font-semibold text-ink tabular-nums">{count}</span>
+          </ProgressRing>
+        ) : (
+          <span key={String(on)} className={cx('grid place-items-center size-7 rounded-full border-2 transition-colors', on ? 'bg-orange border-orange text-white check-pop' : 'border-ink/20')}>
+            {on && <LuCheck size={16} strokeWidth={3} />}
+          </span>
+        )}
       </button>
+      {milestone && (
+        <div role="status" className="fixed z-[90] left-1/2 top-1/3 -translate-x-1/2 rounded-[28px] bg-ink text-on-ink px-7 py-6 text-center shadow-[var(--shadow-3)] animate-pop pointer-events-none">
+          <LuFlame size={40} className="mx-auto text-orange check-pop" />
+          <p className="num text-[40px] mt-1">{milestone} dias</p>
+          <p className="text-[14px] opacity-70 max-w-[220px]">seguidos de {h.name}. Que sequência!</p>
+        </div>
+      )}
       <button onClick={onMonth} className="flex-1 min-w-0 text-left py-2">
         <span className={cx('block text-[15.5px] truncate', on ? 'text-muted line-through decoration-ink/25' : 'text-ink')}>{h.name}</span>
-        <span className="flex items-center gap-1.5 text-[12.5px] text-muted">
-          {sub}{h.reminder && <><LuBell size={11} /> {h.reminder}</>}
+        <span className="flex items-center gap-1.5 text-[12.5px] text-muted min-w-0">
+          <span className="shrink-0 grid place-items-center size-[18px] rounded-md" style={{ background: cat.color + '22', color: cat.color }}><cat.Icon size={11} /></span>
+          <span className="truncate">{sub}</span>{h.reminder && <span className="shrink-0 flex items-center gap-1"><LuBell size={11} /> {h.reminder}</span>}
         </span>
-        {h.target ? <span className="block mt-1.5 max-w-[220px]"><ProgressBar value={count / h.target} height={4} /></span> : null}
       </button>
       {h.target ? (
         <div className="flex items-center gap-1 shrink-0">
@@ -210,7 +239,7 @@ function MonthModal({ habit, onClose }: { habit: Habit; onClose: () => void }) {
     <Modal open onClose={onClose} title={habit.name}>
       <div className="grid grid-cols-3 gap-2 mb-5">
         {[['Este mês', `${doneN} dias`], ['Conclusão', `${pct}%`], ['Melhor sequência', `${best}`]].map(([l, v]) => (
-          <div key={l} className="rounded-2xl bg-cream px-3 py-2.5"><p className="text-[12px] text-muted">{l}</p><p className="text-[18px] font-semibold text-ink tabular-nums">{v}</p></div>
+          <div key={l} className="rounded-2xl bg-cream px-3 py-2.5"><p className="text-[12px] text-muted">{l}</p><p className="text-[18px] num text-ink">{v}</p></div>
         ))}
       </div>
       <div className="flex items-center justify-between mb-3">
@@ -303,12 +332,12 @@ function MonthHeatmap({ habits }: { habits: Habit[] }) {
       </div>
 
       <div className="grid grid-cols-3 gap-2 mt-4">
-        <div className="rounded-2xl bg-cream px-3 py-2.5"><p className="text-[12px] text-muted">Média</p><p className="text-[18px] font-semibold text-ink tabular-nums">{avg}%</p></div>
-        <div className="rounded-2xl bg-cream px-3 py-2.5"><p className="text-[12px] text-muted">Dias 100%</p><p className="text-[18px] font-semibold text-ink tabular-nums">{full}</p></div>
-        <div className="rounded-2xl bg-cream px-3 py-2.5"><p className="text-[12px] text-muted">Dias</p><p className="text-[18px] font-semibold text-ink tabular-nums">{vals.length}</p></div>
+        <div className="rounded-2xl bg-cream px-3 py-2.5"><p className="text-[12px] text-muted">Média</p><p className="text-[18px] num text-ink">{avg}%</p></div>
+        <div className="rounded-2xl bg-cream px-3 py-2.5"><p className="text-[12px] text-muted">Dias 100%</p><p className="text-[18px] num text-ink">{full}</p></div>
+        <div className="rounded-2xl bg-cream px-3 py-2.5"><p className="text-[12px] text-muted">Dias</p><p className="text-[18px] num text-ink">{vals.length}</p></div>
       </div>
 
-      <div className="grid grid-cols-7 gap-1.5 text-center mt-4">
+      <div key={filter + first} className="grid grid-cols-7 gap-1.5 text-center mt-4 animate-fade">
         {['S', 'T', 'Q', 'Q', 'S', 'S', 'D'].map((d, i) => <span key={i} className="text-[11px] text-muted pb-0.5">{d}</span>)}
         {[...Array(lead)].map((_, i) => <span key={'l' + i} />)}
         {days.map((d) => {
@@ -316,7 +345,7 @@ function MonthHeatmap({ habits }: { habits: Habit[] }) {
           const strong = v != null && v >= 0.6;
           return (
             <button key={d} disabled={d > today} onClick={() => setSel(sel === d ? null : d)}
-              className={cx('press aspect-square rounded-[10px] grid place-items-center text-[12.5px] tabular-nums transition-shadow',
+              className={cx('press aspect-square rounded-[10px] grid place-items-center text-[12.5px] tabular-nums transition-[box-shadow,background-color] duration-500',
                 v == null ? 'bg-ink/[0.04] text-ink/30' : strong ? 'text-white font-semibold' : 'text-ink/75',
                 d === today && 'ring-2 ring-ink/50', sel === d && 'ring-2 ring-ink', d > today && 'opacity-40')}
               style={v != null ? { background: heatColor(v) } : undefined}>

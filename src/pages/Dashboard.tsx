@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  LuApple, LuCheck, LuChevronRight, LuDumbbell, LuListChecks, LuMoon, LuPlus, LuScale, LuCamera,
+  LuApple, LuArrowRight, LuCheck, LuChevronRight, LuDumbbell, LuListChecks, LuMoon, LuPlus, LuScale, LuCamera, LuSun, LuSunrise, LuSunset,
 } from 'react-icons/lu';
 import { useStore } from '../store';
 import type { TabId } from '../types';
@@ -8,7 +8,8 @@ import {
   activeHabits, addDays, dayScore, fmtLong, fmtWeekdayShort, greeting, isHabitDone, lastNDays, mealLabel, mealsOn, nf,
   overallStreak, relDay, sessionProgress, todayKey, weekday, isHabitScheduled, habitCount, weekDoneCount, dueHabits,
 } from '../utils';
-import { Card, cx, ProgressBar, ProgressRing } from '../components/ui';
+import { Card, cx, ProgressBar, ProgressRing, useCountUp } from '../components/ui';
+import { Sparkline } from '../components/charts';
 import { Thumb } from './Nutrition';
 import { WaterCard } from '../components/Water';
 import { buildReport, summaryWeek } from '../report';
@@ -31,8 +32,10 @@ export default function Dashboard({ go }: { go: (t: TabId) => void }) {
   return (
     <div className="space-y-4 md:space-y-5">
       <header className="pt-1">
-        <p className="text-[14px] text-muted">{fmtLong(today)}</p>
-        <h1 className="text-[28px] md:text-[36px] font-semibold tracking-[-0.035em] leading-tight text-ink">
+        <p className="eyebrow flex items-center gap-1.5">
+          <GreetIcon /> {fmtLong(today)}
+        </p>
+        <h1 className="text-[30px] md:text-[38px] font-[650] tracking-[-0.04em] leading-tight text-ink mt-1.5">
           {greeting()}{name ? `, ${name}` : ''}
         </h1>
       </header>
@@ -56,10 +59,16 @@ export default function Dashboard({ go }: { go: (t: TabId) => void }) {
 }
 
 /* ── peças comuns ─────────────────────────────────────────── */
+function GreetIcon() {
+  const h = new Date().getHours();
+  const I = h < 5 || h >= 19 ? LuMoon : h < 9 ? LuSunrise : h < 17 ? LuSun : LuSunset;
+  return <I size={13} className="text-orange" />;
+}
+
 function SectionTitle({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
   return (
     <div className="flex items-center justify-between mb-3">
-      <h2 className="text-[16px] font-semibold tracking-[-0.01em] text-ink">{title}</h2>
+      <h2 className="t-section text-ink">{title}</h2>
       {action && (
         <button onClick={onAction} className="press flex items-center gap-0.5 text-[13.5px] text-muted hover:text-ink">
           {action} <LuChevronRight size={15} />
@@ -113,20 +122,43 @@ function TodayCard({ go }: { go: (t: TabId) => void }) {
   ];
 
   const color = score.total >= 80 ? 'var(--color-good)' : 'var(--color-orange)';
+  const shown = Math.round(useCountUp(score.total));
+
+  // mensagem do dia em tom humano
+  const pending = rows.filter((r) => !r.done);
+  const habitsLeft = habits.length - habitsDone;
+  const parts: string[] = [];
+  if (!workout.done && split) parts.push(session ? 'terminar o treino' : 'o treino');
+  if (habitsLeft > 0) parts.push(habitsLeft === 1 ? '1 hábito' : `${habitsLeft} hábitos`);
+  if (meals.length < mealGoal) parts.push(mealGoal - meals.length === 1 ? '1 refeição' : `${mealGoal - meals.length} refeições`);
+  const msg = score.total >= 100 ? 'Dia completo. Mandou muito bem!'
+    : score.total >= 75 ? `Ótimo ritmo! Falta só ${parts.join(' e ') || 'um detalhe'}.`
+      : score.total === 0 && new Date().getHours() < 12 ? 'Um dia novo pela frente. Comece pelo mais fácil.'
+        : parts.length ? `Dia em andamento: faltam ${parts.slice(0, 2).join(' e ')}.` : 'Dia tranquilo por aqui.';
+  const next = pending.find((r) => r.action);
 
   return (
     <Card className="p-5 md:p-6">
       <div className="flex items-center gap-4">
-        <ProgressRing value={score.total / 100} size={84} stroke={8} color={color}>
-          <span className="text-[22px] font-semibold tracking-[-0.03em] text-ink tabular-nums">{score.total}%</span>
+        <ProgressRing value={score.total / 100} size={104} stroke={10} color={color}>
+          <span className="num text-[28px] text-ink leading-none">{shown}<span className="unit">%</span></span>
         </ProgressRing>
         <div className="min-w-0">
-          <h2 className="text-[18px] font-semibold tracking-[-0.01em] text-ink">Seu dia</h2>
-          <p className="text-[13.5px] text-muted leading-snug mt-0.5">
-            {score.total >= 100 ? 'Tudo feito hoje. Mandou bem!' : 'O score sobe conforme você completa as metas abaixo.'}
-          </p>
+          <p className="eyebrow">Seu dia</p>
+          <p className="text-[16px] font-medium text-ink leading-snug mt-1 tracking-[-0.01em]">{msg}</p>
         </div>
       </div>
+
+      {next && (
+        <button onClick={next.onAction} className="press mt-4 w-full flex items-center gap-3 rounded-2xl bg-blush/55 px-4 py-3 text-left">
+          <span className="grid place-items-center size-9 rounded-full bg-orange text-white shrink-0">{next.icon}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block eyebrow !text-orange">Próximo passo</span>
+            <span className="block text-[14.5px] font-medium text-ink truncate">{next.action} · {next.title}</span>
+          </span>
+          <LuArrowRight size={18} className="text-orange shrink-0" />
+        </button>
+      )}
 
       <ul className="mt-5 divide-y divide-line">
         {rows.map((r) => (
@@ -174,7 +206,7 @@ function HabitsCard({ go }: { go: (t: TabId) => void }) {
                 <button onClick={() => (h.target ? actions.setHabitCount(h.id, habitCount(state, h.id, today) + 1) : actions.toggleHabit(h.id))} aria-pressed={done}
                   className="press w-full flex items-center gap-3 h-12 px-3 rounded-2xl hover:bg-cream transition-colors text-left">
                   <span className={cx('grid place-items-center size-6 rounded-full border-2 shrink-0 transition-colors',
-                    done ? 'bg-orange border-orange text-white' : 'border-ink/20')}>
+                    done ? 'bg-orange border-orange text-white check-pop' : 'border-ink/20')} key={String(done)}>
                     {done && <LuCheck size={14} strokeWidth={3} />}
                   </span>
                   <span className={cx('flex-1 text-[15px] truncate', done ? 'text-muted line-through decoration-ink/25' : 'text-ink')}>{h.name}</span>
@@ -229,15 +261,15 @@ function WeekCard() {
   return (
     <Card className="p-5 md:p-6">
       <div className="flex items-baseline justify-between mb-4">
-        <h2 className="text-[16px] font-semibold tracking-[-0.01em] text-ink">Sua semana</h2>
+        <h2 className="t-section text-ink">Sua semana</h2>
         <p className="text-[13px] text-muted">média <b className="text-ink font-semibold tabular-nums">{avg}%</b> · {workouts} {workouts === 1 ? 'treino' : 'treinos'}</p>
       </div>
       <div className="grid grid-cols-7 gap-2 items-end">
-        {days.map(({ d, s }) => (
+        {days.map(({ d, s }, i) => (
           <div key={d} className="flex flex-col items-center gap-1.5">
-            <span className="text-[11px] text-muted tabular-nums">{s}</span>
+            <span className={cx('text-[11px] tabular-nums', s >= 100 ? 'text-good font-semibold' : 'text-muted')}>{s}</span>
             <div className="w-full max-w-[34px] h-20 rounded-xl bg-cream flex items-end overflow-hidden">
-              <div className={cx('w-full rounded-xl transition-all', d === today ? 'bg-orange' : 'bg-ink/80')} style={{ height: `${Math.max(4, s)}%` }} />
+              <div className={cx('w-full rounded-xl rise', d === today ? 'bg-orange' : s >= 100 ? 'bg-good/85' : 'bg-ink/80')} style={{ height: `${Math.max(4, s)}%`, animationDelay: `${i * 45}ms` }} />
             </div>
             <span className={cx('text-[12px] capitalize', d === today ? 'text-ink font-semibold' : 'text-muted')}>{d === today ? 'Hoje' : fmtWeekdayShort(d)}</span>
           </div>
@@ -251,28 +283,42 @@ function WeekCard() {
 function BodyCard({ go }: { go: (t: TabId) => void }) {
   const { state } = useStore();
   const body = [...state.body].filter((b) => b.weight != null).sort((a, b) => (a.date < b.date ? 1 : -1));
-  const sleep = [...state.sleep].sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+  const sleeps = [...state.sleep].sort((a, b) => (a.date < b.date ? 1 : -1));
+  const sleep = sleeps[0];
   const w0 = body[0]?.weight, w1 = body[1]?.weight;
   const diff = w0 != null && w1 != null ? w0 - w1 : null;
+  const goalW = state.goals.weight;
+  // a diferença é "boa" quando aproxima da meta (ou, sem meta, quando é pequena)
+  const good = diff == null ? null : goalW != null && w0 != null ? Math.abs(w0 - goalW) <= Math.abs((w1 ?? w0) - goalW) : Math.abs(diff) < 0.5;
+  const wVals = body.slice(0, 10).reverse().map((b) => b.weight!);
+  const sVals = sleeps.slice(0, 10).reverse().map((x) => x.hours);
   return (
     <Card className="p-5 md:p-6">
       <SectionTitle title="Corpo e sono" action="Registros" onAction={() => go('registros')} />
       <div className="grid grid-cols-2 gap-3">
-        <button onClick={() => go('registros')} className="press rounded-2xl bg-cream p-4 text-left">
-          <p className="text-[13px] text-muted flex items-center gap-1.5"><LuScale size={14} /> Peso</p>
-          <p className="text-[24px] font-semibold tracking-[-0.03em] text-ink tabular-nums mt-1">
-            {w0 != null ? nf(w0, 1) : '—'}<span className="text-[13px] font-normal text-muted ml-1">kg</span>
+        <button onClick={() => go('registros')} className="press rounded-2xl bg-cream p-4 text-left min-w-0">
+          <p className="eyebrow flex items-center gap-1.5"><LuScale size={12} /> Peso</p>
+          <p className="num text-[26px] text-ink mt-1.5 leading-none">
+            {w0 != null ? nf(w0, 1) : '—'}<span className="unit">kg</span>
           </p>
-          <p className="text-[12px] text-muted mt-0.5 truncate">
-            {diff != null ? `${diff > 0 ? '+' : ''}${nf(diff, 1)} kg vs anterior` : body[0] ? relDay(body[0].date) : 'Toque para registrar'}
-          </p>
+          <div className="flex items-end justify-between gap-2 mt-2">
+            <p className={cx('text-[12px] font-medium truncate', diff == null ? 'text-muted' : good ? 'text-good' : 'text-warn')}>
+              {diff != null ? `${diff > 0 ? '+' : ''}${nf(diff, 1)} kg` : body[0] ? relDay(body[0].date) : 'Registrar'}
+            </p>
+            <Sparkline values={wVals} width={56} height={22} color="var(--color-ink)" />
+          </div>
         </button>
-        <button onClick={() => go('registros')} className="press rounded-2xl bg-cream p-4 text-left">
-          <p className="text-[13px] text-muted flex items-center gap-1.5"><LuMoon size={14} /> Sono</p>
-          <p className="text-[24px] font-semibold tracking-[-0.03em] text-ink tabular-nums mt-1">
-            {sleep ? nf(sleep.hours, 1) : '—'}<span className="text-[13px] font-normal text-muted ml-1">h</span>
+        <button onClick={() => go('registros')} className="press rounded-2xl bg-cream p-4 text-left min-w-0">
+          <p className="eyebrow flex items-center gap-1.5"><LuMoon size={12} /> Sono</p>
+          <p className="num text-[26px] text-ink mt-1.5 leading-none">
+            {sleep ? nf(sleep.hours, 1) : '—'}<span className="unit">h</span>
           </p>
-          <p className="text-[12px] text-muted mt-0.5 truncate">{sleep ? relDay(sleep.date) : 'Toque para registrar'}</p>
+          <div className="flex items-end justify-between gap-2 mt-2">
+            <p className={cx('text-[12px] font-medium truncate', !sleep ? 'text-muted' : sleep.hours >= (state.goals.sleep || 7) ? 'text-good' : 'text-warn')}>
+              {sleep ? relDay(sleep.date) : 'Registrar'}
+            </p>
+            <Sparkline values={sVals} width={56} height={22} />
+          </div>
         </button>
       </div>
     </Card>
@@ -301,7 +347,7 @@ function SummaryCard({ go }: { go: (t: TabId) => void }) {
       <div className="grid grid-cols-4 gap-2 mt-4">
         {items.map(([l, v]) => (
           <div key={l}>
-            <p className="text-[20px] font-semibold tracking-[-0.02em] tabular-nums">{v}</p>
+            <p className="num text-[20px]">{v}</p>
             <p className="text-[11.5px] opacity-60">{l}</p>
           </div>
         ))}

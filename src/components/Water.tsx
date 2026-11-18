@@ -66,10 +66,10 @@ export function WaterSheet({ open, day, onClose }: { open: boolean; day: string;
     <Modal open={open} onClose={() => { setEditing(false); onClose(); }} title="Água">
       <div className="flex items-center gap-5">
         <ProgressRing value={water / goal} size={104} stroke={9} color={water >= goal ? 'var(--color-good)' : undefined}>
-          <span className="text-[20px] font-semibold tracking-[-0.03em] text-ink tabular-nums">{Math.round((water / goal) * 100)}%</span>
+          <span className="text-[20px] num text-ink">{Math.round((water / goal) * 100)}%</span>
         </ProgressRing>
         <div className="min-w-0">
-          <p className="text-[28px] font-semibold tracking-[-0.03em] text-ink tabular-nums leading-none">{fmtL(water)}</p>
+          <p className="text-[28px] num text-ink leading-none">{fmtL(water)}</p>
           <p className="text-[13.5px] text-muted mt-1">meta de {fmtL(goal)}</p>
           <p className="text-[13.5px] text-ink/70 mt-0.5">{water >= goal ? 'Meta batida 🎉' : `Faltam ${fmtL(goal - water)}`}</p>
         </div>

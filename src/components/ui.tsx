@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { LuTrash2, LuX, LuStar } from 'react-icons/lu';
 
 /* ── Paleta: bege quente + laranja + preto ─────────────────────
@@ -19,6 +19,34 @@ export const ACCENT: Record<Accent, typeof O> = {
 };
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
+
+/** Valor que "rola" até o número final (respeita "reduzir movimento"). */
+export function useCountUp(target: number, ms = 900) {
+  const [v, setV] = useState(0);
+  const from = useRef(0);
+  useEffect(() => {
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) { setV(target); from.current = target; return; }
+    const a = from.current, t0 = performance.now();
+    let raf = 0;
+    const tick = (t: number) => {
+      const k = Math.min(1, (t - t0) / ms);
+      const e = 1 - Math.pow(1 - k, 3);
+      setV(a + (target - a) * e);
+      if (k < 1) raf = requestAnimationFrame(tick); else from.current = target;
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, ms]);
+  return v;
+}
+
+/** true depois do primeiro quadro: usado para animar barras/anéis a partir do zero. */
+export function useMounted() {
+  const [m, setM] = useState(false);
+  useEffect(() => { const r = requestAnimationFrame(() => requestAnimationFrame(() => setM(true))); return () => cancelAnimationFrame(r); }, []);
+  return m;
+}
 
 /* ── Superfícies ───────────────────────────────────────────── */
 export function Card({ children, className, as: Tag = 'section', ...rest }: React.HTMLAttributes<HTMLElement> & { as?: any }) {
@@ -41,8 +69,8 @@ export function CardHeader({ title, right, sub, icon }: {
       <div className="min-w-0 flex items-center gap-2.5">
         {icon && <span className="text-orange shrink-0">{icon}</span>}
         <div className="min-w-0">
-          <h3 className="text-[17px] font-medium tracking-[-0.01em] text-ink leading-snug">{title}</h3>
-          {sub && <p className="text-[13px] text-muted mt-0.5">{sub}</p>}
+          <h3 className="t-section text-ink">{title}</h3>
+          {sub && <p className="t-caption mt-0.5">{sub}</p>}
         </div>
       </div>
       {right}
@@ -54,8 +82,8 @@ export function PageHeader({ title, sub, right }: { title: string; sub?: string;
   return (
     <header className="flex items-end justify-between gap-4 mb-6 md:mb-8">
       <div>
-        <h1 className="text-[32px] md:text-[40px] font-semibold tracking-[-0.035em] text-ink leading-none">{title}</h1>
-        {sub && <p className="text-[15px] text-muted mt-2">{sub}</p>}
+        <h1 className="text-[32px] md:text-[40px] font-[650] tracking-[-0.04em] text-ink leading-none">{title}</h1>
+        {sub && <p className="text-[14.5px] text-muted mt-2">{sub}</p>}
       </div>
       {right}
     </header>
@@ -208,13 +236,14 @@ export function ProgressRing({ value, size = 120, stroke = 10, color = ORANGE, t
 }) {
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
-  const v = Math.max(0, Math.min(1, value));
+  const mounted = useMounted();
+  const v = mounted ? Math.max(0, Math.min(1, value)) : 0;
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" style={{ stroke: track }} strokeWidth={stroke} />
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke} strokeLinecap="round"
-          strokeDasharray={c} strokeDashoffset={c * (1 - v)} style={{ stroke: color, transition: 'stroke-dashoffset .8s cubic-bezier(.2,.8,.2,1)' }} />
+          strokeDasharray={c} strokeDashoffset={c * (1 - v)} style={{ stroke: color, transition: 'stroke-dashoffset 1.1s var(--spring)' }} />
       </svg>
       <div className="absolute inset-0 grid place-items-center text-center">{children}</div>
     </div>
@@ -222,10 +251,11 @@ export function ProgressRing({ value, size = 120, stroke = 10, color = ORANGE, t
 }
 
 export function ProgressBar({ value, color = ORANGE, height = 8, className }: { value: number; color?: string; height?: number; className?: string }) {
-  const v = Math.max(0, Math.min(1, value));
+  const mounted = useMounted();
+  const v = mounted ? Math.max(0, Math.min(1, value)) : 0;
   return (
     <div className={cx('w-full rounded-full bg-cream overflow-hidden', className)} style={{ height }}>
-      <div className="h-full rounded-full" style={{ width: `${v * 100}%`, background: color, transition: 'width .7s cubic-bezier(.2,.8,.2,1)' }} />
+      <div className="h-full rounded-full" style={{ width: `${v * 100}%`, background: color, transition: 'width .9s var(--spring)' }} />
     </div>
   );
 }
@@ -243,12 +273,15 @@ export function Stars({ value, onChange, size = 22, color = ORANGE }: { value: n
   );
 }
 
-/* ── Modal (bottom-sheet no mobile) ────────────────────────── */
+/* ── Modal (bottom-sheet no mobile, arrastável para fechar) ── */
 export function Modal({ open, onClose, title, children, footer }: {
   open: boolean; onClose: () => void; title: string; children: React.ReactNode; accent?: Accent; footer?: React.ReactNode;
 }) {
+  const [dy, setDy] = useState(0);
+  const drag = useRef<{ y: number; t: number } | null>(null);
   useEffect(() => {
     if (!open) return;
+    setDy(0);
     const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', k);
     const prev = document.body.style.overflow;
@@ -256,14 +289,30 @@ export function Modal({ open, onClose, title, children, footer }: {
     return () => { window.removeEventListener('keydown', k); document.body.style.overflow = prev; };
   }, [open, onClose]);
   if (!open) return null;
+  const onDown = (e: React.PointerEvent) => {
+    if (window.matchMedia('(min-width: 768px)').matches) return;
+    if ((e.target as HTMLElement).closest('button')) return;
+    drag.current = { y: e.clientY, t: Date.now() };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+  const onMove = (e: React.PointerEvent) => { if (drag.current) setDy(Math.max(0, e.clientY - drag.current.y)); };
+  const onUp = () => {
+    if (!drag.current) return;
+    const fast = dy / Math.max(1, Date.now() - drag.current.t) > 0.6;
+    drag.current = null;
+    if (dy > 120 || (fast && dy > 40)) { setDy(window.innerHeight); setTimeout(onClose, 180); } else setDy(0);
+  };
   return (
     <div className="fixed inset-0 z-[60] flex items-end md:items-center justify-center" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="absolute inset-0 bg-ink/30 animate-fade" onClick={onClose} />
-      <div className="relative w-full md:max-w-lg max-h-[92dvh] flex flex-col rounded-t-[28px] md:rounded-[28px] bg-surface shadow-2xl animate-sheet">
-        <div className="md:hidden mx-auto mt-3 h-1 w-10 rounded-full bg-ink/15" />
-        <div className="flex items-center justify-between px-6 pt-5 pb-3">
-          <h2 className="text-xl font-semibold tracking-[-0.02em] text-ink">{title}</h2>
-          <RoundButton label="Fechar" className="size-10" onClick={onClose}><LuX size={17} /></RoundButton>
+      <div className="absolute inset-0 bg-ink/35 animate-fade" style={{ opacity: Math.max(0, 1 - dy / 400) }} onClick={onClose} />
+      <div className="relative w-full md:max-w-lg max-h-[92dvh] flex flex-col rounded-t-[30px] md:rounded-[30px] bg-surface shadow-[var(--shadow-3)] animate-sheet"
+        style={{ transform: dy ? `translateY(${dy}px)` : undefined, transition: drag.current ? 'none' : 'transform .45s var(--spring)' }}>
+        <div className="touch-none select-none" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
+          <div className="md:hidden mx-auto mt-2.5 h-1.5 w-11 rounded-full bg-ink/15" />
+          <div className="flex items-center justify-between px-6 pt-4 pb-3">
+            <h2 className="text-[21px] font-[650] tracking-[-0.025em] text-ink">{title}</h2>
+            <RoundButton label="Fechar" className="size-10" onClick={onClose}><LuX size={17} /></RoundButton>
+          </div>
         </div>
         <div className="px-6 pb-5 overflow-y-auto overscroll-contain min-h-0 flex-1">{children}</div>
         {footer && <div className="shrink-0 px-6 py-4 border-t border-line flex gap-2 justify-end pb-[max(1rem,var(--sab))]">{footer}</div>}
@@ -274,10 +323,22 @@ export function Modal({ open, onClose, title, children, footer }: {
 
 export function Empty({ icon, title, text, action }: { icon: React.ReactNode; title: string; text?: string; action?: React.ReactNode }) {
   return (
-    <div className="flex flex-col items-center text-center py-10 px-4 gap-2">
-      <div className="grid place-items-center size-12 rounded-full bg-cream text-ink/40 mb-1">{icon}</div>
-      <p className="text-[15px] font-medium text-ink">{title}</p>
-      {text && <p className="text-[13px] text-muted max-w-xs">{text}</p>}
+    <div className="flex flex-col items-center text-center py-9 px-4 gap-2">
+      {/* ilustração simples: halos concêntricos, pontinhos e o ícone no centro */}
+      <div className="relative size-28 mb-2" aria-hidden>
+        <svg viewBox="0 0 112 112" className="absolute inset-0">
+          <circle cx="56" cy="56" r="54" fill="var(--color-blush)" opacity=".35" />
+          <circle cx="56" cy="56" r="40" fill="var(--color-blush)" opacity=".6" />
+          <circle cx="56" cy="56" r="27" fill="var(--color-surface)" />
+          <circle cx="18" cy="30" r="3" fill="var(--color-orange)" opacity=".5" />
+          <circle cx="96" cy="24" r="2" fill="var(--color-orange)" opacity=".7" />
+          <circle cx="94" cy="88" r="3.5" fill="var(--color-peach)" />
+          <path d="M22 84 l2 -5 l2 5 l5 2 l-5 2 l-2 5 l-2 -5 l-5 -2 z" fill="var(--color-orange)" opacity=".55" />
+        </svg>
+        <div className="absolute inset-0 grid place-items-center text-orange empty-ico">{icon}</div>
+      </div>
+      <p className="text-[16px] font-semibold tracking-[-0.01em] text-ink">{title}</p>
+      {text && <p className="text-[13.5px] text-muted max-w-xs leading-relaxed">{text}</p>}
       {action && <div className="mt-3">{action}</div>}
     </div>
   );
@@ -287,11 +348,11 @@ export function Segmented<T extends string>({ value, onChange, options }: {
   value: T; onChange: (v: T) => void; options: { value: T; label: React.ReactNode }[]; accent?: Accent;
 }) {
   return (
-    <div className="inline-flex p-1 rounded-full bg-surface gap-1 w-full md:w-auto">
+    <div className="inline-flex p-1 rounded-full glass gap-1 w-full md:w-auto">
       {options.map((o) => (
         <button key={o.value} type="button" onClick={() => onChange(o.value)}
           className={cx('press flex-1 min-w-0 md:flex-none h-10 px-2 sm:px-5 rounded-full text-[13.5px] sm:text-[14px] font-medium transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap',
-            value === o.value ? 'bg-ink text-on-ink' : 'text-ink/55 hover:text-ink')}>
+            value === o.value ? 'bg-ink text-on-ink shadow-[var(--shadow-1)]' : 'text-ink/55 hover:text-ink')}>
           {o.label}
         </button>
       ))}
@@ -303,8 +364,8 @@ export function Stat({ label, value, unit, className }: { label: string; value: 
   return (
     <div className={cx('min-w-0', className)}>
       <p className="text-[13px] text-muted">{label}</p>
-      <p className="text-xl font-medium tracking-[-0.02em] text-ink tabular-nums">
-        {value}{unit && <span className="text-sm font-normal text-muted ml-1">{unit}</span>}
+      <p className="num text-[22px] text-ink">
+        {value}{unit && <span className="unit">{unit}</span>}
       </p>
     </div>
   );

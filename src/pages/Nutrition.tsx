@@ -68,9 +68,9 @@ export default function Nutrition() {
 
           <div className="grid lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] gap-4 md:gap-5 mb-4 md:mb-5">
             <Card className="p-5 md:p-7">
-              <p className="text-[17px] text-ink">Refeições {isToday ? 'de hoje' : 'do dia'}</p>
+              <p className="eyebrow">Refeições {isToday ? 'de hoje' : 'do dia'}</p>
               <p className="mt-4 flex items-baseline gap-2.5">
-                <span className="text-[52px] md:text-[60px] font-medium tracking-[-0.05em] leading-none text-ink tabular-nums">{meals.length}</span>
+                <span className="num text-[56px] md:text-[64px] leading-none text-ink">{meals.length}</span>
                 <span className="text-[15px] text-muted">de {goal} registradas</span>
               </p>
               <div className="flex flex-wrap gap-2 mt-5">
@@ -96,7 +96,8 @@ export default function Nutrition() {
                 action={<Button variant="primary" onClick={() => setModal({})}><LuPlus size={16} /> Registrar refeição</Button>} />
             </Card>
           ) : (
-            <ol className="relative space-y-3 md:space-y-4">
+            <ol className="relative space-y-4 md:space-y-5">
+              <span aria-hidden className="absolute left-[25px] top-3 bottom-3 w-0.5 rounded-full bg-ink/10" />
               {meals.map((m) => (
                 <MealCard key={m.id} meal={m} onEdit={() => setModal({ meal: m })} onOpenPhoto={(i) => setViewer({ ids: m.photos, i })}
                   onRepeat={() => { actions.addMeal({ date: todayKey(), time: nowHHMM(), kind: m.kind, description: m.description, photos: [] }); setDay(todayKey()); toast('Refeição repetida hoje'); }} />
@@ -127,30 +128,31 @@ export default function Nutrition() {
 function MealCard({ meal, onEdit, onOpenPhoto, onRepeat }: { meal: MealLog; onEdit: () => void; onOpenPhoto: (i: number) => void; onRepeat: () => void }) {
   const first = meal.photos[0];
   return (
-    <li>
-      <Card className="p-3 md:p-4 flex gap-3 md:gap-4">
-        {first ? (
-          <button onClick={() => onOpenPhoto(0)} className="press relative shrink-0" aria-label="Ver foto">
-            <Thumb id={first} className="size-20 min-[360px]:size-24 md:size-28 rounded-[20px]" />
+    <li className="relative grid grid-cols-[52px_minmax(0,1fr)] gap-2.5 animate-pop">
+      {/* linha do tempo: hora + ponto */}
+      <div className="flex flex-col items-center pt-3">
+        <span className="relative z-10 size-3.5 rounded-full bg-orange ring-4 ring-canvas" />
+        <span className="num text-[13px] text-ink mt-1.5">{meal.time}</span>
+      </div>
+      <Card className="overflow-hidden">
+        {first && (
+          <button onClick={() => onOpenPhoto(0)} className="press relative block w-full" aria-label="Ver foto">
+            <Thumb id={first} className="w-full aspect-[4/3]" />
             {meal.photos.length > 1 && (
-              <span className="absolute bottom-1.5 right-1.5 h-6 px-2 rounded-full bg-ink/80 text-white text-[11px] font-semibold grid place-items-center">+{meal.photos.length - 1}</span>
+              <span className="absolute bottom-2.5 right-2.5 h-7 px-2.5 rounded-full nav-glass text-ink text-[12px] font-semibold grid place-items-center">+{meal.photos.length - 1} fotos</span>
             )}
           </button>
-        ) : (
-          <button onClick={onEdit} className="press size-20 min-[360px]:size-24 md:size-28 rounded-[20px] bg-cream grid place-items-center text-ink/30 shrink-0" aria-label="Adicionar foto">
-            <LuCamera size={22} />
-          </button>
         )}
-        <div className="flex-1 min-w-0 py-1">
+        <div className="p-4">
           <div className="flex items-center gap-2">
-            <span className="min-w-0 truncate h-6 leading-6 px-2.5 rounded-full bg-blush/70 text-orange text-[12px] font-medium">{mealLabel(meal.kind)}</span>
-            <span className="shrink-0 text-[13px] text-muted tabular-nums">{meal.time}</span>
-            <span className="ml-auto shrink-0 flex -mr-1 -mt-1">
+            <span className="min-w-0 truncate h-6 leading-6 px-2.5 rounded-full bg-blush/70 text-orange text-[12px] font-semibold">{mealLabel(meal.kind)}</span>
+            <span className="ml-auto shrink-0 flex -mr-1.5 -my-1">
+              {!first && <IconButton label="Adicionar foto" className="size-8" onClick={onEdit}><LuCamera size={14} /></IconButton>}
               <IconButton label="Repetir agora" className="size-8" onClick={onRepeat}><LuRepeat size={14} /></IconButton>
               <IconButton label="Editar" className="size-8" onClick={onEdit}><LuPencil size={14} /></IconButton>
             </span>
           </div>
-          <p className="text-[15px] md:text-[16px] text-ink mt-2 leading-snug line-clamp-3">{meal.description || <span className="text-muted">Sem descrição</span>}</p>
+          <p className="text-[15.5px] text-ink mt-2 leading-snug line-clamp-3">{meal.description || <span className="text-muted">Sem descrição</span>}</p>
           {meal.note && <p className="text-[13px] text-muted mt-1.5 line-clamp-2">{meal.note}</p>}
         </div>
       </Card>
@@ -163,7 +165,7 @@ export function Thumb({ id, className }: { id: string; className?: string }) {
   return (
     <div className={cx('bg-cream overflow-hidden grid place-items-center text-ink/30', className)}>
       {url ? <img src={url} alt="Foto da refeição" className="size-full object-cover" draggable={false} />
-        : missing ? <LuImageOff size={20} /> : <LuLoaderCircle size={18} className="animate-spin" />}
+        : missing ? <LuImageOff size={20} /> : <span className="skeleton size-full !rounded-none" />}
     </div>
   );
 }
@@ -194,7 +196,7 @@ function Gallery({ onOpen, onEdit }: { onOpen: (ids: string[], i: number) => voi
               {all.map(({ p, m }, i) => (
                 <button key={p} onClick={() => onOpen(ids, i)} onContextMenu={(e) => { e.preventDefault(); onEdit(m); }}
                   className="press relative aspect-square">
-                  <Thumb id={p} className="size-full rounded-[18px]" />
+                  <Thumb id={p} className="size-full rounded-[18px] shadow-[var(--shadow-2)] ring-1 ring-black/5" />
                   <span className="absolute left-1.5 bottom-1.5 h-5 px-2 rounded-full bg-surface/90 text-ink text-[10.5px] font-medium grid place-items-center">
                     {mealLabel(m.kind)} · {m.time}
                   </span>

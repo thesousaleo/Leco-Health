@@ -62,6 +62,16 @@ jobs:
           PY
           grep -n -A3 "signingConfigs" android/app/build.gradle
 
+      - name: Ícone monocromático (Android 13+)
+        run: |
+          mkdir -p android/app/src/main/res/drawable
+          cp android-res/ic_launcher_monochrome.xml android/app/src/main/res/drawable/
+          for f in android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml; do
+            [ -f "$f" ] || continue
+            grep -q monochrome "$f" || sed -i 's#</adaptive-icon>#    <monochrome android:drawable="@drawable/ic_launcher_monochrome"/>\n</adaptive-icon>#' "$f"
+            cat "$f"
+          done
+
       - name: Tela infinita e tamanho de texto fixo (MainActivity)
         run: |
           f=$(find android/app/src/main/java -name MainActivity.java | head -1)

@@ -65,22 +65,31 @@ function Weight() {
     toast(`${nf(w, 1)} kg registrado`);
   };
 
-  const Delta = ({ v, label }: { v?: number; label: string }) => (
-    <div className="rounded-2xl bg-cream px-4 py-3">
-      <p className="text-[12.5px] text-muted">{label}</p>
-      <p className="text-[18px] font-semibold tracking-[-0.02em] text-ink tabular-nums flex items-center gap-1">
-        {v == null ? '—' : <>{v < 0 ? <LuTrendingDown size={16} className="text-good" /> : v > 0 ? <LuTrendingUp size={16} className="text-orange" /> : null}{v > 0 ? '+' : ''}{nf(v, 1)} kg</>}
-      </p>
-    </div>
-  );
+  // a variação é "boa" quando aproxima da meta; sem meta, fica neutra
+  const tone = (v?: number) => {
+    if (v == null || Math.abs(v) < 0.05 || goal == null || !last) return 'neutral';
+    const want = Math.sign(goal - last.weight!) || -Math.sign(v);
+    return Math.sign(v) === want ? 'good' : 'warn';
+  };
+  const Delta = ({ v, label }: { v?: number; label: string }) => {
+    const t = tone(v);
+    return (
+      <div className={cx('rounded-2xl px-4 py-3', t === 'good' ? 'bg-good/10' : t === 'warn' ? 'bg-warn/10' : 'bg-cream')}>
+        <p className="text-[12.5px] text-muted">{label}</p>
+        <p className={cx('text-[18px] num flex items-center gap-1', t === 'good' ? 'text-good' : t === 'warn' ? 'text-warn' : 'text-ink')}>
+          {v == null ? '—' : <>{v < 0 ? <LuTrendingDown size={16} /> : v > 0 ? <LuTrendingUp size={16} /> : null}{v > 0 ? '+' : ''}{nf(v, 1)}<span className="unit">kg</span></>}
+        </p>
+      </div>
+    );
+  };
 
   return (
     <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] gap-4 md:gap-5 items-start">
       <div className="space-y-4 md:space-y-5">
         <Card className="p-5 md:p-6">
-          <p className="text-[14px] text-muted">Peso atual</p>
-          <p className="text-[48px] font-semibold tracking-[-0.045em] text-ink tabular-nums leading-none mt-1">
-            {last ? nf(last.weight!, 1) : '—'}<span className="text-[18px] font-normal text-muted tracking-normal ml-1.5">kg</span>
+          <p className="eyebrow">Peso atual</p>
+          <p className="num text-[56px] text-ink leading-none mt-2">
+            {last ? nf(last.weight!, 1) : '—'}<span className="unit">kg</span>
           </p>
           <p className="text-[13px] text-muted mt-1.5">{last ? `registrado ${relDay(last.date).toLowerCase()}` : 'Nenhum registro ainda'}</p>
           <div className="grid grid-cols-2 gap-2 mt-5">
@@ -214,7 +223,7 @@ function Sleep() {
         </div>
         <div className="mt-3 rounded-2xl bg-cream px-4 py-3 flex items-baseline justify-between">
           <span className="text-[13.5px] text-muted">Tempo de sono</span>
-          <span className="text-[22px] font-semibold tracking-[-0.02em] text-ink tabular-nums">
+          <span className="text-[22px] num text-ink">
             {Math.floor(hours)}h{String(Math.round((hours % 1) * 60)).padStart(2, '0')}
             <span className={cx('text-[12.5px] font-normal ml-2', hours >= goal ? 'text-good' : 'text-muted')}>{hours >= goal ? 'meta ✓' : `meta ${goal}h`}</span>
           </span>
@@ -274,7 +283,7 @@ function Sleep() {
             ].map(([l, v]) => (
               <div key={l} className="rounded-2xl bg-cream px-4 py-3">
                 <p className="text-[12.5px] text-muted">{l}</p>
-                <p className="text-[19px] font-semibold tracking-[-0.02em] text-ink tabular-nums">{v}</p>
+                <p className="text-[19px] num text-ink">{v}</p>
               </div>
             ))}
           </div>
@@ -284,6 +293,8 @@ function Sleep() {
           </div>
           <p className="text-[12px] text-muted">Linha tracejada = meta de {goal}h (altere em Ajustes → Metas).</p>
         </Card>
+
+        <NightBands />
 
         <SleepInsights />
 
@@ -307,6 +318,58 @@ function Sleep() {
         </Card>
       </div>
     </div>
+  );
+}
+
+/* ── Faixa das noites (estilo Oura): quando dormiu e acordou ── */
+function NightBands() {
+  const { state } = useStore();
+  const goal = state.goals.sleep || 8;
+  const nights = lastNDays(7).map((d) => ({ d, s: state.sleep.find((x) => x.date === d) }));
+  // eixo das 20h de um dia às 12h do outro (16 h)
+  const toPos = (hhmm?: string) => {
+    if (!hhmm) return null;
+    const [h, m] = hhmm.split(':').map(Number);
+    let t = h + m / 60; if (t < 20) t += 24;
+    return Math.max(0, Math.min(1, (t - 20) / 16));
+  };
+  if (!nights.some((n) => n.s?.bedtime)) return null;
+  return (
+    <Card className="p-5 md:p-6">
+      <p className="t-section text-ink">Suas noites</p>
+      <p className="t-caption mt-0.5 mb-4">Quando você dormiu e acordou em cada noite.</p>
+      <div className="relative">
+        <div className="grid grid-cols-[34px_1fr_44px] gap-2 text-[10.5px] text-muted mb-1.5">
+          <span />
+          <div className="flex justify-between">{['20h', '0h', '4h', '8h', '12h'].map((l) => <span key={l}>{l}</span>)}</div>
+          <span />
+        </div>
+        <div className="space-y-2">
+          {nights.map(({ d, s }, i) => {
+            const a = toPos(s?.bedtime), b = toPos(s?.wake);
+            const ok = s && s.hours >= goal;
+            return (
+              <div key={d} className="grid grid-cols-[34px_1fr_44px] gap-2 items-center">
+                <span className="text-[12px] text-muted capitalize">{fmtWeekdayShort(d).slice(0, 3)}</span>
+                <div className="relative h-6 rounded-full bg-cream overflow-hidden">
+                  {[0.25, 0.5, 0.75].map((x) => <span key={x} className="absolute top-0 bottom-0 w-px bg-ink/[0.06]" style={{ left: `${x * 100}%` }} />)}
+                  {a != null && b != null && b > a && (
+                    <span className="absolute top-1 bottom-1 rounded-full rise origin-left"
+                      style={{ left: `${a * 100}%`, width: `${(b - a) * 100}%`, background: ok ? 'var(--color-good)' : 'var(--color-orange)', opacity: 0.55 + ((s?.quality ?? 3) / 5) * 0.45, animationName: 'none', transition: 'width .8s var(--spring)', transitionDelay: `${i * 40}ms` }} />
+                  )}
+                </div>
+                <span className={cx('num text-[12.5px] text-right', ok ? 'text-good' : 'text-ink')}>{s ? `${nf(s.hours, 1)}h` : '—'}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 text-[11.5px] text-muted">
+          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-good" /> na meta</span>
+          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-orange" /> abaixo da meta</span>
+          <span>cor mais forte = noite melhor</span>
+        </div>
+      </div>
+    </Card>
   );
 }
 

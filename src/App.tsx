@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { LuActivity, LuApple, LuDumbbell, LuHouse, LuListChecks, LuSettings, LuUsers, LuCloudUpload, LuSparkles } from 'react-icons/lu';
+import React, { useEffect, useRef, useState } from 'react';
+import { LuActivity, LuApple, LuCircleX, LuCircleCheck, LuDumbbell, LuHouse, LuListChecks, LuSettings, LuUsers, LuCloudUpload, LuSparkles } from 'react-icons/lu';
 import { SyncProvider, useSync } from './sync';
 import AuthForm from './components/AuthForm';
 import Friends from './pages/Friends';
@@ -18,7 +18,8 @@ import Habits from './pages/Habits';
 import Metrics from './pages/Metrics';
 import Settings from './pages/Settings';
 
-const TABS: { id: TabId; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
+type Ico = React.ComponentType<{ size?: number; fill?: string; fillOpacity?: number; strokeWidth?: number }>;
+const TABS: { id: TabId; label: string; icon: Ico }[] = [
   { id: 'inicio', label: 'Início', icon: LuHouse },
   { id: 'treino', label: 'Treino', icon: LuDumbbell },
   { id: 'nutricao', label: 'Nutrição', icon: LuApple },
@@ -77,10 +78,7 @@ function Effects() {
 function Logo() {
   return (
     <div className="flex items-center gap-2.5">
-      <svg viewBox="0 0 100 100" className="size-9 shrink-0" aria-hidden>
-        <rect width="100" height="100" rx="26" fill="var(--color-orange)" />
-        <path d="M28 22 V68 H42 L48 56 L56 78 L62 62 H72" fill="none" stroke="white" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
+      <LogoMark className="size-9 shrink-0" />
       <p className="font-semibold text-ink tracking-[-0.02em] text-[17px]">Leco Health</p>
     </div>
   );
@@ -89,6 +87,9 @@ function Logo() {
 function Shell() {
   const { state, toastMsg } = useStore();
   const [tab, setTab] = useState<TabId>(readHash);
+  const prevTab = useRef<TabId>(tab);
+  const dir = ALL.indexOf(tab) >= ALL.indexOf(prevTab.current) ? 'r' : 'l';
+  useEffect(() => { prevTab.current = tab; }, [tab]);
   const score = dayScore(state).total;
   const navIds = (state.prefs.navTabs || []).filter((id) => TABS.some((t) => t.id === id)).slice(0, 5);
   const mobileTabs = [TABS[0], ...navIds.map((id) => TABS.find((t) => t.id === id)!)];
@@ -116,16 +117,17 @@ function Shell() {
     ajustes: <Settings go={go} />,
   }[tab];
 
-  const navBtn = (id: TabId, label: string, Icon: React.ComponentType<{ size?: number }>) => {
+  const navBtn = (id: TabId, label: string, Icon: Ico) => {
     const active = tab === id;
     return (
       <button key={id} onClick={() => go(id)} aria-current={active ? 'page' : undefined}
         className={cx('press flex items-center gap-3 h-12 px-4 rounded-full text-[15px] font-medium transition-colors',
-          active ? 'bg-ink text-on-ink' : 'text-ink/55 hover:text-ink hover:bg-cream')}>
-        <Icon size={18} /> {label}
+          active ? 'bg-orange text-white' : 'text-ink/55 hover:text-ink hover:bg-cream')}>
+        <Icon size={18} {...(active ? { fill: 'currentColor', fillOpacity: 0.22 } : {})} /> {label}
       </button>
     );
   };
+  const activeIdx = mobileTabs.findIndex((t) => t.id === tab);
 
   return (
     <RestTimerProvider visible={tab === 'treino'}>
@@ -169,23 +171,29 @@ function Shell() {
       </header>
 
       <main className="md:pl-64">
-        <div key={tab} className="mx-auto max-w-[1280px] px-4 md:px-8 pt-3 md:pt-8 pb-[calc(6.5rem+var(--sab))] md:pb-12 animate-page">
+        <PullToRefresh />
+        <div key={tab} className={cx('mx-auto max-w-[1280px] px-4 md:px-8 pt-3 md:pt-8 md:pb-12', tab === 'treino' ? 'pb-[calc(11rem+var(--sab))]' : 'pb-[calc(6.5rem+var(--sab))]', dir === 'r' ? 'animate-page-r' : 'animate-page-l')}>
           {page}
         </div>
       </main>
 
       {/* Bottom nav mobile */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 px-3 pb-[max(.75rem,var(--sab))] pt-2 pointer-events-none">
-        <div className="pointer-events-auto mx-auto max-w-md grid rounded-full nav-glass p-1 shadow-[0_10px_30px_-10px_rgba(0,0,0,.3)]"
+        <div className="pointer-events-auto relative mx-auto max-w-md grid rounded-full nav-glass p-1"
           style={{ gridTemplateColumns: `repeat(${mobileTabs.length}, minmax(0,1fr))` }}>
+          {/* pílula que desliza até a aba ativa */}
+          {activeIdx >= 0 && (
+            <span aria-hidden className="absolute top-1 bottom-1 left-1 rounded-full bg-orange shadow-[0_6px_16px_-6px_var(--color-orange)] transition-transform duration-500"
+              style={{ width: `calc((100% - .5rem) / ${mobileTabs.length})`, transform: `translateX(${activeIdx * 100}%)`, transitionTimingFunction: 'var(--spring)' }} />
+          )}
           {mobileTabs.map((t) => {
             const Icon = t.icon;
             const active = tab === t.id;
             return (
               <button key={t.id} onClick={() => go(t.id)} aria-current={active ? 'page' : undefined}
-                className={cx('press flex flex-col items-center justify-center gap-0.5 h-14 rounded-full transition-colors min-w-0', active ? 'bg-ink text-on-ink' : 'text-ink/45')}>
-                <Icon size={19} />
-                <span className="text-[9.5px] font-medium truncate max-w-full">{t.label}</span>
+                className={cx('press relative flex flex-col items-center justify-center gap-0.5 h-14 rounded-full transition-colors duration-300 min-w-0', active ? 'text-white' : 'text-ink/50')}>
+                <Icon size={20} strokeWidth={active ? 2.2 : 1.9} {...(active ? { fill: 'currentColor', fillOpacity: 0.22 } : {})} />
+                <span className={cx('text-[10px] truncate max-w-full', active ? 'font-semibold' : 'font-medium')}>{t.label}</span>
               </button>
             );
           })}
@@ -195,13 +203,101 @@ function Shell() {
       <Onboarding />
       <Celebration />
 
-      {toastMsg && (
-        <div key={toastMsg.id} role="status"
-          className="fixed z-[70] left-1/2 -translate-x-1/2 top-[4.5rem] md:top-6 md:left-[calc(50%+8rem)] px-5 h-11 rounded-full flex items-center text-[14px] font-medium text-on-ink bg-ink shadow-xl animate-toast whitespace-nowrap">
-          {toastMsg.msg}
-        </div>
-      )}
+      {toastMsg && (() => {
+        const bad = /^(erro|não|falh|sem )/i.test(toastMsg.msg);
+        return (
+          <div key={toastMsg.id} role="status"
+            className="fixed z-[70] left-1/2 top-[calc(4.6rem+var(--sat))] md:top-6 md:left-[calc(50%+8rem)] pl-2 pr-5 h-12 max-w-[calc(100vw-2rem)] rounded-full flex items-center gap-2.5 text-[14px] font-medium text-on-ink bg-ink shadow-[var(--shadow-3)] animate-toast">
+            <span className={cx('grid place-items-center size-8 rounded-full shrink-0', bad ? 'bg-bad/90' : 'bg-good/90')}>
+              {bad ? <LuCircleX size={17} className="text-white" /> : <LuCircleCheck size={17} className="text-white" />}
+            </span>
+            <span className="truncate">{toastMsg.msg}</span>
+          </div>
+        );
+      })()}
+      <Splash />
     </RestTimerProvider>
+  );
+}
+
+/** Logo animada ao abrir o app: o "pulso" se desenha e a tela some. */
+export function LogoMark({ className, animated }: { className?: string; animated?: boolean }) {
+  return (
+    <svg viewBox="0 0 100 100" className={className} aria-hidden>
+      <rect width="100" height="100" rx="26" fill="var(--color-orange)" />
+      <path d="M28 22 V68 H42 L48 56 L56 78 L62 62 H72" fill="none" stroke="white" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round"
+        className={animated ? 'draw' : undefined} style={animated ? ({ '--len': 160 } as React.CSSProperties) : undefined} />
+    </svg>
+  );
+}
+
+function Splash() {
+  const [phase, setPhase] = useState<'in' | 'out' | 'done'>(() => {
+    try { return sessionStorage.getItem('leco-splash') ? 'done' : 'in'; } catch { return 'done'; }
+  });
+  useEffect(() => {
+    if (phase !== 'in') return;
+    try { sessionStorage.setItem('leco-splash', '1'); } catch { /* */ }
+    const a = setTimeout(() => setPhase('out'), 1000);
+    const b = setTimeout(() => setPhase('done'), 1450);
+    return () => { clearTimeout(a); clearTimeout(b); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  if (phase === 'done') return null;
+  return (
+    <div aria-hidden className={cx('fixed inset-0 z-[200] bg-canvas grid place-items-center transition-opacity duration-400', phase === 'out' && 'opacity-0 pointer-events-none')}>
+      <div className={cx('flex flex-col items-center gap-4 transition-transform duration-500', phase === 'out' ? 'scale-110' : 'animate-pop')}>
+        <LogoMark className="size-24 drop-shadow-xl" animated />
+        <p className="text-[19px] font-semibold tracking-[-0.02em] text-ink">Leco Health</p>
+      </div>
+    </div>
+  );
+}
+
+/** Puxar a tela para baixo no topo sincroniza com a nuvem. */
+function PullToRefresh() {
+  const sync = useSync();
+  const { toast } = useStore();
+  const [pull, setPull] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const start = useRef<number | null>(null);
+  const pullRef = useRef(0);
+  useEffect(() => {
+    const down = (e: TouchEvent) => {
+      if (window.scrollY > 0 || busy || document.querySelector('[role=dialog]')) { start.current = null; return; }
+      start.current = e.touches[0].clientY;
+    };
+    const move = (e: TouchEvent) => {
+      if (start.current == null) return;
+      const d = e.touches[0].clientY - start.current;
+      if (d <= 0 || window.scrollY > 0) { pullRef.current = 0; setPull(0); return; }
+      const v = Math.min(110, d * 0.45); pullRef.current = v; setPull(v);
+    };
+    const up = async () => {
+      const v = pullRef.current; start.current = null; pullRef.current = 0;
+      if (v >= 70) {
+        setBusy(true); setPull(60);
+        try {
+          if (sync.session) { await sync.syncNow(); toast('Sincronizado'); } else toast('Sem conta: dados salvos só neste aparelho');
+        } catch { toast('Não foi possível sincronizar'); }
+        setBusy(false);
+      }
+      setPull(0);
+    };
+    window.addEventListener('touchstart', down, { passive: true });
+    window.addEventListener('touchmove', move, { passive: true });
+    window.addEventListener('touchend', up);
+    return () => { window.removeEventListener('touchstart', down); window.removeEventListener('touchmove', move); window.removeEventListener('touchend', up); };
+  }, [busy, sync, toast]);
+  if (!pull && !busy) return null;
+  const ready = pull >= 70 || busy;
+  return (
+    <div className="md:hidden fixed left-1/2 z-30 -translate-x-1/2 pointer-events-none" style={{ top: `calc(var(--sat) + 3.6rem + ${Math.min(pull, 70) * 0.6}px)`, opacity: Math.min(1, pull / 40 + (busy ? 1 : 0)) }}>
+      <div className="size-10 rounded-full nav-glass grid place-items-center">
+        <LogoMark className={cx('size-6', busy && 'spin')} />
+      </div>
+      {!busy && <p className="text-[11px] text-muted text-center mt-1 whitespace-nowrap">{ready ? 'Solte para sincronizar' : 'Puxe para sincronizar'}</p>}
+    </div>
   );
 }
 
