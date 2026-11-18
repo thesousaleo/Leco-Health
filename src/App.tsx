@@ -1,4 +1,4 @@
-import React, { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { Activity, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useRipple, staggerIn } from './motion';
 import { LuActivity, LuApple, LuCamera, LuCircleX, LuCircleCheck, LuDroplet, LuDumbbell, LuHouse, LuListChecks, LuMoon, LuNotebookPen, LuPlus, LuScale, LuChevronLeft, LuChevronRight, LuSearch, LuSettings, LuTrophy, LuUsers, LuCloudUpload, LuSparkles } from 'react-icons/lu';
 import { setIntent } from './intent';
@@ -22,7 +22,7 @@ import Metrics from './pages/Metrics';
 import Settings from './pages/Settings';
 import { computeBadges } from './components/Badges';
 import { SearchSheet } from './components/Search';
-import { useSwipeTabs, type SwipeHint } from './swipe';
+import { swipeIn, useSwipeTabs, type SwipeEnd } from './swipe';
 
 type Ico = React.ComponentType<{ size?: number; fill?: string; fillOpacity?: number; strokeWidth?: number }>;
 const TABS: { id: TabId; label: string; icon: Ico }[] = [
@@ -169,11 +169,13 @@ function Shell() {
     window.addEventListener('keydown', k);
     return () => window.removeEventListener('keydown', k);
   }, []);
-  const swipedRef = useRef(false);
-  const go = useCallback((t: TabId, dir?: 'r' | 'l') => {
+  const swipedRef = useRef<SwipeEnd | null>(null); // veio de um arraste: continua o mesmo movimento
+  const prevTabRef = useRef<TabId | null>(null);
+  const go = useCallback((t: TabId, dir?: 'r' | 'l', swipe?: SwipeEnd) => {
     if (t === tabRef.current) { window.scrollTo({ top: 0, behavior: 'smooth' }); setNavTab(t); return; }
     dirRef.current = dir ?? (ALL.indexOf(t) >= ALL.indexOf(tabRef.current) ? 'r' : 'l');
-    swipedRef.current = !!dir;
+    swipedRef.current = swipe ?? null;
+    prevTabRef.current = tabRef.current;
     // 1) a barra reage na hora; 2) a página nova é montada logo depois, sem travar a animação da barra
     setNavTab(t);
     startTransition(() => setTab(t));
@@ -235,22 +237,23 @@ function Shell() {
   const mainRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
-    if (mainRef.current) staggerIn(mainRef.current, dirRef.current, swipedRef.current ? 64 : 22);
-    swipedRef.current = false;
+    if (mainRef.current) {
+      if (swipedRef.current) swipeIn(mainRef.current, swipedRef.current);
+      else staggerIn(mainRef.current, dirRef.current);
+    }
+    swipedRef.current = null;
   }, [tab]);
 
   // arrastar para os lados troca de aba (na ordem da barra)
   const hostRef = useRef<HTMLElement>(null);
   const hintRef = useRef<HTMLDivElement>(null);
-  const [hint, setHint] = useState<SwipeHint>(null);
   const orderRef = useRef<TabId[]>([]); orderRef.current = mobileTabs.map((t) => t.id);
   useSwipeTabs({
-    host: hostRef, page: mainRef, hint: hintRef, setHint,
+    host: hostRef, page: mainRef, hint: hintRef,
     order: () => orderRef.current, current: () => tabRef.current,
     enabled: () => stRef.current.prefs.swipeTabs !== false && window.innerWidth < 768,
-    go: (t, dir) => go(t, dir),
+    go: (t, dir, end) => go(t, dir, end),
     labelOf: (t) => TABS.find((x) => x.id === t)?.label ?? '',
-    onThreshold: () => { if (stRef.current.prefs.haptics) void haptic(); },
   });
   // quando a tela de abertura some, os blocos do Início entram (antes ficavam escondidos atrás dela)
   useEffect(() => {
@@ -259,7 +262,7 @@ function Shell() {
     return () => window.removeEventListener('leco:splash-out', on);
   }, []);
 
-  const page = useMemo(() => ({
+  const pages = useMemo<Record<TabId, React.ReactNode>>(() => ({
     inicio: <Dashboard go={go} />,
     treino: <Workout />,
     nutricao: <Nutrition />,
@@ -267,7 +270,18 @@ function Shell() {
     registros: <Metrics />,
     amigos: <Friends />,
     ajustes: <Settings go={go} />,
-  }[tab]), [tab, go]);
+  }), [go]);
+  // Páginas vivas: a atual, as vizinhas da barra (preparadas em segundo plano, para o arraste e o toque
+  // trocarem na hora) e a anterior. As escondidas não rodam efeitos e só atualizam quando sobra tempo.
+  const orderKey = mobileTabs.map((t) => t.id).join(',');
+  const [alive, setAlive] = useState<TabId[]>([]);
+  useEffect(() => {
+    const order = orderKey.split(',') as TabId[];
+    const i = order.indexOf(tab);
+    const want = [order[i - 1], order[i + 1], prevTabRef.current].filter((x): x is TabId => !!x && x !== tab);
+    setAlive((prev) => (prev.join() === want.join() ? prev : want));
+  }, [tab, orderKey]);
+  const live = ALL.filter((id) => id === tab || alive.includes(id));
 
   const navBtn = (id: TabId, label: string, Icon: Ico) => {
     const active = navTab === id;
@@ -331,10 +345,14 @@ function Shell() {
       {/* overflow-x-clip: blocos que entram deslizando nunca alargam a tela */}
       <main ref={hostRef} className="md:pl-64 overflow-x-clip" style={{ touchAction: 'pan-y pinch-zoom' }}>
         <PullToRefresh />
-        <div key={tab} ref={mainRef}
-          className={cx('mx-auto max-w-[1280px] px-4 md:px-8 pt-3 md:pt-8 md:pb-12', tab === 'treino' ? 'pb-[calc(11rem+var(--sab))]' : FAB_TABS.includes(tab) ? 'pb-[calc(10rem+var(--sab))]' : 'pb-[calc(6.5rem+var(--sab))]')}>
-          {page}
-        </div>
+        {live.map((id) => (
+          <Activity key={id} mode={id === tab ? 'visible' : 'hidden'}>
+            <div ref={id === tab ? mainRef : undefined} data-page={id}
+              className={cx('mx-auto max-w-[1280px] px-4 md:px-8 pt-3 md:pt-8 md:pb-12', id === 'treino' ? 'pb-[calc(11rem+var(--sab))]' : FAB_TABS.includes(id) ? 'pb-[calc(10rem+var(--sab))]' : 'pb-[calc(6.5rem+var(--sab))]')}>
+              {pages[id]}
+            </div>
+          </Activity>
+        ))}
       </main>
 
       {/* Bottom nav mobile */}
@@ -381,8 +399,8 @@ function Shell() {
           </div>
         );
       })()}
-      <div ref={hintRef} aria-hidden className={cx('swipe-hint md:hidden', hint?.side === 'left' ? 'left-3' : 'right-3')}>
-        {hint?.side === 'left' && <LuChevronLeft size={16} />}<span>{hint?.label}</span>{hint?.side === 'right' && <LuChevronRight size={16} />}
+      <div ref={hintRef} aria-hidden data-side="right" className="swipe-hint md:hidden">
+        <LuChevronLeft size={16} className="sh-l" /><span data-label /><LuChevronRight size={16} className="sh-r" />
       </div>
       <SearchSheet open={search} onClose={() => setSearch(false)} go={go} />
       <Splash />

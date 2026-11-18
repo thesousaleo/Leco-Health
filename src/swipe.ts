@@ -1,13 +1,43 @@
 /* Arrastar o dedo para os lados troca de aba (na ordem da barra inferior).
-   Os blocos da página acompanham o dedo; passou do ponto (ou foi um movimento rápido), troca.
-   Só os blocos se movem (nunca a página inteira): no Android isso fazia a barra de vidro piscar. */
+   - Durante o arraste, os blocos visíveis seguem o dedo 1:1 (sem atraso, sem efeitos).
+   - Ao soltar, a página atual continua saindo com a velocidade do dedo (uma cópia visual dela,
+     para não depender do tempo de montar a página nova) e a página nova entra do outro lado.
+   - Só blocos se movem (nunca o contêiner da página inteira): no Android isso fazia a barra de vidro piscar. */
 import { useEffect, useRef } from 'react';
 import type { TabId } from './types';
 
 const BLOCKS = 'header, .glass, [data-stagger]';
 const SKIP = 'input, textarea, select, [contenteditable="true"], [data-hcheck], [data-noswipe], [role="slider"]';
+const EASE = 'cubic-bezier(.22,.8,.26,1)'; // desacelera suave, sem quicar
 
-export type SwipeHint = { label: string; side: 'left' | 'right' } | null;
+const reduce = () => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+/** Blocos de primeiro nível que aparecem na tela. */
+export function visibleBlocks(root: HTMLElement | null) {
+  if (!root) return [];
+  const vh = window.innerHeight;
+  const all = [...root.querySelectorAll<HTMLElement>(BLOCKS)];
+  return all.filter((el) => !all.some((x) => x !== el && x.contains(el)))
+    .filter((el) => { const r = el.getBoundingClientRect(); return r.bottom > 0 && r.top < vh && r.height > 0; });
+}
+
+/** Fim de um arraste: de onde a página antiga parou, quanto tempo leva e quando começou. */
+export type SwipeEnd = { dx: number; ms: number; t0: number };
+
+/** Entrada da página nova: encostada na antiga (como uma faixa só), na mesma curva e no mesmo relógio. */
+export function swipeIn(root: HTMLElement, end: SwipeEnd) {
+  if (reduce() || !end.ms) return;
+  const w = window.innerWidth;
+  const from = end.dx < 0 ? w + end.dx : -w + end.dx;
+  const late = Math.max(0, performance.now() - end.t0);
+  visibleBlocks(root).forEach((el) => {
+    el.classList.remove('stagger-in');
+    el.animate(
+      [{ transform: `translate3d(${from}px,0,0)` }, { transform: 'translate3d(0,0,0)' }],
+      { duration: end.ms, delay: -Math.min(late, end.ms * 0.6), easing: EASE, fill: 'backwards' },
+    );
+  });
+}
 
 export function useSwipeTabs(opts: {
   host: React.RefObject<HTMLElement | null>; // área que aceita o gesto (o <main>)
@@ -15,58 +45,78 @@ export function useSwipeTabs(opts: {
   order: () => TabId[];
   current: () => TabId;
   enabled: () => boolean;
-  go: (t: TabId, dir: 'r' | 'l') => void;
+  go: (t: TabId, dir: 'r' | 'l', end: SwipeEnd) => void;
   hint: React.RefObject<HTMLElement | null>;
-  setHint: (h: SwipeHint) => void;
   labelOf: (t: TabId) => string;
-  onThreshold?: () => void;
 }) {
   const o = useRef(opts); o.current = opts;
   useEffect(() => {
     type S = {
       id: number; x0: number; y0: number; lock: 'x' | 'y' | null; dx: number; w: number;
-      prev?: TabId; next?: TabId; blocks: HTMLElement[]; samples: { x: number; t: number }[]; armed: boolean;
+      prev?: TabId; next?: TabId; blocks: HTMLElement[]; samples: { x: number; t: number }[]; raf: number;
     };
     let s: S | null = null;
-    const reduce = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-    const paint = (dx: number) => {
+    const paint = () => {
       if (!s) return;
-      const p = Math.min(1, Math.abs(dx) / (s.w * 0.22));
-      if (!reduce()) s.blocks.forEach((b, i) => {
-        // leve paralaxe: os blocos de baixo andam um pouco menos
-        const k = 1 - Math.min(i, 6) * 0.025;
-        b.style.transform = `translate3d(${dx * k}px,0,0)`;
-        b.style.opacity = String(1 - Math.min(1, Math.abs(dx) / s!.w) * 0.22);
-      });
+      s.raf = 0;
+      const dx = s.dx;
+      s.blocks.forEach((b) => { b.style.transform = `translate3d(${dx}px,0,0)`; });
       const h = o.current.hint.current;
       if (h) {
         const target = dx < 0 ? s.next : s.prev;
-        h.style.opacity = target ? String(Math.min(1, p * 1.2)) : '0';
-        h.style.transform = `translate3d(${dx < 0 ? (1 - p) * 24 : -(1 - p) * 24}px,-50%,0) scale(${0.9 + p * 0.1})`;
-        h.dataset.armed = p >= 1 ? '1' : '0';
+        const p = Math.min(1, Math.abs(dx) / (s.w * 0.25));
+        h.style.opacity = target ? String(Math.min(1, p * 1.4)) : '0';
+        h.style.transform = `translate3d(${(dx < 0 ? 1 : -1) * (1 - p) * 18}px,-50%,0)`;
+        h.dataset.armed = p >= 1 && target ? '1' : '0';
       }
-      const armed = p >= 1 && !!(dx < 0 ? s.next : s.prev);
-      if (armed && !s.armed) o.current.onThreshold?.();
-      s.armed = armed;
     };
-    const clear = (blocks: HTMLElement[], animate: boolean) => {
-      blocks.forEach((b) => {
-        if (animate && !reduce()) {
-          b.style.transition = 'transform .42s var(--spring), opacity .3s ease';
-          b.style.transform = ''; b.style.opacity = '';
-          b.addEventListener('transitionend', () => { b.style.transition = ''; }, { once: true });
-          setTimeout(() => { b.style.transition = ''; }, 500);
-        } else { b.style.transform = ''; b.style.opacity = ''; b.style.transition = ''; }
-      });
+    const resetHint = () => {
       const h = o.current.hint.current;
       if (h) { h.style.opacity = '0'; h.dataset.armed = '0'; }
-      o.current.host.current?.classList.remove('swiping');
+    };
+    const settle = (blocks: HTMLElement[]) => {
+      blocks.forEach((b) => {
+        if (reduce()) { b.style.transform = ''; b.style.transition = ''; b.style.willChange = ''; return; }
+        b.style.transition = `transform .34s ${EASE}`;
+        b.style.transform = '';
+        setTimeout(() => { b.style.transition = ''; b.style.willChange = ''; }, 380);
+      });
+      resetHint();
     };
     const stopClick = () => {
       const stop = (e: Event) => { e.stopPropagation(); e.preventDefault(); };
       window.addEventListener('click', stop, { capture: true, once: true });
       setTimeout(() => window.removeEventListener('click', stop, { capture: true }), 350);
+    };
+
+    /** Cópia visual da página atual que termina de sair da tela enquanto a nova é montada. */
+    const flyOut = (blocks: HTMLElement[], dx: number, ms: number) => {
+      const w = window.innerWidth;
+      const ghost = document.createElement('div');
+      ghost.className = 'swipe-ghost';
+      ghost.setAttribute('aria-hidden', 'true');
+      blocks.forEach((b) => {
+        const r = b.getBoundingClientRect();
+        const c = b.cloneNode(true) as HTMLElement;
+        c.classList.remove('stagger-in');
+        c.removeAttribute('id');
+        Object.assign(c.style, {
+          position: 'absolute', left: `${r.left - dx}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px`,
+          margin: '0', boxSizing: 'border-box', transform: `translate3d(${dx}px,0,0)`, transition: 'none', willChange: 'transform', opacity: '',
+        });
+        ghost.appendChild(c);
+        b.style.visibility = 'hidden';
+      });
+      document.body.appendChild(ghost);
+      void ghost.offsetWidth;
+      const to = dx < 0 ? -w : w;
+      [...ghost.children].forEach((c) => {
+        (c as HTMLElement).style.transition = `transform ${ms}ms ${EASE}`;
+        (c as HTMLElement).style.transform = `translate3d(${to}px,0,0)`;
+      });
+      // as páginas continuam vivas (escondidas): os blocos originais voltam a ficar visíveis para a próxima vez
+      setTimeout(() => { ghost.remove(); blocks.forEach((b) => { b.style.visibility = ''; }); }, ms + 60);
     };
 
     const down = (e: PointerEvent) => {
@@ -77,60 +127,74 @@ export function useSwipeTabs(opts: {
       const order = o.current.order();
       const i = order.indexOf(o.current.current());
       if (i < 0) return;
-      s = { id: e.pointerId, x0: e.clientX, y0: e.clientY, lock: null, dx: 0, w: window.innerWidth, prev: order[i - 1], next: order[i + 1], blocks: [], samples: [{ x: e.clientX, t: e.timeStamp }], armed: false };
+      s = { id: e.pointerId, x0: e.clientX, y0: e.clientY, lock: null, dx: 0, w: window.innerWidth, prev: order[i - 1], next: order[i + 1], blocks: [], samples: [{ x: e.clientX, t: e.timeStamp }], raf: 0 };
     };
     const move = (e: PointerEvent) => {
       if (!s || e.pointerId !== s.id) return;
       const dx = e.clientX - s.x0, dy = e.clientY - s.y0;
       if (!s.lock) {
-        if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
-        s.lock = Math.abs(dx) > Math.abs(dy) * 1.4 ? 'x' : 'y';
+        if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+        s.lock = Math.abs(dx) > Math.abs(dy) * 1.3 ? 'x' : 'y';
         if (s.lock === 'y') { s = null; return; }
-        const page = o.current.page.current;
-        const vh = window.innerHeight;
-        const all = page ? [...page.querySelectorAll<HTMLElement>(BLOCKS)] : [];
-        s.blocks = all.filter((el) => !all.some((x) => x !== el && x.contains(el)))
-          .filter((el) => { const r = el.getBoundingClientRect(); return r.bottom > 0 && r.top < vh; });
-        s.blocks.forEach((b) => { b.classList.remove('stagger-in'); b.style.transition = 'none'; });
+        // o gesto começa a contar a partir daqui (sem "pulo" de 10 px)
+        s.x0 = e.clientX;
+        s.blocks = visibleBlocks(o.current.page.current);
+        s.blocks.forEach((b) => {
+          b.getAnimations?.().forEach((a) => a.cancel());
+          b.classList.remove('stagger-in');
+          b.style.transition = 'none'; b.style.willChange = 'transform';
+        });
         o.current.host.current?.classList.add('swiping');
-        const side = dx < 0 ? 'right' : 'left';
+        // aviso da aba vizinha: atualizado direto no elemento (sem re-renderizar o app no meio do gesto)
         const target = dx < 0 ? s.next : s.prev;
-        o.current.setHint(target ? { label: o.current.labelOf(target), side } : null);
+        const h = o.current.hint.current;
+        if (h && target) {
+          h.dataset.side = dx < 0 ? 'right' : 'left';
+          const lab = h.querySelector('[data-label]'); if (lab) lab.textContent = o.current.labelOf(target);
+        }
       }
-      // sem aba daquele lado: o conteúdo "resiste" (elástico)
-      const has = dx < 0 ? s.next : s.prev;
-      const eff = has ? dx : Math.sign(dx) * Math.min(60, Math.abs(dx) * 0.22);
-      s.dx = eff;
+      const raw = e.clientX - s.x0;
+      // sem aba daquele lado: o conteúdo cede pouco e volta (elástico)
+      const has = raw < 0 ? s.next : s.prev;
+      s.dx = has ? raw : Math.sign(raw) * Math.min(56, Math.abs(raw) * 0.2);
       s.samples.push({ x: e.clientX, t: e.timeStamp });
-      if (s.samples.length > 5) s.samples.shift();
-      paint(eff);
+      if (s.samples.length > 6) s.samples.shift();
+      if (!s.raf) s.raf = requestAnimationFrame(paint);
     };
     const up = (e: PointerEvent) => {
       if (!s || e.pointerId !== s.id) return;
       const st = s; s = null;
+      if (st.raf) cancelAnimationFrame(st.raf);
       if (st.lock !== 'x') return;
+      o.current.host.current?.classList.remove('swiping');
       stopClick();
-      const a = st.samples[0], b = st.samples[st.samples.length - 1];
-      const v = b.t > a.t ? (b.x - a.x) / (b.t - a.t) : 0; // px/ms
+      // velocidade dos últimos ~100 ms
+      const last = st.samples[st.samples.length - 1];
+      const first = st.samples.find((p) => last.t - p.t <= 100) ?? st.samples[0];
+      const v = last.t > first.t ? (last.x - first.x) / (last.t - first.t) : 0; // px/ms
       const target = st.dx < 0 ? st.next : st.prev;
-      const fast = Math.abs(v) > 0.45 && Math.sign(v) === Math.sign(st.dx) && Math.abs(st.dx) > 36;
-      if (target && (Math.abs(st.dx) > st.w * 0.22 || fast)) {
+      const flick = Math.abs(v) > 0.35 && Math.sign(v) === Math.sign(st.dx) && Math.abs(st.dx) > 24;
+      const back = Math.abs(v) > 0.35 && Math.sign(v) !== Math.sign(st.dx); // voltou o dedo: desiste
+      if (target && !back && (Math.abs(st.dx) > st.w * 0.25 || flick)) {
         const dir = st.dx < 0 ? 'r' : 'l';
-        if (!reduce()) st.blocks.forEach((bl) => {
-          bl.style.transition = 'transform .16s ease-in, opacity .16s ease-in';
-          bl.style.transform = `translate3d(${st.dx < 0 ? -st.w * 0.35 : st.w * 0.35}px,0,0)`;
-          bl.style.opacity = '0.7';
-        });
-        const h = o.current.hint.current; if (h) h.style.opacity = '0';
-        setTimeout(() => { o.current.host.current?.classList.remove('swiping'); o.current.go(target, dir); }, reduce() ? 0 : 120);
+        // duração casada com a velocidade do dedo: a curva começa na mesma velocidade em que o dedo soltou
+        const rest = st.w - Math.abs(st.dx);
+        const ms = reduce() ? 0 : Math.round(Math.min(380, Math.max(220, (3 * rest) / Math.max(Math.abs(v), 0.4))));
+        resetHint();
+        const t0 = performance.now();
+        if (ms) flyOut(st.blocks, st.dx, ms);
+        st.blocks.forEach((b) => { b.style.transform = ''; b.style.transition = ''; b.style.willChange = ''; });
+        // a página nova já está pronta (preparada em segundo plano): troca na hora e entra no mesmo compasso
+        o.current.go(target, dir, { dx: st.dx, ms, t0 });
       } else {
-        clear(st.blocks, true);
+        settle(st.blocks);
       }
     };
     const cancel = (e: PointerEvent) => {
       if (!s || e.pointerId !== s.id) return;
       const st = s; s = null;
-      if (st.lock === 'x') clear(st.blocks, true);
+      if (st.raf) cancelAnimationFrame(st.raf);
+      if (st.lock === 'x') { o.current.host.current?.classList.remove('swiping'); settle(st.blocks); }
     };
     window.addEventListener('pointerdown', down, { passive: true });
     window.addEventListener('pointermove', move, { passive: true });

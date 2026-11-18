@@ -413,5 +413,8 @@ button > svg, a > svg { flex-shrink: 0; }
   transition: background-color .2s ease, color .2s ease;
 }
 .swipe-hint { background: color-mix(in srgb, var(--color-surface) 88%, transparent); box-shadow: var(--shadow-2), inset 0 0 0 1px color-mix(in srgb, var(--color-ink) 6%, transparent); }
-.swipe-hint[data-armed="1"] { background: var(--color-orange); color: #fff; }
+.swipe-hint[data-armed="1"] { background: var(--color-ink); color: var(--color-on-ink); }
 .swiping .press:active { transform: none; filter: none; }
+.swipe-hint[data-side="right"] { right: 12px; } .swipe-hint[data-side="left"] { left: 12px; }
+.swipe-hint[data-side="right"] .sh-l, .swipe-hint[data-side="left"] .sh-r { display: none; }
+.swipe-ghost { position: fixed; inset: 0; z-index: 30; pointer-events: none; overflow: hidden; }

@@ -3,6 +3,7 @@ import {
   LuApple, LuArrowRight, LuCheck, LuChevronRight, LuDumbbell, LuListChecks, LuEyeOff, LuMoon, LuPlay, LuPlus, LuScale, LuCamera, LuSun, LuSunrise, LuSunset,
 } from 'react-icons/lu';
 import { useStore } from '../store';
+import { setIntent } from '../intent';
 import type { AppState, HomeBlockId, ModuleId, TabId } from '../types';
 import {
   activeHabits, addDays, dayScore, fmtLong, fmtWeekdayShort, greeting, isHabitDone, lastNDays, mealLabel, mealsOn, nf,
@@ -401,7 +402,7 @@ function SummaryCard({ go }: { go: (t: TabId) => void }) {
       </div>
       <div className="flex gap-2 mt-4">
         <button onClick={() => setStories(true)} className="press h-10 px-4 rounded-full bg-orange text-white text-[13.5px] font-medium flex items-center gap-1.5"><LuPlay size={14} /> Ver stories</button>
-        <button onClick={() => { try { localStorage.setItem('leco-health:metrics-view', 'resumo'); } catch { /* */ } go('registros'); }}
+        <button onClick={() => { go('registros'); setIntent('registros', 'resumo'); }}
           className="press h-10 px-4 rounded-full text-[13.5px] font-medium" style={{ background: 'color-mix(in srgb, var(--color-on-ink) 12%, transparent)' }}>Resumo completo</button>
       </div>
       {stories && <WeekStories state={state} from={from} to={to} onClose={() => setStories(false)} />}
