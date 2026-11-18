@@ -22,6 +22,7 @@ import Metrics from './pages/Metrics';
 import Settings from './pages/Settings';
 import { computeBadges } from './components/Badges';
 import { SearchSheet } from './components/Search';
+import { useIsDesktop } from './desktop/kit';
 import { swipeIn, useSwipeTabs, type SwipeEnd } from './swipe';
 
 type Ico = React.ComponentType<{ size?: number; fill?: string; fillOpacity?: number; strokeWidth?: number }>;
@@ -159,6 +160,7 @@ function Shell() {
 
   useRipple();
   const [search, setSearch] = useState(false);
+  useEffect(() => { const on = () => setSearch(true); window.addEventListener('leco:search', on); return () => window.removeEventListener('leco:search', on); }, []);
   // "/" ou Ctrl+K abre a busca (teclado físico)
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
@@ -348,7 +350,7 @@ function Shell() {
         {live.map((id) => (
           <Activity key={id} mode={id === tab ? 'visible' : 'hidden'}>
             <div ref={id === tab ? mainRef : undefined} data-page={id}
-              className={cx('mx-auto max-w-[1280px] px-4 md:px-8 pt-3 md:pt-8 md:pb-12', id === 'treino' ? 'pb-[calc(11rem+var(--sab))]' : FAB_TABS.includes(id) ? 'pb-[calc(10rem+var(--sab))]' : 'pb-[calc(6.5rem+var(--sab))]')}>
+              className={cx('mx-auto px-4 md:px-8 pt-3 md:pt-8 md:pb-12', id === 'inicio' || id === 'treino' ? 'max-w-[1280px] min-[1100px]:max-w-[1720px]' : 'max-w-[1280px]', id === 'treino' ? 'pb-[calc(11rem+var(--sab))]' : FAB_TABS.includes(id) ? 'pb-[calc(10rem+var(--sab))]' : 'pb-[calc(6.5rem+var(--sab))]')}>
               {pages[id]}
             </div>
           </Activity>
@@ -449,6 +451,8 @@ function QuickAdd({ tab, go }: { tab: TabId; go: (t: TabId) => void }) {
   const { state, actions, toast } = useStore();
   const [open, setOpen] = useState(false);
   const [hide, setHide] = useState(false);
+  const desk = useIsDesktop();
+  useEffect(() => { const on = () => setOpen(true); window.addEventListener('leco:quickadd', on); return () => window.removeEventListener('leco:quickadd', on); }, []);
   // some ao rolar para baixo (para não cobrir o conteúdo) e volta ao rolar para cima ou no fim da página
   useEffect(() => {
     let last = window.scrollY, raf = 0;
@@ -466,7 +470,8 @@ function QuickAdd({ tab, go }: { tab: TabId; go: (t: TabId) => void }) {
     return () => { window.removeEventListener('scroll', on); cancelAnimationFrame(raf); };
   }, []);
   useEffect(() => setHide(false), [tab]);
-  if (!FAB_TABS.includes(tab)) return null;
+  // no computador, o Início e o Treino têm o botão "Registrar" no topo
+  const showFab = FAB_TABS.includes(tab) && !(desk && (tab === 'inicio' || tab === 'treino'));
   const cup = state.waterSizes?.[0];
   const run = (fn: () => void) => { setOpen(false); setTimeout(fn, 180); };
   const items: { label: string; sub?: string; icon: React.ReactNode; color: string; fn: () => void; mod?: ModuleId }[] = ([
@@ -479,12 +484,12 @@ function QuickAdd({ tab, go }: { tab: TabId; go: (t: TabId) => void }) {
   ] as { label: string; sub?: string; icon: React.ReactNode; color: string; fn: () => void; mod?: ModuleId }[]).filter((it) => !it.mod || modOn(state, it.mod));
   return (
     <>
-      <div className={cx('fixed z-40 right-4 bottom-[calc(6.1rem+var(--sab))] md:right-8 md:bottom-8 fab-auto', hide && 'fab-hidden')}>
+      {showFab && <div className={cx('fixed z-40 right-4 bottom-[calc(6.1rem+var(--sab))] md:right-8 md:bottom-8 fab-auto', hide && 'fab-hidden')}>
         <button onClick={() => setOpen(true)} aria-label="Novo registro" tabIndex={hide ? -1 : 0}
           className="press size-14 rounded-full fab-glass grid place-items-center text-white">
           <LuPlus size={26} strokeWidth={2.4} />
         </button>
-      </div>
+      </div>}
       <Modal open={open} onClose={() => setOpen(false)} title="Novo registro">
         <div className="grid grid-cols-3 gap-2.5 pb-2">
           {items.map((it) => (

@@ -418,3 +418,26 @@ button > svg, a > svg { flex-shrink: 0; }
 .swipe-hint[data-side="right"] { right: 12px; } .swipe-hint[data-side="left"] { left: 12px; }
 .swipe-hint[data-side="right"] .sh-l, .swipe-hint[data-side="left"] .sh-r { display: none; }
 .swipe-ghost { position: fixed; inset: 0; z-index: 30; pointer-events: none; overflow: hidden; }
+
+/* ── versão para computador (painel de controle) ─────────── */
+.desk-panel { background: color-mix(in srgb, var(--color-surface) 94%, transparent); box-shadow: var(--shadow-1), inset 0 0 0 1px color-mix(in srgb, var(--color-ink) 5%, transparent); }
+.desk-drawer { animation: desk-drawer .38s cubic-bezier(.22,.8,.26,1) both; }
+@keyframes desk-drawer { from { transform: translateX(24px); opacity: .6; } }
+.desk-fade { animation: desk-fade .28s ease both; }
+@keyframes desk-fade { from { opacity: .4; transform: translateY(4px); } }
+.desk-hover { transition: background-color .15s ease, box-shadow .15s ease, transform .15s ease; }
+@media (hover: hover) {
+  .desk-hover:hover { background-color: color-mix(in srgb, var(--color-ink) 4%, transparent); }
+  .desk-kpi.desk-hover:hover { box-shadow: var(--shadow-2); transform: translateY(-1px); }
+}
+.desk-active { box-shadow: inset 0 0 0 2px var(--color-orange) !important; }
+.desk-table { border-collapse: separate; border-spacing: 0; }
+.desk-table th { position: sticky; top: 0; z-index: 1; font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--color-muted); padding: 0 12px 8px; background: transparent; white-space: nowrap; }
+.desk-table td { padding: 10px 12px; border-top: 1px solid var(--color-line); vertical-align: middle; color: color-mix(in srgb, var(--color-ink) 82%, transparent); font-variant-numeric: tabular-nums; }
+.desk-table tbody tr { transition: background-color .12s ease; }
+.desk-table td:not(:first-child) { white-space: nowrap; }
+.desk-table tbody tr td:first-child { border-top-left-radius: 0; }
+@media (hover: hover) { .desk-table tbody tr.cursor-pointer:hover td { background: color-mix(in srgb, var(--color-ink) 3.5%, transparent); } }
+.desk-table tbody tr.is-sel td { background: color-mix(in srgb, var(--color-orange) 9%, transparent); }
+.desk-table tbody tr:focus-visible { outline: 2px solid var(--color-orange); outline-offset: -2px; }
+@media (prefers-reduced-motion: reduce) { .desk-drawer, .desk-fade { animation: none; } }

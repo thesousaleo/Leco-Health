@@ -2,7 +2,7 @@ import { useIntent } from '../intent';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   LuBike, LuCalendarDays, LuCheck, LuChevronDown, LuChevronLeft, LuChevronRight, LuChevronUp, LuClipboardList, LuClock, LuDumbbell,
-  LuFootprints, LuHistory, LuNotebookPen, LuPencil, LuPlay, LuPlus, LuRotateCcw, LuSearch, LuShare2, LuTimer, LuTrendingUp, LuTrophy, LuWaves, LuX,
+  LuFootprints, LuHistory, LuLayoutDashboard, LuNotebookPen, LuPencil, LuPlay, LuPlus, LuRotateCcw, LuSearch, LuShare2, LuTimer, LuTrendingUp, LuTrophy, LuWaves, LuX,
 } from 'react-icons/lu';
 import { useStore } from '../store';
 import type { CardioKind, CardioLog, Exercise, ExerciseLog, SetLog, Split, WorkoutSession } from '../types';
@@ -17,23 +17,33 @@ import { BarChart, LineChart } from '../components/charts';
 import { useRestTimer } from '../components/RestTimer';
 import { BodyMap, muscleStats, recoveryZone, REGION_LABEL, volumeZone, type Region } from '../components/BodyMap';
 import { haptic, shareFile } from '../native';
+import { useIsDesktop } from '../desktop/kit';
+import DesktopWorkout from '../desktop/DesktopWorkout';
 
-type View = 'sessao' | 'cardio' | 'fichas' | 'historico';
+type View = 'painel' | 'sessao' | 'cardio' | 'fichas' | 'historico';
 
 export default function Workout() {
   const { state } = useStore();
   const today = todayKey();
   const scheduled = state.schedule[weekday(today)];
-  const [view, setView] = useState<View>('sessao');
+  const desk = useIsDesktop();
+  const [view0, setView] = useState<View>(() => (desk ? 'painel' : 'sessao'));
+  const view: View = view0 === 'painel' && !desk ? 'sessao' : view0;
   useIntent('treino', (i) => { if (i === 'sessao' || i === 'cardio' || i === 'fichas' || i === 'historico') { setView(i); setEditing(null); } });
   const [editing, setEditing] = useState<string | null>(null); // sessão antiga em edição
   const editingSession = state.sessions.find((s) => s.id === editing);
+
+  // computador: painel de controle (as outras telas continuam a um clique)
+  if (desk && view === 'painel' && !editingSession) {
+    return <DesktopWorkout setView={(v) => { setView(v); setEditing(null); }} onEdit={setEditing} MuscleMap={MuscleMapCard} Calendar={MonthCalendar} />;
+  }
 
   return (
     <div>
       <PageHeader title="Treino" sub={scheduled ? `Hoje: Treino ${state.splits.find((s) => s.id === scheduled)?.letter ?? ''}` : 'Hoje é dia de descanso'} />
       <div className="mb-5 overflow-x-auto no-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
         <Segmented value={view} onChange={(v) => { setView(v); setEditing(null); }} options={[
+          ...(desk ? [{ value: 'painel' as View, label: <><LuLayoutDashboard size={14} /> Painel</> }] : []),
           { value: 'sessao', label: <><LuPlay size={14} /> Treino</> },
           { value: 'cardio', label: <><LuFootprints size={14} /> Cardio</> },
           { value: 'fichas', label: <><LuClipboardList size={14} /> Fichas</> },
@@ -44,7 +54,7 @@ export default function Workout() {
       {editingSession ? (
         <div>
           <button onClick={() => setEditing(null)} className="press mb-4 h-10 px-4 rounded-full bg-surface text-[14px] text-ink flex items-center gap-1.5">
-            <LuChevronLeft size={16} /> Voltar ao histórico
+            <LuChevronLeft size={16} /> {desk && view === 'painel' ? 'Voltar ao painel' : 'Voltar ao histórico'}
           </button>
           <SessionEditor session={editingSession} past />
         </div>

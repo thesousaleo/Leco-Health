@@ -14,6 +14,8 @@ import { ScoreRings, type RingPart } from '../components/ScoreRings';
 import { ScoreDetail } from '../components/ScoreDetail';
 import { DayStrip } from '../components/DayStrip';
 import { WeekStories } from '../components/WeekStories';
+import { useIsDesktop } from '../desktop/kit';
+import DesktopHome from '../desktop/DesktopHome';
 import { HabitDot, habitState, PauseBanner } from '../components/HabitBits';
 import { Sparkline } from '../components/charts';
 import { Thumb } from './Nutrition';
@@ -29,6 +31,12 @@ import { buildReport, summaryWeek } from '../report';
    6. Corpo e sono */
 
 export default function Dashboard({ go }: { go: (t: TabId) => void }) {
+  const desk = useIsDesktop();
+  if (desk) return <DesktopHome go={go} />;
+  return <MobileDashboard go={go} />;
+}
+
+function MobileDashboard({ go }: { go: (t: TabId) => void }) {
   const { state } = useStore();
   const today = todayKey();
   const name = state.profile.name?.split(' ')[0];
