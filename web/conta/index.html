@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#E9E5DF" />
+<title>Leco Health — Conta</title>
+<style>
+  *{box-sizing:border-box} body{margin:0;min-height:100vh;display:grid;place-items:center;background:#E9E5DF;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:#1C1B1A;padding:20px}
+  .card{width:100%;max-width:420px;background:#fff;border-radius:28px;padding:28px;box-shadow:0 8px 24px -16px rgba(28,27,26,.25)}
+  .logo{display:flex;align-items:center;gap:10px;font-weight:600;font-size:17px;margin-bottom:22px}
+  .dot{width:36px;height:36px;border-radius:50%;background:#F26B3A;display:grid;place-items:center}
+  h1{font-size:24px;letter-spacing:-.02em;margin:0 0 8px} p{color:#6F6A64;line-height:1.5;margin:0 0 16px;font-size:15px}
+  label{display:block;font-size:13px;color:#8C8781;margin:14px 0 6px}
+  input{width:100%;height:48px;border-radius:16px;border:1px solid transparent;background:#F4F2EF;padding:0 16px;font-size:16px;outline:none}
+  input:focus{background:#fff;border-color:rgba(28,27,26,.15)}
+  button{margin-top:20px;width:100%;height:52px;border:0;border-radius:999px;background:#F26B3A;color:#fff;font-size:16px;font-weight:600;cursor:pointer}
+  button:disabled{opacity:.5} .err{color:#D9541F;font-size:14px;margin-top:12px} .ok{font-size:44px;margin-bottom:6px}
+  a{display:inline-block;margin-top:6px;color:#E8622C;font-weight:600;text-decoration:none}
+  a:active{opacity:.7}
+</style>
+</head>
+<body>
+<main class="card">
+  <div class="logo"><svg width="36" height="36" viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="26" fill="#F26B3A"/><path d="M28 22 V68 H42 L48 56 L56 78 L62 62 H72" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/></svg>Leco Health</div>
+  <div id="view"><p>Carregando…</p></div>
+</main>
+<script>
+const SUPABASE_URL = 'https://tqlhqhapvgfzvcvpimku.supabase.co';
+const KEY = 'sb_publishable_d62xAf8k5vzVSI3O7PsMHw_Vru03RsO';
+const view = document.getElementById('view');
+const h = new URLSearchParams(location.hash.slice(1));
+const q = new URLSearchParams(location.search);
+const token = h.get('access_token');
+const type = h.get('type') || q.get('type');
+const error = h.get('error_description') || q.get('error_description');
+const show = (html) => { view.innerHTML = html; };
+
+if (error) {
+  show(`<h1>Link inválido</h1><p>${error.replace(/\+/g,' ')}.</p><p>Os links valem por pouco tempo. Peça um novo pelo app.</p>`);
+} else if (type === 'recovery' && token) {
+  show(`<h1>Nova senha</h1><p>Escolha uma senha nova para sua conta.</p>
+    <form id="f"><label>Nova senha</label><input id="p1" type="password" minlength="6" required autocomplete="new-password">
+    <label>Repita a senha</label><input id="p2" type="password" minlength="6" required autocomplete="new-password">
+    <button id="b">Salvar nova senha</button><div class="err" id="e"></div></form>`);
+  document.getElementById('f').onsubmit = async (ev) => {
+    ev.preventDefault();
+    const p1 = document.getElementById('p1').value, p2 = document.getElementById('p2').value, e = document.getElementById('e'), b = document.getElementById('b');
+    if (p1 !== p2) { e.textContent = 'As senhas não são iguais.'; return; }
+    b.disabled = true; e.textContent = '';
+    try {
+      const r = await fetch(SUPABASE_URL + '/auth/v1/user', { method: 'PUT', headers: { apikey: KEY, Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ password: p1 }) });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.msg || j.message || 'Não foi possível salvar.'); }
+      history.replaceState(null, '', location.pathname);
+      show(`<div class="ok">✅</div><h1>Senha alterada</h1><p>Pronto! Entre com a nova senha no app ou na versão web.</p><p><a href="../">Abrir o Leco Health na web</a></p>`);
+    } catch (err) { e.textContent = err.message; b.disabled = false; }
+  };
+} else if (token || type === 'signup' || type === 'email') {
+  history.replaceState(null, '', location.pathname);
+  show(`<div class="ok">✅</div><h1>E-mail confirmado</h1><p>Sua conta está pronta. Entre com seu e-mail e senha no app ou na versão web.</p><p><a href="../">Abrir o Leco Health na web</a></p>`);
+} else {
+  show(`<h1>Leco Health</h1><p>Esta página confirma e-mails e redefine senhas das contas do app. Abra o link que chegou no seu e-mail.</p>
+    <p><a href="../">Abrir o Leco Health na web</a></p><p><a href="https://github.com/thesousaleo/Leco-Health/releases/latest">Baixar o app (Android)</a></p>`);
+}
+</script>
+</body>
+</html>

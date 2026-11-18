@@ -479,7 +479,7 @@ function QuickAdd({ tab, go }: { tab: TabId; go: (t: TabId) => void }) {
   ] as { label: string; sub?: string; icon: React.ReactNode; color: string; fn: () => void; mod?: ModuleId }[]).filter((it) => !it.mod || modOn(state, it.mod));
   return (
     <>
-      <div className={cx('md:hidden fixed z-40 right-4 bottom-[calc(6.1rem+var(--sab))] fab-auto', hide && 'fab-hidden')}>
+      <div className={cx('fixed z-40 right-4 bottom-[calc(6.1rem+var(--sab))] md:right-8 md:bottom-8 fab-auto', hide && 'fab-hidden')}>
         <button onClick={() => setOpen(true)} aria-label="Novo registro" tabIndex={hide ? -1 : 0}
           className="press size-14 rounded-full fab-glass grid place-items-center text-white">
           <LuPlus size={26} strokeWidth={2.4} />

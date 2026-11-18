@@ -38,9 +38,19 @@ const html = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#E9E5DF" />
 <title>Leco Health</title>
+<script>
+/* links de confirmação de e-mail e troca de senha (Supabase) chegam aqui: seguem para a página de conta */
+(function(){var u=location.search+location.hash;if(/access_token=|error_description=|[?&#]type=(signup|recovery|email|invite|magiclink)/.test(u))location.replace('conta/'+location.search+location.hash);})();
+</script>
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="description" content="Saúde, treino, refeições e hábitos num app só." />
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%23F26B3A'/%3E%3Cpath d='M28 22 V68 H42 L48 56 L56 78 L62 62 H72' fill='none' stroke='white' stroke-width='9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />

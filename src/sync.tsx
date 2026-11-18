@@ -51,6 +51,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [needsChoice, setNeedsChoice] = useState(false);
+  const needsChoiceRef = useRef(false); needsChoiceRef.current = needsChoice;
   const [friends, setFriends] = useState<Friend[]>([]);
   const [ready, setReady] = useState(false); // estado inicial já reconciliado
   const stateRef = useRef(state);
@@ -119,6 +120,22 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     else setStatus('offline');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user.id]);
+
+  // usando celular e computador: ao voltar para o app, busca o que mudou no outro aparelho
+  const sessRef = useRef(session); sessRef.current = session;
+  const recRef = useRef(reconcile); recRef.current = reconcile;
+  useEffect(() => {
+    let last = Date.now();
+    const on = () => {
+      if (document.visibilityState !== 'visible' || !sessRef.current || needsChoiceRef.current) return;
+      if (Date.now() - last < 15000) return; // evita repetir em trocas rápidas de janela
+      last = Date.now();
+      void recRef.current(sessRef.current);
+    };
+    document.addEventListener('visibilitychange', on);
+    window.addEventListener('focus', on);
+    return () => { document.removeEventListener('visibilitychange', on); window.removeEventListener('focus', on); };
+  }, []);
 
   // envia alterações (debounce)
   useEffect(() => {
