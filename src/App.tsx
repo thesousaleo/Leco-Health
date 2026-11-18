@@ -1,5 +1,4 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { flushSync } from 'react-dom';
 import { useRipple, staggerIn } from './motion';
 import { LuActivity, LuApple, LuCircleX, LuCircleCheck, LuDumbbell, LuHouse, LuListChecks, LuSettings, LuUsers, LuCloudUpload, LuSparkles } from 'react-icons/lu';
 import { SyncProvider, useSync } from './sync';
@@ -103,7 +102,6 @@ function Shell() {
     return () => window.removeEventListener('hashchange', on);
   }, []);
 
-  const [vt, setVt] = useState(false); // transição feita pelo navegador (sem animação CSS extra)
   useRipple();
   const go = (t: TabId) => {
     if (t === tab) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
@@ -112,13 +110,9 @@ function Shell() {
       try { if (window.location.hash !== '#' + t) history.replaceState(null, '', '#' + t); } catch { /* frame */ }
       window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
     };
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
-    if (doc.startViewTransition && !reduce) {
-      document.documentElement.dataset.dir = ALL.indexOf(t) >= ALL.indexOf(tab) ? 'r' : 'l';
-      setVt(true);
-      doc.startViewTransition(() => flushSync(apply));
-    } else { setVt(false); apply(); }
+    // Só a página anima (CSS). Não usamos a "foto da tela" do navegador:
+    // no Android ela não reproduz o vidro e a barra de abas sumia na troca.
+    apply();
   };
   // blocos da página entram em sequência, de leve
   const mainRef = useRef<HTMLDivElement>(null);
@@ -176,7 +170,7 @@ function Shell() {
       </aside>
 
       {/* Top bar mobile */}
-      <header style={{ viewTransitionName: 'topbar' } as React.CSSProperties} className="gpu md:hidden sticky top-0 z-40 flex items-center justify-between px-4 pt-[var(--sat)] h-[calc(4rem+var(--sat))] bg-canvas/75 backdrop-blur-xl backdrop-saturate-150">
+      <header className="gpu md:hidden sticky top-0 z-40 flex items-center justify-between px-4 pt-[var(--sat)] h-[calc(4rem+var(--sat))] bg-canvas/75 backdrop-blur-xl backdrop-saturate-150">
         <Logo />
         <div className="flex items-center gap-2">
           <span className="text-[13px] font-semibold tabular-nums text-white px-3 h-8 rounded-full bg-orange grid place-items-center">{score}%</span>
@@ -189,8 +183,8 @@ function Shell() {
 
       <main className="md:pl-64">
         <PullToRefresh />
-        <div key={tab} ref={mainRef} style={{ viewTransitionName: 'page' } as React.CSSProperties}
-          className={cx('mx-auto max-w-[1280px] px-4 md:px-8 pt-3 md:pt-8 md:pb-12', tab === 'treino' ? 'pb-[calc(11rem+var(--sab))]' : 'pb-[calc(6.5rem+var(--sab))]', !vt && (dir === 'r' ? 'animate-page-r' : 'animate-page-l'))}>
+        <div key={tab} ref={mainRef}
+          className={cx('mx-auto max-w-[1280px] px-4 md:px-8 pt-3 md:pt-8 md:pb-12', tab === 'treino' ? 'pb-[calc(11rem+var(--sab))]' : 'pb-[calc(6.5rem+var(--sab))]', dir === 'r' ? 'animate-page-r' : 'animate-page-l')}>
           {page}
         </div>
       </main>
@@ -199,7 +193,7 @@ function Shell() {
       {/* o nome da transição e a camada própria ficam na pílula: se ficassem no <nav>, ele virava a
           "raiz" do desfoque e o vidro deixava o conteúdo passar nítido por trás */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 px-3 pb-[max(.75rem,var(--sab))] pt-2 pointer-events-none">
-        <div style={{ viewTransitionName: 'tabbar' } as React.CSSProperties} className="pointer-events-auto relative mx-auto max-w-md grid rounded-full nav-glass p-1"
+        <div className="pointer-events-auto relative mx-auto max-w-md grid rounded-full nav-glass p-1"
           style={{ gridTemplateColumns: `repeat(${mobileTabs.length}, minmax(0,1fr))` }}>
           {/* pílula que desliza até a aba ativa */}
           {activeIdx >= 0 && (

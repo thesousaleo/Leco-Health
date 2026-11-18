@@ -108,11 +108,11 @@
 @keyframes wave { 0%, 60%, 100% { transform: rotate(0); } 10%, 30% { transform: rotate(14deg); } 20% { transform: rotate(-8deg); } }
 @keyframes wave-x { 0%, 100% { transform: translateX(-6%) scaleX(1.1); } 50% { transform: translateX(6%) scaleX(1.1); } }
 
-@keyframes page-l { from { opacity: .6; transform: translate3d(-10px, 0, 0); } to { opacity: 1; transform: none; } }
-@keyframes page-r { from { opacity: .6; transform: translate3d(10px, 0, 0); } to { opacity: 1; transform: none; } }
+@keyframes page-l { from { opacity: .55; transform: translate3d(-36px, 0, 0); } 40% { opacity: 1; } to { opacity: 1; transform: none; } }
+@keyframes page-r { from { opacity: .55; transform: translate3d(36px, 0, 0); } 40% { opacity: 1; } to { opacity: 1; transform: none; } }
 @utility animate-page { animation: page .28s var(--ease-out); }
-@utility animate-page-l { animation: page-l .28s var(--ease-out); }
-@utility animate-page-r { animation: page-r .28s var(--ease-out); }
+@utility animate-page-l { animation: page-l .45s var(--spring); }
+@utility animate-page-r { animation: page-r .45s var(--spring); }
 @utility animate-fade { animation: fade .25s ease-out; }
 @utility animate-sheet { animation: sheet .55s var(--spring); }
 @utility animate-pop { animation: pop .45s var(--spring); }
@@ -206,21 +206,6 @@ button > svg, a > svg { flex-shrink: 0; }
 .gpu { transform: translateZ(0); -webkit-backface-visibility: hidden; backface-visibility: hidden; will-change: transform; }
 
 /* ── Animações de uso ─────────────────────────────────────── */
-/* Transição entre abas (View Transitions): página desliza na direção da aba; barra e cabeçalho ficam parados */
-/* fundo, cabeçalho e barra trocam na hora (a imagem antiga some; a nova é "ao vivo", então a bolinha da aba desliza) */
-::view-transition-old(root), ::view-transition-old(topbar), ::view-transition-old(tabbar) { display: none; }
-::view-transition-new(root), ::view-transition-new(topbar), ::view-transition-new(tabbar) { animation: none; }
-::view-transition-group(topbar), ::view-transition-group(tabbar) { z-index: 10; }
-::view-transition-group(page) { animation-duration: .38s; animation-timing-function: var(--ease-out); }
-@keyframes vt-out-l { to { transform: translate3d(-12%, 0, 0) scale(.97); opacity: 0; } }
-@keyframes vt-out-r { to { transform: translate3d(12%, 0, 0) scale(.97); opacity: 0; } }
-@keyframes vt-in-r { 0% { transform: translate3d(24%, 0, 0) scale(.98); opacity: 0; } 35% { opacity: 1; } }
-@keyframes vt-in-l { 0% { transform: translate3d(-24%, 0, 0) scale(.98); opacity: 0; } 35% { opacity: 1; } }
-html[data-dir="r"]::view-transition-old(page) { animation: vt-out-l .22s cubic-bezier(.4,0,1,1) both; }
-html[data-dir="r"]::view-transition-new(page) { animation: vt-in-r .48s var(--spring) .06s both; }
-html[data-dir="l"]::view-transition-old(page) { animation: vt-out-r .22s cubic-bezier(.4,0,1,1) both; }
-html[data-dir="l"]::view-transition-new(page) { animation: vt-in-l .48s var(--spring) .06s both; }
-
 /* Onda do toque */
 .ripple-host { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; pointer-events: none; z-index: 0; }
 .ripple {
@@ -257,6 +242,5 @@ html[data-dir="l"]::view-transition-new(page) { animation: vt-in-l .48s var(--sp
   transition: transform .5s var(--spring), width .5s var(--spring); }
 
 @media (prefers-reduced-motion: reduce) {
-  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
   .ripple-host { display: none; }
 }
