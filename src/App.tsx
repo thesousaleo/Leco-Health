@@ -1,6 +1,6 @@
 import React, { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useRipple, staggerIn } from './motion';
-import { LuActivity, LuApple, LuCamera, LuCircleX, LuCircleCheck, LuDroplet, LuDumbbell, LuHouse, LuListChecks, LuMoon, LuNotebookPen, LuPlus, LuScale, LuSearch, LuSettings, LuTrophy, LuUsers, LuCloudUpload, LuSparkles } from 'react-icons/lu';
+import { LuActivity, LuApple, LuCamera, LuCircleX, LuCircleCheck, LuDroplet, LuDumbbell, LuHouse, LuListChecks, LuMoon, LuNotebookPen, LuPlus, LuScale, LuChevronLeft, LuChevronRight, LuSearch, LuSettings, LuTrophy, LuUsers, LuCloudUpload, LuSparkles } from 'react-icons/lu';
 import { setIntent } from './intent';
 import { SyncProvider, useSync } from './sync';
 import AuthForm from './components/AuthForm';
@@ -12,7 +12,7 @@ import { RestTimerProvider } from './components/RestTimer';
 import { Button, cx, Modal, ProgressBar } from './components/ui';
 import { Celebration, SetupWizard } from './components/Extras';
 import { LockGate } from './components/Lock';
-import { leaveApp, onBackButton, onNotificationAction, setSystemBars, snoozeNotification, syncReminders, takeShortcutAction } from './native';
+import { haptic, leaveApp, onBackButton, onNotificationAction, setSystemBars, snoozeNotification, syncReminders, takeShortcutAction } from './native';
 import { popBack } from './back';
 import Dashboard from './pages/Dashboard';
 import Workout from './pages/Workout';
@@ -22,6 +22,7 @@ import Metrics from './pages/Metrics';
 import Settings from './pages/Settings';
 import { computeBadges } from './components/Badges';
 import { SearchSheet } from './components/Search';
+import { useSwipeTabs, type SwipeHint } from './swipe';
 
 type Ico = React.ComponentType<{ size?: number; fill?: string; fillOpacity?: number; strokeWidth?: number }>;
 const TABS: { id: TabId; label: string; icon: Ico }[] = [
@@ -168,9 +169,11 @@ function Shell() {
     window.addEventListener('keydown', k);
     return () => window.removeEventListener('keydown', k);
   }, []);
-  const go = useCallback((t: TabId) => {
+  const swipedRef = useRef(false);
+  const go = useCallback((t: TabId, dir?: 'r' | 'l') => {
     if (t === tabRef.current) { window.scrollTo({ top: 0, behavior: 'smooth' }); setNavTab(t); return; }
-    dirRef.current = ALL.indexOf(t) >= ALL.indexOf(tabRef.current) ? 'r' : 'l';
+    dirRef.current = dir ?? (ALL.indexOf(t) >= ALL.indexOf(tabRef.current) ? 'r' : 'l');
+    swipedRef.current = !!dir;
     // 1) a barra reage na hora; 2) a página nova é montada logo depois, sem travar a animação da barra
     setNavTab(t);
     startTransition(() => setTab(t));
@@ -232,8 +235,23 @@ function Shell() {
   const mainRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
-    if (mainRef.current) staggerIn(mainRef.current, dirRef.current);
+    if (mainRef.current) staggerIn(mainRef.current, dirRef.current, swipedRef.current ? 64 : 22);
+    swipedRef.current = false;
   }, [tab]);
+
+  // arrastar para os lados troca de aba (na ordem da barra)
+  const hostRef = useRef<HTMLElement>(null);
+  const hintRef = useRef<HTMLDivElement>(null);
+  const [hint, setHint] = useState<SwipeHint>(null);
+  const orderRef = useRef<TabId[]>([]); orderRef.current = mobileTabs.map((t) => t.id);
+  useSwipeTabs({
+    host: hostRef, page: mainRef, hint: hintRef, setHint,
+    order: () => orderRef.current, current: () => tabRef.current,
+    enabled: () => stRef.current.prefs.swipeTabs !== false && window.innerWidth < 768,
+    go: (t, dir) => go(t, dir),
+    labelOf: (t) => TABS.find((x) => x.id === t)?.label ?? '',
+    onThreshold: () => { if (stRef.current.prefs.haptics) void haptic(); },
+  });
   // quando a tela de abertura some, os blocos do Início entram (antes ficavam escondidos atrás dela)
   useEffect(() => {
     const on = () => { if (mainRef.current) staggerIn(mainRef.current, 'r'); };
@@ -311,7 +329,7 @@ function Shell() {
       </header>
 
       {/* overflow-x-clip: blocos que entram deslizando nunca alargam a tela */}
-      <main className="md:pl-64 overflow-x-clip">
+      <main ref={hostRef} className="md:pl-64 overflow-x-clip" style={{ touchAction: 'pan-y pinch-zoom' }}>
         <PullToRefresh />
         <div key={tab} ref={mainRef}
           className={cx('mx-auto max-w-[1280px] px-4 md:px-8 pt-3 md:pt-8 md:pb-12', tab === 'treino' ? 'pb-[calc(11rem+var(--sab))]' : FAB_TABS.includes(tab) ? 'pb-[calc(10rem+var(--sab))]' : 'pb-[calc(6.5rem+var(--sab))]')}>
@@ -363,6 +381,9 @@ function Shell() {
           </div>
         );
       })()}
+      <div ref={hintRef} aria-hidden className={cx('swipe-hint md:hidden', hint?.side === 'left' ? 'left-3' : 'right-3')}>
+        {hint?.side === 'left' && <LuChevronLeft size={16} />}<span>{hint?.label}</span>{hint?.side === 'right' && <LuChevronRight size={16} />}
+      </div>
       <SearchSheet open={search} onClose={() => setSearch(false)} go={go} />
       <Splash />
     </RestTimerProvider>

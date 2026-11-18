@@ -197,6 +197,7 @@ export interface Prefs {
   modules?: Partial<Record<ModuleId, boolean>>; // false = desligado (o padrão é ligado)
   discreet?: boolean; // esconde o peso no Início
   streakShield?: boolean; // escudo semanal da sequência (padrão: ligado)
+  swipeTabs?: boolean; // arrastar para os lados troca de aba (padrão: ligado)
 }
 
 /* ── Estado raiz ───────────────────────────────────────────── */

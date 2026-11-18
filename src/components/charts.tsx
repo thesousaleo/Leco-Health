@@ -94,7 +94,7 @@ export function LineChart({ data, color = 'var(--color-orange)', unit = '', heig
 
   return (
     <div className="relative" ref={boxRef}>
-      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="w-full touch-pan-y select-none" style={{ height: 'auto', aspectRatio: `${W}/${H}` }}
+      <svg ref={svgRef} data-noswipe viewBox={`0 0 ${W} ${H}`} className="w-full touch-pan-y select-none" style={{ height: 'auto', aspectRatio: `${W}/${H}` }}
         onPointerMove={onMove} onPointerDown={onMove} onPointerLeave={() => setHover(null)}>
         <defs>
           <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">

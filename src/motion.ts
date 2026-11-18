@@ -35,7 +35,7 @@ export function useRipple() {
 
 /** Transição de página: o título e os blocos visíveis entram em sequência, vindo do lado da aba.
  *  Começam já 65% visíveis (nada "some"); só os primeiros da tela animam. */
-export function staggerIn(root: HTMLElement, dir: 'r' | 'l' = 'r') {
+export function staggerIn(root: HTMLElement, dir: 'r' | 'l' = 'r', dist = 22) {
   if (reduce()) return;
   const vh = window.innerHeight;
   const all = [...root.querySelectorAll<HTMLElement>('header, .glass, [data-stagger]')];
@@ -46,7 +46,7 @@ export function staggerIn(root: HTMLElement, dir: 'r' | 'l' = 'r') {
   items.forEach((el, i) => {
     el.classList.remove('stagger-in');
     void el.offsetWidth;
-    el.style.setProperty('--dx', dir === 'r' ? '22px' : '-22px');
+    el.style.setProperty('--dx', `${dir === 'r' ? dist : -dist}px`);
     el.style.animationDelay = `${i * 40}ms`;
     el.classList.add('stagger-in');
     el.addEventListener('animationend', () => { el.classList.remove('stagger-in'); el.style.animationDelay = ''; }, { once: true });

@@ -439,6 +439,9 @@ function AppearanceTab({ go }: { go?: (t: TabId) => void }) {
       <Section title="Tamanho do texto">
         <Choice value={p.textSize} onChange={(v) => set({ textSize: v })} options={[{ v: 1, l: 'Normal' }, { v: 1.1, l: 'Grande' }, { v: 1.2, l: 'Maior' }]} />
       </Section>
+      <Section title="Gestos">
+        <Toggle checked={p.swipeTabs !== false} onChange={(v) => set({ swipeTabs: v })} label="Arrastar para trocar de aba" sub="Deslize o dedo para os lados para ir à aba vizinha da barra." />
+      </Section>
       <Section title="Sensações">
         <div className="space-y-2">
           <Toggle checked={p.haptics} onChange={(v) => set({ haptics: v })} label="Vibração leve" sub="Ao marcar hábitos, concluir séries e bater metas." />
