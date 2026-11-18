@@ -176,7 +176,7 @@ function Shell() {
       </aside>
 
       {/* Top bar mobile */}
-      <header style={{ viewTransitionName: 'topbar' } as React.CSSProperties} className="gpu md:hidden sticky top-0 z-40 flex items-center justify-between px-4 pt-[var(--sat)] h-[calc(4rem+var(--sat))] bg-canvas/40 backdrop-blur-xl backdrop-saturate-150">
+      <header style={{ viewTransitionName: 'topbar' } as React.CSSProperties} className="gpu md:hidden sticky top-0 z-40 flex items-center justify-between px-4 pt-[var(--sat)] h-[calc(4rem+var(--sat))] bg-canvas/75 backdrop-blur-xl backdrop-saturate-150">
         <Logo />
         <div className="flex items-center gap-2">
           <span className="text-[13px] font-semibold tabular-nums text-white px-3 h-8 rounded-full bg-orange grid place-items-center">{score}%</span>
@@ -196,8 +196,10 @@ function Shell() {
       </main>
 
       {/* Bottom nav mobile */}
-      <nav style={{ viewTransitionName: 'tabbar' } as React.CSSProperties} className="gpu md:hidden fixed bottom-0 inset-x-0 z-40 px-3 pb-[max(.75rem,var(--sab))] pt-2 pointer-events-none">
-        <div className="pointer-events-auto relative mx-auto max-w-md grid rounded-full nav-glass p-1"
+      {/* o nome da transição e a camada própria ficam na pílula: se ficassem no <nav>, ele virava a
+          "raiz" do desfoque e o vidro deixava o conteúdo passar nítido por trás */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 px-3 pb-[max(.75rem,var(--sab))] pt-2 pointer-events-none">
+        <div style={{ viewTransitionName: 'tabbar' } as React.CSSProperties} className="pointer-events-auto relative mx-auto max-w-md grid rounded-full nav-glass p-1"
           style={{ gridTemplateColumns: `repeat(${mobileTabs.length}, minmax(0,1fr))` }}>
           {/* pílula que desliza até a aba ativa */}
           {activeIdx >= 0 && (
