@@ -190,6 +190,7 @@ function HabitsCard({ go }: { go: (t: TabId) => void }) {
   const today = todayKey();
   const habits = activeHabits(state, today).filter((h) => isHabitScheduled(h, today));
   const streak = overallStreak(state);
+  const [fx, setFx] = React.useState<string | null>(null); // anima só o que você acabou de marcar
   return (
     <Card className="p-5 md:p-6">
       <SectionTitle title="Hábitos de hoje" action={habits.length ? (streak > 1 ? `${streak} dias seguidos` : 'Ver todos') : undefined} onAction={() => go('habitos')} />
@@ -203,11 +204,14 @@ function HabitsCard({ go }: { go: (t: TabId) => void }) {
             const done = isHabitDone(state, h.id, today);
             return (
               <li key={h.id}>
-                <button onClick={() => (h.target ? actions.setHabitCount(h.id, habitCount(state, h.id, today) + 1) : actions.toggleHabit(h.id))} aria-pressed={done}
+                <button onClick={() => { if (!done) setFx(h.id + Date.now()); h.target ? actions.setHabitCount(h.id, habitCount(state, h.id, today) + 1) : actions.toggleHabit(h.id); }} aria-pressed={done}
                   className="press w-full flex items-center gap-3 h-12 px-3 rounded-2xl hover:bg-cream transition-colors text-left">
-                  <span className={cx('grid place-items-center size-6 rounded-full border-2 shrink-0 transition-colors',
-                    done ? 'bg-orange border-orange text-white check-pop' : 'border-ink/20')} key={String(done)}>
-                    {done && <LuCheck size={14} strokeWidth={3} />}
+                  <span className="relative grid place-items-center shrink-0">
+                    {done && fx?.startsWith(h.id) && <span key={fx} className="check-burst" aria-hidden />}
+                    <span className={cx('relative grid place-items-center size-6 rounded-full border-2 transition-colors',
+                      done ? 'bg-orange border-orange text-white' : 'border-ink/20', done && fx?.startsWith(h.id) && 'check-pop')} key={String(done) + (fx?.startsWith(h.id) ? fx : '')}>
+                      {done && <LuCheck size={14} strokeWidth={3} />}
+                    </span>
                   </span>
                   <span className={cx('flex-1 text-[15px] truncate', done ? 'text-muted line-through decoration-ink/25' : 'text-ink')}>{h.name}</span>
                   {h.target ? <span className="text-[12.5px] text-muted tabular-nums shrink-0">{habitCount(state, h.id, today)}/{h.target} {h.unit}</span>

@@ -209,12 +209,13 @@ function ExerciseCard({ session, entry, locked, nextSetId, focus }: { session: W
   const rest = exDef?.rest;
   const isCurrent = !!nextSetId && entry.sets.some((x) => x.id === nextSetId);
   const [open, setOpen] = useState(false);
+  const [fx, setFx] = useState<string | null>(null); // série que você acabou de concluir
 
   // modo foco: exercício concluído vira uma linha compacta (toque para abrir)
   if (focus && allDone && !open) {
     return (
       <button onClick={() => setOpen(true)} className="press w-full glass rounded-[22px] px-4 py-3 flex items-center gap-3 text-left">
-        <span className="grid place-items-center size-8 rounded-full bg-good text-white shrink-0 check-pop"><LuCheck size={16} strokeWidth={3} /></span>
+        <span className="grid place-items-center size-8 rounded-full bg-good text-white shrink-0"><LuCheck size={16} strokeWidth={3} /></span>
         <span className="flex-1 min-w-0">
           <span className="block text-[15px] font-medium text-ink truncate line-through decoration-ink/25">{entry.name}</span>
           <span className="block text-[12.5px] text-muted tabular-nums">{entry.sets.length} séries · melhor {nf(bestNow, 1)} kg{isPR ? ' · recorde!' : ''}</span>
@@ -263,9 +264,10 @@ function ExerciseCard({ session, entry, locked, nextSetId, focus }: { session: W
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
             <button disabled={locked} aria-label={`Concluir série ${i + 1}`} aria-pressed={s.done}
-              onClick={() => { actions.updateSet(session.id, entry.exerciseId, s.id, { done: !s.done }); if (!s.done && !session.completed) timer.start(rest); }}
-              className={cx('press size-11 rounded-full grid place-items-center transition-colors disabled:opacity-60', s.done ? 'bg-orange text-white' : s.id === nextSetId ? 'bg-orange/15 text-orange' : 'bg-cream text-ink/30')}>
-              <LuCheck size={18} strokeWidth={3} className={s.done ? 'check-pop' : undefined} key={String(s.done)} />
+              onClick={() => { if (!s.done) setFx(s.id); actions.updateSet(session.id, entry.exerciseId, s.id, { done: !s.done }); if (!s.done && !session.completed) timer.start(rest); }}
+              className={cx('press relative size-11 rounded-full grid place-items-center transition-colors disabled:opacity-60', s.done ? 'bg-orange text-white' : s.id === nextSetId ? 'bg-orange/15 text-orange' : 'bg-cream text-ink/30')}>
+              {s.done && fx === s.id && <span className="check-burst" aria-hidden />}
+              <LuCheck size={18} strokeWidth={3} className={cx('relative', s.done && fx === s.id && 'check-pop')} key={String(s.done) + (fx === s.id ? 'fx' : '')} />
             </button>
           </div>
         ))}

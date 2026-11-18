@@ -1,4 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
+import { useRipple, staggerIn } from './motion';
 import { LuActivity, LuApple, LuCircleX, LuCircleCheck, LuDumbbell, LuHouse, LuListChecks, LuSettings, LuUsers, LuCloudUpload, LuSparkles } from 'react-icons/lu';
 import { SyncProvider, useSync } from './sync';
 import AuthForm from './components/AuthForm';
@@ -101,11 +103,26 @@ function Shell() {
     return () => window.removeEventListener('hashchange', on);
   }, []);
 
+  const [vt, setVt] = useState(false); // transição feita pelo navegador (sem animação CSS extra)
+  useRipple();
   const go = (t: TabId) => {
-    setTab(t);
-    try { if (window.location.hash !== '#' + t) history.replaceState(null, '', '#' + t); } catch { /* frame */ }
-    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+    if (t === tab) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    const apply = () => {
+      setTab(t);
+      try { if (window.location.hash !== '#' + t) history.replaceState(null, '', '#' + t); } catch { /* frame */ }
+      window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+    };
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
+    if (doc.startViewTransition && !reduce) {
+      document.documentElement.dataset.dir = ALL.indexOf(t) >= ALL.indexOf(tab) ? 'r' : 'l';
+      setVt(true);
+      doc.startViewTransition(() => flushSync(apply));
+    } else { setVt(false); apply(); }
   };
+  // blocos da página entram em sequência, de leve
+  const mainRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => { if (mainRef.current) staggerIn(mainRef.current); }, [tab]);
 
   const page = {
     inicio: <Dashboard go={go} />,
@@ -159,7 +176,7 @@ function Shell() {
       </aside>
 
       {/* Top bar mobile */}
-      <header className="gpu md:hidden sticky top-0 z-40 flex items-center justify-between px-4 pt-[var(--sat)] h-[calc(4rem+var(--sat))] bg-canvas/40 backdrop-blur-xl backdrop-saturate-150">
+      <header style={{ viewTransitionName: 'topbar' } as React.CSSProperties} className="gpu md:hidden sticky top-0 z-40 flex items-center justify-between px-4 pt-[var(--sat)] h-[calc(4rem+var(--sat))] bg-canvas/40 backdrop-blur-xl backdrop-saturate-150">
         <Logo />
         <div className="flex items-center gap-2">
           <span className="text-[13px] font-semibold tabular-nums text-white px-3 h-8 rounded-full bg-orange grid place-items-center">{score}%</span>
@@ -172,13 +189,14 @@ function Shell() {
 
       <main className="md:pl-64">
         <PullToRefresh />
-        <div key={tab} className={cx('mx-auto max-w-[1280px] px-4 md:px-8 pt-3 md:pt-8 md:pb-12', tab === 'treino' ? 'pb-[calc(11rem+var(--sab))]' : 'pb-[calc(6.5rem+var(--sab))]', dir === 'r' ? 'animate-page-r' : 'animate-page-l')}>
+        <div key={tab} ref={mainRef} style={{ viewTransitionName: 'page' } as React.CSSProperties}
+          className={cx('mx-auto max-w-[1280px] px-4 md:px-8 pt-3 md:pt-8 md:pb-12', tab === 'treino' ? 'pb-[calc(11rem+var(--sab))]' : 'pb-[calc(6.5rem+var(--sab))]', !vt && (dir === 'r' ? 'animate-page-r' : 'animate-page-l'))}>
           {page}
         </div>
       </main>
 
       {/* Bottom nav mobile */}
-      <nav className="gpu md:hidden fixed bottom-0 inset-x-0 z-40 px-3 pb-[max(.75rem,var(--sab))] pt-2 pointer-events-none">
+      <nav style={{ viewTransitionName: 'tabbar' } as React.CSSProperties} className="gpu md:hidden fixed bottom-0 inset-x-0 z-40 px-3 pb-[max(.75rem,var(--sab))] pt-2 pointer-events-none">
         <div className="pointer-events-auto relative mx-auto max-w-md grid rounded-full nav-glass p-1"
           style={{ gridTemplateColumns: `repeat(${mobileTabs.length}, minmax(0,1fr))` }}>
           {/* pílula que desliza até a aba ativa */}
@@ -192,7 +210,9 @@ function Shell() {
             return (
               <button key={t.id} onClick={() => go(t.id)} aria-current={active ? 'page' : undefined}
                 className={cx('press relative flex flex-col items-center justify-center gap-0.5 h-14 rounded-full transition-colors duration-300 min-w-0', active ? 'text-white' : 'text-ink/50')}>
-                <Icon size={20} strokeWidth={active ? 2.2 : 1.9} {...(active ? { fill: 'currentColor', fillOpacity: 0.22 } : {})} />
+                <span key={active ? 'on' : 'off'} className={active ? 'nav-bounce' : undefined}>
+                  <Icon size={20} strokeWidth={active ? 2.2 : 1.9} {...(active ? { fill: 'currentColor', fillOpacity: 0.22 } : {})} />
+                </span>
                 <span className={cx('text-[10px] truncate max-w-full', active ? 'font-semibold' : 'font-medium')}>{t.label}</span>
               </button>
             );

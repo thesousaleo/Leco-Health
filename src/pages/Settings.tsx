@@ -99,13 +99,14 @@ function Section({ title, sub, children, right }: { title: string; sub?: string;
 function Toggle({ checked, onChange, label, sub }: { checked: boolean; onChange: (v: boolean) => void; label: string; sub?: string }) {
   return (
     <button type="button" onClick={() => onChange(!checked)} role="switch" aria-checked={checked}
-      className="w-full flex items-center justify-between gap-4 rounded-2xl bg-cream px-4 py-3 text-left">
+      className="press w-full flex items-center justify-between gap-4 rounded-2xl bg-cream px-4 py-3 text-left">
       <span className="min-w-0">
         <span className="block text-[14.5px] text-ink">{label}</span>
         {sub && <span className="block text-[12.5px] text-muted">{sub}</span>}
       </span>
-      <span className={cx('relative w-12 h-7 rounded-full shrink-0 transition-colors', checked ? 'bg-orange' : 'bg-ink/20')}>
-        <span className={cx('absolute top-1 size-5 rounded-full bg-surface shadow transition-all', checked ? 'left-6' : 'left-1')} />
+      <span className={cx('relative w-12 h-7 rounded-full shrink-0 transition-colors duration-300', checked ? 'bg-orange' : 'bg-ink/20')}>
+        <span className="absolute top-1 left-1 h-5 w-5 rounded-full bg-surface shadow-[var(--shadow-1)] active:w-6"
+          style={{ transform: `translateX(${checked ? 20 : 0}px)`, transition: 'transform .45s var(--spring-bounce), width .2s' }} />
       </span>
     </button>
   );

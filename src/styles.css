@@ -203,3 +203,59 @@ button > svg, a > svg { flex-shrink: 0; }
 .empty-ico > svg { width: 26px; height: 26px; }
 
 .gpu { transform: translateZ(0); -webkit-backface-visibility: hidden; backface-visibility: hidden; will-change: transform; }
+
+/* ── Animações de uso ─────────────────────────────────────── */
+/* Transição entre abas (View Transitions): página desliza na direção da aba; barra e cabeçalho ficam parados */
+/* fundo, cabeçalho e barra trocam na hora (a imagem antiga some; a nova é "ao vivo", então a bolinha da aba desliza) */
+::view-transition-old(root), ::view-transition-old(topbar), ::view-transition-old(tabbar) { display: none; }
+::view-transition-new(root), ::view-transition-new(topbar), ::view-transition-new(tabbar) { animation: none; }
+::view-transition-group(topbar), ::view-transition-group(tabbar) { z-index: 10; }
+::view-transition-group(page) { animation-duration: .38s; animation-timing-function: var(--ease-out); }
+@keyframes vt-out-l { to { transform: translate3d(-12%, 0, 0) scale(.97); opacity: 0; } }
+@keyframes vt-out-r { to { transform: translate3d(12%, 0, 0) scale(.97); opacity: 0; } }
+@keyframes vt-in-r { 0% { transform: translate3d(24%, 0, 0) scale(.98); opacity: 0; } 35% { opacity: 1; } }
+@keyframes vt-in-l { 0% { transform: translate3d(-24%, 0, 0) scale(.98); opacity: 0; } 35% { opacity: 1; } }
+html[data-dir="r"]::view-transition-old(page) { animation: vt-out-l .22s cubic-bezier(.4,0,1,1) both; }
+html[data-dir="r"]::view-transition-new(page) { animation: vt-in-r .48s var(--spring) .06s both; }
+html[data-dir="l"]::view-transition-old(page) { animation: vt-out-r .22s cubic-bezier(.4,0,1,1) both; }
+html[data-dir="l"]::view-transition-new(page) { animation: vt-in-l .48s var(--spring) .06s both; }
+
+/* Onda do toque */
+.ripple-host { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; pointer-events: none; z-index: 0; }
+.ripple {
+  position: absolute; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, color-mix(in srgb, currentColor 22%, transparent) 0%, color-mix(in srgb, currentColor 10%, transparent) 45%, transparent 70%);
+  transform: scale(0); opacity: 1;
+  animation: ripple-grow .55s cubic-bezier(.2,.8,.2,1) forwards;
+}
+.ripple.out { animation: ripple-grow .55s cubic-bezier(.2,.8,.2,1) forwards, ripple-fade .4s ease forwards; }
+@keyframes ripple-grow { to { transform: scale(1); } }
+@keyframes ripple-fade { to { opacity: 0; } }
+
+/* Entrada escalonada dos blocos (sem começar invisível) */
+@keyframes stagger-in { from { opacity: .35; transform: translate3d(0, 14px, 0) scale(.985); } to { opacity: 1; transform: none; } }
+.stagger-in { animation: stagger-in .55s var(--spring) both; }
+
+/* Ícone da aba ativa dá um pulinho */
+@keyframes nav-bounce { 0% { transform: scale(.7) translateY(3px); } 55% { transform: scale(1.18) translateY(-2px); } 100% { transform: none; } }
+.nav-bounce { display: inline-flex; animation: nav-bounce .5s var(--spring-bounce); }
+
+/* Check com onda que se espalha */
+@keyframes check-burst { from { transform: scale(.6); opacity: .55; } to { transform: scale(2.1); opacity: 0; } }
+.check-burst { position: absolute; inset: 0; border-radius: 9999px; background: var(--color-orange); pointer-events: none; animation: check-burst .6s cubic-bezier(.2,.8,.2,1) forwards; }
+
+/* Janelas: saída suave */
+@keyframes sheet-out { to { transform: translate3d(0, 105%, 0); } }
+@keyframes fade-out { to { opacity: 0; } }
+@media (min-width: 768px) { @keyframes sheet-out { to { transform: scale(.94); opacity: 0; } } }
+.animate-sheet-out { animation: sheet-out .32s cubic-bezier(.4,0,1,1) forwards; }
+.animate-fade-out { animation: fade-out .3s ease forwards; }
+
+/* Indicador deslizante dos seletores */
+.seg-ind { position: absolute; top: 4px; bottom: 4px; left: 0; border-radius: 9999px; background: var(--color-ink); box-shadow: var(--shadow-1);
+  transition: transform .5s var(--spring), width .5s var(--spring); }
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+  .ripple-host { display: none; }
+}

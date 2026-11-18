@@ -279,6 +279,19 @@ export function Modal({ open, onClose, title, children, footer }: {
 }) {
   const [dy, setDy] = useState(0);
   const drag = useRef<{ y: number; t: number } | null>(null);
+  // mantém a janela montada um instante para animar a saída
+  const [shown, setShown] = useState(open);
+  const [leaving, setLeaving] = useState(false);
+  const last = useRef({ title, children, footer });
+  if (open) last.current = { title, children, footer };
+  useEffect(() => {
+    if (open) { setShown(true); setLeaving(false); return; }
+    if (!shown) return;
+    setLeaving(true);
+    const t = setTimeout(() => { setShown(false); setLeaving(false); setDy(0); }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
   useEffect(() => {
     if (!open) return;
     setDy(0);
@@ -288,7 +301,8 @@ export function Modal({ open, onClose, title, children, footer }: {
     document.body.style.overflow = 'hidden';
     return () => { window.removeEventListener('keydown', k); document.body.style.overflow = prev; };
   }, [open, onClose]);
-  if (!open) return null;
+  if (!open && !shown) return null;
+  const view = open ? { title, children, footer } : last.current;
   const onDown = (e: React.PointerEvent) => {
     if (window.matchMedia('(min-width: 768px)').matches) return;
     if ((e.target as HTMLElement).closest('button')) return;
@@ -300,22 +314,22 @@ export function Modal({ open, onClose, title, children, footer }: {
     if (!drag.current) return;
     const fast = dy / Math.max(1, Date.now() - drag.current.t) > 0.6;
     drag.current = null;
-    if (dy > 120 || (fast && dy > 40)) { setDy(window.innerHeight); setTimeout(onClose, 180); } else setDy(0);
+    if (dy > 120 || (fast && dy > 40)) { setDy(window.innerHeight); setTimeout(onClose, 200); } else setDy(0);
   };
   return (
-    <div className="fixed inset-0 z-[60] flex items-end md:items-center justify-center" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="absolute inset-0 bg-ink/35 animate-fade" style={{ opacity: Math.max(0, 1 - dy / 400) }} onClick={onClose} />
-      <div className="relative w-full md:max-w-lg max-h-[92dvh] flex flex-col rounded-t-[30px] md:rounded-[30px] bg-surface shadow-[var(--shadow-3)] animate-sheet"
+    <div className="fixed inset-0 z-[60] flex items-end md:items-center justify-center" role="dialog" aria-modal="true" aria-label={view.title}>
+      <div className={cx('absolute inset-0 bg-ink/35', leaving ? 'animate-fade-out' : 'animate-fade')} style={{ opacity: Math.max(0, 1 - dy / 400) }} onClick={onClose} />
+      <div className={cx('relative w-full md:max-w-lg max-h-[92dvh] flex flex-col rounded-t-[30px] md:rounded-[30px] bg-surface shadow-[var(--shadow-3)]', leaving ? 'animate-sheet-out' : 'animate-sheet')}
         style={{ transform: dy ? `translateY(${dy}px)` : undefined, transition: drag.current ? 'none' : 'transform .45s var(--spring)' }}>
         <div className="touch-none select-none" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
           <div className="md:hidden mx-auto mt-2.5 h-1.5 w-11 rounded-full bg-ink/15" />
           <div className="flex items-center justify-between px-6 pt-4 pb-3">
-            <h2 className="text-[21px] font-[650] tracking-[-0.025em] text-ink">{title}</h2>
+            <h2 className="text-[21px] font-[650] tracking-[-0.025em] text-ink">{view.title}</h2>
             <RoundButton label="Fechar" className="size-10" onClick={onClose}><LuX size={17} /></RoundButton>
           </div>
         </div>
-        <div className="px-6 pb-5 overflow-y-auto overscroll-contain min-h-0 flex-1">{children}</div>
-        {footer && <div className="shrink-0 px-6 py-4 border-t border-line flex gap-2 justify-end pb-[max(1rem,var(--sab))]">{footer}</div>}
+        <div className="px-6 pb-5 overflow-y-auto overscroll-contain min-h-0 flex-1">{view.children}</div>
+        {view.footer && <div className="shrink-0 px-6 py-4 border-t border-line flex gap-2 justify-end pb-[max(1rem,var(--sab))]">{view.footer}</div>}
       </div>
     </div>
   );
@@ -347,12 +361,25 @@ export function Empty({ icon, title, text, action }: { icon: React.ReactNode; ti
 export function Segmented<T extends string>({ value, onChange, options }: {
   value: T; onChange: (v: T) => void; options: { value: T; label: React.ReactNode }[]; accent?: Accent;
 }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [ind, setInd] = useState<{ x: number; w: number } | null>(null);
+  useEffect(() => {
+    const el = box.current; if (!el) return;
+    const upd = () => {
+      const btn = el.querySelector<HTMLElement>(`[data-seg="${CSS.escape(value)}"]`);
+      if (btn) setInd({ x: btn.offsetLeft, w: btn.offsetWidth });
+    };
+    upd();
+    const ro = new ResizeObserver(upd); ro.observe(el);
+    return () => ro.disconnect();
+  }, [value, options.length]);
   return (
-    <div className="inline-flex p-1 rounded-full glass gap-1 w-full md:w-auto">
+    <div ref={box} className="relative inline-flex p-1 rounded-full glass gap-1 w-full md:w-auto">
+      {ind && <span aria-hidden className="seg-ind" style={{ width: ind.w, transform: `translateX(${ind.x}px)` }} />}
       {options.map((o) => (
-        <button key={o.value} type="button" onClick={() => onChange(o.value)}
-          className={cx('press flex-1 min-w-0 md:flex-none h-10 px-2 sm:px-5 rounded-full text-[13.5px] sm:text-[14px] font-medium transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap',
-            value === o.value ? 'bg-ink text-on-ink shadow-[var(--shadow-1)]' : 'text-ink/55 hover:text-ink')}>
+        <button key={o.value} type="button" data-seg={o.value} onClick={() => onChange(o.value)}
+          className={cx('press relative z-[1] flex-1 min-w-0 md:flex-none h-10 px-2 sm:px-5 rounded-full text-[13.5px] sm:text-[14px] font-medium transition-colors duration-300 flex items-center justify-center gap-1.5 whitespace-nowrap',
+            value === o.value ? (ind ? 'text-on-ink' : 'bg-ink text-on-ink') : 'text-ink/55 hover:text-ink')}>
           {o.label}
         </button>
       ))}

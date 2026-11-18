@@ -124,6 +124,7 @@ function HabitRow({ h, organize, onEdit, onMonth, onUp, onDown }: {
   // comemora 7, 30 e 100 dias seguidos
   const prevSt = useRef(st);
   const [milestone, setMilestone] = useState<number | null>(null);
+  const [fx, setFx] = useState(0); // só anima quando você marca (não ao abrir a tela)
   useEffect(() => {
     if (on && st > prevSt.current && MILESTONES.includes(st)) { setMilestone(st); const t = setTimeout(() => setMilestone(null), 2600); prevSt.current = st; return () => clearTimeout(t); }
     prevSt.current = st;
@@ -140,15 +141,18 @@ function HabitRow({ h, organize, onEdit, onMonth, onUp, onDown }: {
   }
   return (
     <li className="flex items-center gap-1.5">
-      <button onClick={() => (h.target ? actions.setHabitCount(h.id, on ? 0 : h.target) : actions.toggleHabit(h.id))} aria-pressed={on}
+      <button onClick={() => { if (!on) setFx(Date.now()); h.target ? actions.setHabitCount(h.id, on ? 0 : h.target) : actions.toggleHabit(h.id); }} aria-pressed={on}
         aria-label={on ? `Desmarcar ${h.name}` : `Marcar ${h.name}`} className="press shrink-0 grid place-items-center size-11">
         {h.target && !on ? (
           <ProgressRing value={count / h.target} size={30} stroke={3.5}>
             <span className="text-[10px] font-semibold text-ink tabular-nums">{count}</span>
           </ProgressRing>
         ) : (
-          <span key={String(on)} className={cx('grid place-items-center size-7 rounded-full border-2 transition-colors', on ? 'bg-orange border-orange text-white check-pop' : 'border-ink/20')}>
-            {on && <LuCheck size={16} strokeWidth={3} />}
+          <span className="relative grid place-items-center">
+            {on && fx > 0 && <span key={fx} className="check-burst" aria-hidden />}
+            <span key={String(on) + fx} className={cx('relative grid place-items-center size-7 rounded-full border-2 transition-colors', on ? 'bg-orange border-orange text-white' : 'border-ink/20', on && fx > 0 && 'check-pop')}>
+              {on && <LuCheck size={16} strokeWidth={3} />}
+            </span>
           </span>
         )}
       </button>

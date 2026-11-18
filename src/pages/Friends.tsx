@@ -314,7 +314,7 @@ function FriendCard({ f, sent, onReact, onRemove, onSharesSaved }: {
         {EMOJIS.map((e) => {
           const ex = sent.find((r) => r.emoji === e);
           return (
-            <button key={e} onClick={() => { if (!ex) setBurst({ e, k: Date.now() }); onReact(e, ex); }} aria-pressed={!!ex}
+            <button key={e} data-noripple onClick={() => { if (!ex) setBurst({ e, k: Date.now() }); onReact(e, ex); }} aria-pressed={!!ex}
               className={cx('press relative size-10 rounded-full grid place-items-center text-[18px] transition-colors', ex ? 'bg-blush ring-2 ring-orange/40' : 'bg-cream')}>
               {e}
               {burst?.e === e && <span key={burst.k} aria-hidden className="float-up absolute left-1/2 -top-1 text-[26px] pointer-events-none">{e}</span>}
