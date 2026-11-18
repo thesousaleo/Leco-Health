@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { pushBack } from '../back';
+import { useIntent } from '../intent';
 import {
   LuCamera, LuCheck, LuRepeat, LuChevronLeft, LuChevronRight, LuImage, LuImageOff, LuImages, LuLoaderCircle, LuMinus, LuNotebookPen, LuPencil, LuPlus, LuX,
 } from 'react-icons/lu';
@@ -35,6 +36,7 @@ export default function Nutrition() {
   const [view, setView] = useState<'diario' | 'galeria'>('diario');
   const [modal, setModal] = useState<{ meal?: MealLog } | null>(null);
   const [viewer, setViewer] = useState<{ ids: string[]; i: number } | null>(null);
+  useIntent('nutricao', (i) => { if (i === 'meal') { setDay(todayKey()); setView('diario'); setModal({}); } });
   const meals = mealsOn(state, day);
   const goal = state.goals.meals || 4;
   const water = state.water[day] || 0;

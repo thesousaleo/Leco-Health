@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  LuApple, LuArrowRight, LuCheck, LuChevronRight, LuDumbbell, LuListChecks, LuMoon, LuPlus, LuScale, LuCamera, LuSun, LuSunrise, LuSunset,
+  LuApple, LuArrowRight, LuCheck, LuChevronRight, LuDumbbell, LuListChecks, LuMoon, LuPlay, LuPlus, LuScale, LuCamera, LuSun, LuSunrise, LuSunset,
 } from 'react-icons/lu';
 import { useStore } from '../store';
 import type { TabId } from '../types';
@@ -9,6 +9,10 @@ import {
   overallStreak, relDay, sessionProgress, todayKey, weekday, isHabitScheduled, habitCount, weekDoneCount, dueHabits,
 } from '../utils';
 import { Card, cx, ProgressBar, ProgressRing, useCountUp } from '../components/ui';
+import { ScoreRings, type RingPart } from '../components/ScoreRings';
+import { ScoreDetail } from '../components/ScoreDetail';
+import { DayStrip } from '../components/DayStrip';
+import { WeekStories } from '../components/WeekStories';
 import { Sparkline } from '../components/charts';
 import { Thumb } from './Nutrition';
 import { WaterCard } from '../components/Water';
@@ -44,6 +48,7 @@ export default function Dashboard({ go }: { go: (t: TabId) => void }) {
         {state.prefs.homeBlocks.filter((b) => b.on).map((b) => {
           switch (b.id) {
             case 'dia': return <div key={b.id}><TodayCard go={go} /></div>;
+            case 'faixa': return <div key={b.id}><DayStrip /></div>;
             case 'resumo': return showSummary ? <div key={b.id}><SummaryCard go={go} /></div> : null;
             case 'agua': return <div key={b.id}><WaterCard /></div>;
             case 'semana': return <div key={b.id}><WeekCard /></div>;
@@ -123,6 +128,16 @@ function TodayCard({ go }: { go: (t: TabId) => void }) {
 
   const color = score.total >= 80 ? 'var(--color-good)' : 'var(--color-orange)';
   const shown = Math.round(useCountUp(score.total));
+  const sleepToday = state.sleep.find((x) => x.date === today);
+  const goalSleep = state.goals.sleep || 8;
+  const ringParts: RingPart[] = [
+    { key: 'treino', label: 'Treino', value: score.workout, color: 'var(--color-orange)', detail: workout.sub },
+    { key: 'refeicoes', label: 'Refeições', value: score.nutrition, color: 'var(--color-good)', detail: `${meals.length} de ${mealGoal} registradas` },
+    { key: 'habitos', label: 'Hábitos', value: habits.length ? habitsDone / habits.length : 0, color: 'var(--color-mind)', detail: habits.length ? `${habitsDone} de ${habits.length} feitos` : 'nenhum programado' },
+    { key: 'sono', label: 'Sono', value: sleepToday ? Math.min(1, sleepToday.hours / goalSleep) : 0, color: 'var(--color-sleep)', detail: sleepToday ? `${nf(sleepToday.hours, 1)} h de ${goalSleep} h` : 'noite não registrada' },
+  ];
+  const ringsRef = React.useRef<HTMLButtonElement>(null);
+  const [detail, setDetail] = React.useState<DOMRect | null>(null);
 
   // mensagem do dia em tom humano
   const pending = rows.filter((r) => !r.done);
@@ -140,14 +155,18 @@ function TodayCard({ go }: { go: (t: TabId) => void }) {
   return (
     <Card className="p-5 md:p-6">
       <div className="flex items-center gap-4">
-        <ProgressRing value={score.total / 100} size={104} stroke={10} color={color}>
-          <span className="num text-[28px] text-ink leading-none">{shown}<span className="unit">%</span></span>
-        </ProgressRing>
+        <button ref={ringsRef} aria-label="Ver detalhes do dia" className="press rounded-full shrink-0"
+          style={{ visibility: detail ? 'hidden' : undefined }}
+          onClick={() => ringsRef.current && setDetail(ringsRef.current.getBoundingClientRect())}>
+          <ScoreRings total={score.total} totalColor={color} parts={ringParts} />
+        </button>
         <div className="min-w-0">
           <p className="eyebrow">Seu dia</p>
-          <p className="text-[16px] font-medium text-ink leading-snug mt-1 tracking-[-0.01em]">{msg}</p>
+          <p className="num text-[34px] text-ink leading-none mt-1.5">{shown}<span className="unit">%</span></p>
+          <p className="text-[14.5px] font-medium text-ink/85 leading-snug mt-1.5 tracking-[-0.01em]">{msg}</p>
         </div>
       </div>
+      {detail && <ScoreDetail from={detail} sourceRef={ringsRef} total={score.total} totalColor={color} parts={ringParts} msg={msg} onClose={() => setDetail(null)} />}
 
       {next && (
         <button onClick={next.onAction} className="press mt-4 w-full flex items-center gap-3 rounded-2xl bg-blush/55 px-4 py-3 text-left">
@@ -307,7 +326,7 @@ function BodyCard({ go }: { go: (t: TabId) => void }) {
           </p>
           <div className="flex items-end justify-between gap-2 mt-2">
             <p className={cx('text-[12px] font-medium truncate', diff == null ? 'text-muted' : good ? 'text-good' : 'text-warn')}>
-              {diff != null ? `${diff > 0 ? '+' : ''}${nf(diff, 1)} kg` : body[0] ? relDay(body[0].date) : 'Registrar'}
+              {diff != null ? `${Math.abs(diff) < 0.05 ? '●' : diff > 0 ? '▲' : '▼'} ${diff > 0 ? '+' : ''}${nf(diff, 1)} kg` : body[0] ? relDay(body[0].date) : 'Registrar'}
             </p>
             <Sparkline values={wVals} width={56} height={22} color="var(--color-ink)" />
           </div>
@@ -319,9 +338,9 @@ function BodyCard({ go }: { go: (t: TabId) => void }) {
           </p>
           <div className="flex items-end justify-between gap-2 mt-2">
             <p className={cx('text-[12px] font-medium truncate', !sleep ? 'text-muted' : sleep.hours >= (state.goals.sleep || 7) ? 'text-good' : 'text-warn')}>
-              {sleep ? relDay(sleep.date) : 'Registrar'}
+              {sleep ? `${sleep.hours >= (state.goals.sleep || 7) ? '▲' : '▼'} ${relDay(sleep.date)}` : 'Registrar'}
             </p>
-            <Sparkline values={sVals} width={56} height={22} />
+            <Sparkline values={sVals} width={56} height={22} color="var(--color-sleep)" />
           </div>
         </button>
       </div>
@@ -334,6 +353,7 @@ function SummaryCard({ go }: { go: (t: TabId) => void }) {
   const { state } = useStore();
   const { from, to } = summaryWeek();
   const r = buildReport(state, from, to);
+  const [stories, setStories] = React.useState(false);
   const items: [string, string][] = [
     ['Score médio', `${r.scoreAvg}%`],
     ['Treinos', `${r.workouts + r.cardio}`],
@@ -356,8 +376,12 @@ function SummaryCard({ go }: { go: (t: TabId) => void }) {
           </div>
         ))}
       </div>
-      <button onClick={() => { try { localStorage.setItem('leco-health:metrics-view', 'resumo'); } catch { /* */ } go('registros'); }}
-        className="press mt-4 h-10 px-4 rounded-full bg-orange text-white text-[13.5px] font-medium">Ver resumo completo</button>
+      <div className="flex gap-2 mt-4">
+        <button onClick={() => setStories(true)} className="press h-10 px-4 rounded-full bg-orange text-white text-[13.5px] font-medium flex items-center gap-1.5"><LuPlay size={14} /> Ver stories</button>
+        <button onClick={() => { try { localStorage.setItem('leco-health:metrics-view', 'resumo'); } catch { /* */ } go('registros'); }}
+          className="press h-10 px-4 rounded-full text-[13.5px] font-medium" style={{ background: 'color-mix(in srgb, var(--color-on-ink) 12%, transparent)' }}>Resumo completo</button>
+      </div>
+      {stories && <WeekStories state={state} from={from} to={to} onClose={() => setStories(false)} />}
     </div>
   );
 }

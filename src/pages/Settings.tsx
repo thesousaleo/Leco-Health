@@ -334,7 +334,7 @@ const ACCENTS: { id: Accent; label: string; color: string }[] = [
   { id: 'rosa', label: 'Rosa', color: '#DB2777' }, { id: 'grafite', label: 'Grafite', color: '#3F3F46' },
 ];
 const BLOCK_LABEL: Record<HomeBlockId, string> = {
-  dia: 'Seu dia', resumo: 'Resumo da semana (domingo e segunda)', agua: 'Água', semana: 'Sua semana', habitos: 'Hábitos de hoje', refeicoes: 'Refeições de hoje', corpo: 'Corpo e sono',
+  dia: 'Seu dia', faixa: 'Seu dia em 24 h', resumo: 'Resumo da semana (domingo e segunda)', agua: 'Água', semana: 'Sua semana', habitos: 'Hábitos de hoje', refeicoes: 'Refeições de hoje', corpo: 'Corpo e sono',
 };
 const NAV_ALL: { id: TabId; label: string }[] = [
   { id: 'treino', label: 'Treino' }, { id: 'nutricao', label: 'Nutrição' }, { id: 'habitos', label: 'Hábitos' }, { id: 'registros', label: 'Registros' }, { id: 'amigos', label: 'Amigos' },
@@ -394,6 +394,9 @@ function AppearanceTab({ go }: { go?: (t: TabId) => void }) {
             </button>
           ))}
         </div>
+      </Section>
+      <Section title="Noite profunda">
+        <Toggle checked={p.nightWarm !== false} onChange={(v) => set({ nightWarm: v })} label="Esquentar as cores antes de dormir" sub="Nas 2 horas antes do seu horário de sono, o app fica em tons âmbar." />
       </Section>
       <Section title="Efeito vidro">
         <Toggle checked={p.glass !== false} onChange={(v) => set({ glass: v })} label="Blocos translúcidos" sub="Estilo liquid glass. Desligue se o celular ficar lento." />

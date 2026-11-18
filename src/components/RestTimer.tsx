@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { LuMinus, LuPause, LuPlay, LuPlus, LuTimer, LuX } from 'react-icons/lu';
 import { cx, ProgressRing } from './ui';
+import { haptic } from '../native';
 
 /* Timer de descanso flutuante — global, sobrevive à troca de abas. */
 
@@ -82,6 +83,9 @@ export function RestTimerProvider({ children, visible }: { children: React.React
   };
 
   const mm = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+  const urgent = running && left > 0 && left <= 10;
+  // vibração leve nos 3 últimos segundos
+  useEffect(() => { if (running && left > 0 && left <= 3) void haptic(); }, [running, left]);
 
   return (
     <Ctx.Provider value={{ start, preset, setPreset }}>
@@ -95,9 +99,11 @@ export function RestTimerProvider({ children, visible }: { children: React.React
                 <button className="press size-8 rounded-full grid place-items-center text-white/50 hover:text-white hover:bg-white/10" onClick={() => setOpen(false)} aria-label="Minimizar"><LuX size={16} /></button>
               </div>
               <div className="flex items-center gap-4">
+                <div className={cx('rounded-full', urgent && 'timer-urgent')}>
                 <ProgressRing value={active ? left / total : 0} size={92} stroke={7} color="var(--color-orange)" track="rgba(255,255,255,.12)">
                   <span className="text-[22px] font-medium tracking-[-0.03em] text-white tabular-nums">{active ? mm : `${preset}s`}</span>
                 </ProgressRing>
+                </div>
                 <div className="flex flex-col gap-2 flex-1">
                   <div className="flex gap-1.5">
                     {PRESETS.map((p) => (
@@ -124,7 +130,7 @@ export function RestTimerProvider({ children, visible }: { children: React.React
           )}
           <button onClick={() => setOpen((o) => !o)}
             className={cx('press h-14 rounded-full flex items-center gap-2 pl-5 pr-6 transition-colors shadow-[0_10px_30px_-10px_rgba(28,27,26,.4)]',
-              flash ? 'bg-orange text-white animate-pulse' : active ? 'bg-orange text-white' : 'bg-[#1C1B1A] text-white')}
+              flash ? 'bg-orange text-white animate-pulse' : active ? 'bg-orange text-white' : 'bg-[#1C1B1A] text-white', urgent && 'timer-urgent')}
             aria-label="Timer de descanso">
             <LuTimer size={20} />
             <span className="font-medium tabular-nums text-[16px]">{flash ? 'Bora!' : active ? mm : 'Descanso'}</span>

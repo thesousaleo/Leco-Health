@@ -160,7 +160,7 @@ export interface NoteEntry {
 }
 
 /* ── Preferências ──────────────────────────────────────────── */
-export type HomeBlockId = 'dia' | 'resumo' | 'agua' | 'semana' | 'habitos' | 'refeicoes' | 'corpo';
+export type HomeBlockId = 'dia' | 'faixa' | 'resumo' | 'agua' | 'semana' | 'habitos' | 'refeicoes' | 'corpo';
 export type Accent = 'laranja' | 'verde' | 'azul' | 'roxo' | 'rosa' | 'grafite';
 export interface Prefs {
   theme: 'auto' | 'light' | 'dark';
@@ -169,6 +169,7 @@ export interface Prefs {
   haptics: boolean;
   celebrate: boolean;
   glass?: boolean; // efeito vidro (liquid glass) nos blocos
+  nightWarm?: boolean; // Noite profunda: esquenta o tema antes de dormir
   homeBlocks: { id: HomeBlockId; on: boolean }[];
   navTabs: TabId[]; // abas da barra inferior (além do Início)
   scoreWeights: { treino: number; refeicoes: number; habitos: number };

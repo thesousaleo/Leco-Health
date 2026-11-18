@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useIntent, type Intent } from '../intent';
 import {
   LuActivity, LuApple, LuDumbbell, LuFileText, LuMoon, LuNotebookPen, LuPencil, LuPlus, LuScale, LuSearch, LuStethoscope, LuTag,
-  LuTrendingDown, LuTrendingUp, LuX, LuChartColumn, LuCamera, LuImage, LuColumns2, LuFileDown, LuChevronLeft, LuChevronRight, LuLightbulb,
+  LuTrendingDown, LuTrendingUp, LuX, LuChartColumn, LuCamera, LuImage, LuColumns2, LuFileDown, LuChevronLeft, LuChevronRight, LuLightbulb, LuPlay,
 } from 'react-icons/lu';
 import { deletePhoto, savePhoto } from '../photos';
 import { PhotoViewer, Thumb } from './Nutrition';
@@ -10,11 +11,13 @@ import { shareFile } from '../native';
 import { useSync } from '../sync';
 import { useStore } from '../store';
 import type { NoteEntry, NoteKind, SleepLog } from '../types';
-import { addDays, fmtShort, lastNDays, nf, relDay, round1, todayKey, fmtWeekdayShort } from '../utils';
+import { addDays, fmtShort, lastNDays, nf, radarWeek, relDay, round1, todayKey, fmtWeekdayShort, weightTrend } from '../utils';
 import {
   Button, Card, Chip, cx, DeleteButton, Empty, Field, IconButton, Input, Modal, NumInput, PageHeader, Segmented, Select, Stars, Tag, TextArea,
 } from '../components/ui';
-import { BarChart, LineChart } from '../components/charts';
+import { BarChart, LineChart, RadarChart } from '../components/charts';
+import { WeekStories } from '../components/WeekStories';
+import { BadgeShelf } from '../components/Badges';
 
 type View = 'peso' | 'sono' | 'diario' | 'resumo';
 
@@ -23,6 +26,9 @@ export default function Metrics() {
     try { const v = localStorage.getItem('leco-health:metrics-view') as View | null; if (v) { localStorage.removeItem('leco-health:metrics-view'); return v; } } catch { /* */ }
     return 'peso';
   });
+  // ações rápidas do botão ＋
+  const [focus, setFocus] = useState<{ i: Intent; k: number } | null>(null);
+  useIntent('registros', (i) => { setView(i === 'weight' ? 'peso' : i === 'sleep' ? 'sono' : 'diario'); setFocus({ i, k: Date.now() }); });
   return (
     <div>
       <PageHeader title="Registros" sub="Peso, sono e diário de saúde" />
@@ -34,19 +40,32 @@ export default function Metrics() {
           { value: 'resumo', label: <><LuChartColumn size={15} /> Resumo</> },
         ]} />
       </div>
-      {view === 'peso' && <Weight />}
+      {view === 'peso' && <Weight focusKey={focus?.i === 'weight' ? focus.k : 0} />}
       {view === 'sono' && <Sleep />}
-      {view === 'diario' && <Journal />}
+      {view === 'diario' && <Journal newKey={focus?.i === 'note' ? focus.k : 0} />}
       {view === 'resumo' && <ReportView />}
     </div>
   );
 }
 
 /* ─────────────────────────── Peso ─────────────────────────── */
-function Weight() {
+function Weight({ focusKey = 0 }: { focusKey?: number }) {
   const { state, actions, toast } = useStore();
+  useEffect(() => {
+    if (!focusKey) return;
+    const el = document.getElementById('peso-input') as HTMLInputElement | null;
+    el?.scrollIntoView({ block: 'center', behavior: 'smooth' }); el?.focus();
+  }, [focusKey]);
   const today = todayKey();
   const [period, setPeriod] = useState<30 | 90 | 0>(90);
+  const wt = useMemo(() => weightTrend(state.body.filter((b) => b.weight != null).sort((a, b) => (a.date < b.date ? -1 : 1)).map((b) => ({ date: b.date, weight: b.weight! }))), [state.body]);
+  const trendBy = useMemo(() => new Map(wt.points.map((p) => [p.date, p.trend])), [wt]);
+  const lastPt = wt.points[wt.points.length - 1];
+  const flux = lastPt && wt.points.length >= 4 ? (() => {
+    const d = lastPt.weight - lastPt.trend;
+    if (Math.abs(d) <= wt.band) return { dir: 0, text: `Último registro dentro da flutuação normal (tendência ${nf(lastPt.trend, 1)} kg)` };
+    return { dir: Math.sign(d), text: `Último registro ${nf(Math.abs(d), 1)} kg ${d > 0 ? 'acima' : 'abaixo'} da tendência: provavelmente água/sal, veja nos próximos dias` };
+  })() : null;
   const [date, setDate] = useState(today);
   const [val, setVal] = useState('');
   const logs = state.body.filter((b) => b.weight != null).sort((a, b) => (a.date < b.date ? -1 : 1));
@@ -109,7 +128,7 @@ function Weight() {
           <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); save(); }}>
             <div className="grid grid-cols-2 gap-2">
               <Field label="Peso (kg)">
-                <Input inputMode="decimal" value={val} onChange={(e) => setVal(e.target.value)} placeholder={last ? nf(last.weight!, 1) : '80,0'} className="text-[18px] font-medium" />
+                <Input id="peso-input" inputMode="decimal" value={val} onChange={(e) => setVal(e.target.value)} placeholder={last ? nf(last.weight!, 1) : '80,0'} className="text-[18px] font-medium" />
               </Field>
               <Field label="Dia"><Input type="date" className="min-w-0 px-3" value={date} max={today} onChange={(e) => setDate(e.target.value || today)} /></Field>
             </div>
@@ -129,11 +148,14 @@ function Weight() {
             </div>
           </div>
           <LineChart data={shown.map((l) => ({ label: fmtShort(l.date), value: l.weight!, sub: relDay(l.date) }))} unit=" kg" goal={goal}
-            trend={shown.map((l) => {
-              const win = logs.filter((x) => x.date <= l.date && x.date > addDays(l.date, -7));
-              return win.length >= 2 ? round1(win.reduce((a, x) => a + x.weight!, 0) / win.length) : null;
-            })} />
-          <p className="text-[12px] text-muted mt-1">Linha tracejada = média dos últimos 7 dias (tendência, ignora oscilações do dia a dia).</p>
+            trend={shown.map((l) => round1(trendBy.get(l.date) ?? l.weight!))} trendLabel="tendência"
+            band={shown.map((l) => { const t = trendBy.get(l.date); return t == null ? null : { lo: round1(t - wt.band), hi: round1(t + wt.band) }; })} />
+          {flux && (
+            <p className={cx('text-[13px] font-medium mt-2 flex items-center gap-1.5', flux.dir === 0 ? 'text-good' : 'text-warn')}>
+              {flux.dir === 0 ? '●' : flux.dir > 0 ? '▲' : '▼'} {flux.text}
+            </p>
+          )}
+          <p className="text-[12px] text-muted mt-1">Tracejado = tendência (média suavizada, ignora água e sal do dia a dia). Faixa = flutuação normal (±{nf(wt.band, 1)} kg).</p>
         </Card>
 
         <ProgressPhotos lastWeight={last?.weight} />
@@ -147,7 +169,7 @@ function Weight() {
                 return (
                   <li key={l.id} className="flex items-center gap-3 px-3 py-3">
                     <span className="flex-1 text-[14.5px] text-ink/80">{relDay(l.date)}</span>
-                    {d != null && d !== 0 && <span className={cx('text-[12.5px] tabular-nums', d < 0 ? 'text-good' : 'text-orange')}>{d > 0 ? '+' : ''}{nf(d, 1)}</span>}
+                    {d != null && d !== 0 && <span className={cx('text-[12.5px] tabular-nums', tone(d) === 'good' ? 'text-good' : tone(d) === 'warn' ? 'text-warn' : 'text-muted')}>{d > 0 ? '▲ +' : '▼ '}{nf(d, 1)}</span>}
                     <span className="text-[15px] font-semibold text-ink tabular-nums w-20 text-right">{nf(l.weight!, 1)} kg</span>
                     <DeleteButton onConfirm={() => actions.deleteBody(l.id)} />
                   </li>
@@ -288,7 +310,7 @@ function Sleep() {
             ))}
           </div>
           <div className="mt-5">
-            <BarChart color="var(--color-orange)" goal={goal} unit="h" decimals={1}
+            <BarChart color="var(--color-sleep)" goal={goal} unit="h" decimals={1}
               data={days.map((d) => ({ label: fmtWeekdayShort(d).slice(0, 1).toUpperCase(), value: byDay[d]?.hours ?? 0 }))} />
           </div>
           <p className="text-[12px] text-muted">Linha tracejada = meta de {goal}h (altere em Ajustes → Metas).</p>
@@ -339,7 +361,7 @@ function NightBands() {
       <p className="t-section text-ink">Suas noites</p>
       <p className="t-caption mt-0.5 mb-4">Quando você dormiu e acordou em cada noite.</p>
       <div className="relative">
-        <div className="grid grid-cols-[34px_1fr_44px] gap-2 text-[10.5px] text-muted mb-1.5">
+        <div className="grid grid-cols-[34px_1fr_58px] gap-2 text-[10.5px] text-muted mb-1.5">
           <span />
           <div className="flex justify-between">{['20h', '0h', '4h', '8h', '12h'].map((l) => <span key={l}>{l}</span>)}</div>
           <span />
@@ -349,24 +371,25 @@ function NightBands() {
             const a = toPos(s?.bedtime), b = toPos(s?.wake);
             const ok = s && s.hours >= goal;
             return (
-              <div key={d} className="grid grid-cols-[34px_1fr_44px] gap-2 items-center">
+              <div key={d} className="grid grid-cols-[34px_1fr_58px] gap-2 items-center">
                 <span className="text-[12px] text-muted capitalize">{fmtWeekdayShort(d).slice(0, 3)}</span>
-                <div className="relative h-6 rounded-full bg-cream overflow-hidden">
+                <div className={cx('relative h-6 rounded-full overflow-hidden', s ? 'bg-cream' : 'hatch')}>
                   {[0.25, 0.5, 0.75].map((x) => <span key={x} className="absolute top-0 bottom-0 w-px bg-ink/[0.06]" style={{ left: `${x * 100}%` }} />)}
                   {a != null && b != null && b > a && (
                     <span className="absolute top-1 bottom-1 rounded-full band-in"
-                      style={{ left: `${a * 100}%`, width: `${(b - a) * 100}%`, background: ok ? 'var(--color-good)' : 'var(--color-orange)', opacity: 0.55 + ((s?.quality ?? 3) / 5) * 0.45, animationDelay: `${i * 45}ms` }} />
+                      style={{ left: `${a * 100}%`, width: `${(b - a) * 100}%`, background: 'var(--color-sleep)', opacity: 0.45 + ((s?.quality ?? 3) / 5) * 0.55, animationDelay: `${i * 45}ms` }} />
                   )}
                 </div>
-                <span className={cx('num text-[12.5px] text-right', ok ? 'text-good' : 'text-ink')}>{s ? `${nf(s.hours, 1)}h` : '—'}</span>
+                <span className={cx('num text-[12.5px] text-right', !s ? 'text-muted' : ok ? 'text-good' : 'text-warn')}>{s ? `${ok ? '▲' : '▼'} ${nf(s.hours, 1)}h` : '—'}</span>
               </div>
             );
           })}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 text-[11.5px] text-muted">
-          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-good" /> na meta</span>
-          <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-orange" /> abaixo da meta</span>
-          <span>cor mais forte = noite melhor</span>
+          <span className="text-good">▲ na meta</span>
+          <span className="text-warn">▼ abaixo da meta</span>
+          <span>azul mais forte = noite melhor</span>
+          <span className="flex items-center gap-1.5"><span className="inline-block w-5 h-2.5 rounded-full hatch" /> sem registro</span>
         </div>
       </div>
     </Card>
@@ -556,11 +579,12 @@ function ReportView() {
   const p = buildReport(state, addDays(from, -7), addDays(from, -1));
   const [pdfDays, setPdfDays] = useState<7 | 30 | 90>(30);
   const [busy, setBusy] = useState(false);
+  const [stories, setStories] = useState(false);
   const cmp = (a: number, b: number, unit = '') => {
     if (!b && !a) return null;
     const d = a - b;
     if (Math.abs(d) < 0.05) return <span className="text-muted">igual à semana anterior</span>;
-    return <span className={d > 0 ? 'text-good' : 'text-orange'}>{d > 0 ? '+' : ''}{nf(d, unit === ' L' ? 1 : 0)}{unit} vs semana anterior</span>;
+    return <span className={d > 0 ? 'text-good' : 'text-warn'}>{d > 0 ? '▲ +' : '▼ −'}{nf(Math.abs(d), unit === ' L' ? 1 : 0)}{unit} vs semana anterior</span>;
   };
   const Row = ({ l, v, c }: { l: string; v: string; c?: React.ReactNode }) => (
     <div className="flex items-start justify-between gap-3 py-3">
@@ -589,6 +613,8 @@ function ReportView() {
             </div>
           ))}
         </div>
+        <button onClick={() => setStories(true)} className="press w-full h-11 mb-2 rounded-full bg-ink text-on-ink text-[14px] font-medium flex items-center justify-center gap-2"><LuPlay size={14} /> Ver a semana em stories</button>
+        {stories && <WeekStories state={state} from={from} to={to > today ? today : to} onClose={() => setStories(false)} />}
         <div className="divide-y divide-line">
           <Row l="Score médio" v={`${r.scoreAvg}%`} c={cmp(r.scoreAvg, p.scoreAvg, ' pts')} />
           <Row l="Melhor dia" v={r.best ? `${relDay(r.best.date)} · ${r.best.score}%` : '—'} />
@@ -602,6 +628,9 @@ function ReportView() {
           <Row l="Peso" v={r.weightEnd != null ? `${nf(r.weightEnd, 1)} kg` : '—'} c={r.weightStart != null && r.weightEnd != null && r.weightStart !== r.weightEnd ? `${r.weightEnd - r.weightStart > 0 ? '+' : ''}${nf(r.weightEnd - r.weightStart, 1)} kg na semana` : undefined} />
         </div>
       </Card>
+      <div className="space-y-4 md:space-y-5">
+      <RadarCard end={to > today ? today : to} />
+      <Card className="p-5 md:p-6"><BadgeShelf state={state} /></Card>
       <Card className="p-5 md:p-6">
         <p className="text-[16px] font-semibold text-ink flex items-center gap-2"><LuFileDown size={17} /> Relatório em PDF</p>
         <p className="text-[13px] text-muted mt-1 mb-4">Para mostrar ao nutricionista, médico ou personal. Inclui score, treinos, refeições, água, hábitos, sono, peso e diário.</p>
@@ -618,7 +647,28 @@ function ReportView() {
           } catch { toast('Não foi possível gerar o PDF'); } finally { setBusy(false); }
         }}><LuFileDown size={16} /> {busy ? 'Gerando…' : 'Gerar e compartilhar'}</Button>
       </Card>
+      </div>
     </div>
+  );
+}
+
+/** Radar de 6 eixos: a semana sobre a média das 4 anteriores. */
+function RadarCard({ end }: { end: string }) {
+  const { state } = useStore();
+  const r = useMemo(() => radarWeek(state, end), [state, end]);
+  const diffs = r.axes.map((a, i) => ({ a, d: r.current[i] - r.reference[i] }));
+  const up = [...diffs].sort((x, y) => y.d - x.d)[0];
+  const down = [...diffs].sort((x, y) => x.d - y.d)[0];
+  return (
+    <Card className="p-5 md:p-6">
+      <p className="t-section text-ink">Sua semana em 6 eixos</p>
+      <p className="t-caption mt-0.5">Área colorida = esta semana · tracejado = média das 4 anteriores</p>
+      <div className="mt-2"><RadarChart axes={r.axes} current={r.current} reference={r.reference} /></div>
+      <div className="flex flex-wrap gap-2 mt-1">
+        {up && up.d > 0.05 && <span className="h-7 px-3 rounded-full text-[12.5px] font-medium grid place-items-center" style={{ background: 'color-mix(in srgb, var(--color-good) 14%, transparent)', color: 'var(--color-good)' }}>▲ {up.a} melhor que o normal</span>}
+        {down && down.d < -0.05 && <span className="h-7 px-3 rounded-full text-[12.5px] font-medium grid place-items-center" style={{ background: 'color-mix(in srgb, var(--color-warn) 14%, transparent)', color: 'var(--color-warn)' }}>▼ {down.a} abaixo do normal</span>}
+      </div>
+    </Card>
   );
 }
 const fmtDayMonthShort = (k: string) => fmtShort(k);
@@ -632,12 +682,13 @@ const KINDS: { id: NoteKind; icon: React.ReactNode; accent: 'bio' | 'treino' | '
   { id: 'Dieta', icon: <LuApple size={13} />, accent: 'nutri' },
 ];
 
-function Journal() {
+function Journal({ newKey = 0 }: { newKey?: number }) {
   const { state, actions, toast } = useStore();
   const [kind, setKind] = useState<NoteKind | 'Todos'>('Todos');
   const [tag, setTag] = useState<string | null>(null);
   const [q, setQ] = useState('');
   const [modal, setModal] = useState<{ note?: NoteEntry } | null>(null);
+  useEffect(() => { if (newKey) setModal({}); }, [newKey]);
   const allTags = useMemo(() => [...new Set(state.notes.flatMap((n) => n.tags))].sort(), [state.notes]);
   const notes = [...state.notes]
     .filter((n) => kind === 'Todos' || n.kind === kind)

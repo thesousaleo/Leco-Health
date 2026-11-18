@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { haptic } from '../native';
 import {
   LuArchive, LuArchiveRestore, LuArrowDown, LuArrowUp, LuBell, LuBrain, LuCheck, LuChevronLeft, LuChevronRight, LuFlame, LuHeartPulse,
   LuMinus, LuPencil, LuPill, LuPlus, LuSun,
@@ -7,7 +8,7 @@ import { useStore } from '../store';
 import type { Habit, HabitCategory, HabitFreq } from '../types';
 import {
   activeHabits, addDays, dueHabits, fmtWeekdayShort, freqLabel, fromKey, habitCount, habitStreak, isHabitDone, isHabitScheduled, lastNDays,
-  overallStreak, todayKey, toKey, weekDoneCount,
+  mealsOn, overallStreak, todayKey, toKey, weekDoneCount,
 } from '../utils';
 import { Button, Card, cx, DeleteButton, Empty, Field, heatColor, HeatLegend, IconButton, Input, Modal, NumInput, PageHeader, ProgressBar, ProgressRing, Segmented } from '../components/ui';
 
@@ -19,12 +20,51 @@ const CATS: { id: HabitCategory; icon: React.ReactNode }[] = [
 ];
 /** Cor e ícone de cada categoria. */
 export const CAT_STYLE: Record<string, { color: string; Icon: React.ComponentType<{ size?: number }> }> = {
-  'Saúde': { color: '#E5484D', Icon: LuHeartPulse },
-  'Mente': { color: '#8E4EC6', Icon: LuBrain },
-  'Suplementação': { color: '#12A594', Icon: LuPill },
-  'Rotina': { color: '#E2A336', Icon: LuSun },
+  'Saúde': { color: 'var(--color-bad)', Icon: LuHeartPulse },
+  'Mente': { color: 'var(--color-mind)', Icon: LuBrain },
+  'Suplementação': { color: 'var(--color-good)', Icon: LuPill },
+  'Rotina': { color: 'var(--color-warn)', Icon: LuSun },
 };
 const MILESTONES = [7, 30, 100];
+
+/** Arrastar o dedo sobre os círculos marca vários hábitos de uma vez (só marca, nunca desmarca). */
+function useDragMark(toast: (m: string) => void) {
+  const st = useRef<{ start: HTMLElement; y: number; active: boolean; marked: Set<HTMLElement>; n: number } | null>(null);
+  const markEl = (el: HTMLElement) => {
+    if (!st.current || st.current.marked.has(el)) return;
+    st.current.marked.add(el);
+    if (el.dataset.done === '0') { el.click(); st.current.n++; void haptic(); }
+  };
+  return {
+    onPointerDown: (e: React.PointerEvent) => {
+      const el = (e.target as HTMLElement).closest<HTMLElement>('[data-hcheck]');
+      st.current = el ? { start: el, y: e.clientY, active: false, marked: new Set(), n: 0 } : null;
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      const s = st.current; if (!s) return;
+      if (!s.active) {
+        if (Math.abs(e.clientY - s.y) < 10) return;
+        s.active = true;
+        markEl(s.start);
+      }
+      const over = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-hcheck]');
+      // também pega o círculo da linha em que o dedo está, mesmo fora do círculo
+      const row = over ?? document.elementFromPoint(e.clientX, e.clientY)?.closest('li')?.querySelector<HTMLElement>('[data-hcheck]');
+      if (row) markEl(row);
+    },
+    onPointerUp: () => {
+      const s = st.current; st.current = null;
+      if (s?.active) {
+        // o "clique" do fim do arraste não pode desmarcar o primeiro
+        const stop = (ev: Event) => { ev.stopPropagation(); ev.preventDefault(); };
+        s.start.addEventListener('click', stop, { capture: true, once: true });
+        setTimeout(() => s.start.removeEventListener('click', stop, { capture: true }), 400);
+        if (s.n >= 2) toast(`${s.n} hábitos marcados`);
+      }
+    },
+    onPointerCancel: () => { st.current = null; },
+  };
+}
 
 export default function Habits() {
   const { state, actions, toast } = useStore();
@@ -35,6 +75,7 @@ export default function Habits() {
   const [modal, setModal] = useState<{ habit?: Habit } | null>(null);
   const [month, setMonth] = useState<Habit | null>(null);
   const [organize, setOrganize] = useState(false);
+  const dragMark = useDragMark(toast);
   const todayList = habits.filter((h) => isHabitScheduled(h, today));
   const due = dueHabits(state, today);
   const done = due.filter((h) => isHabitDone(state, h.id, today)).length;
@@ -58,7 +99,7 @@ export default function Habits() {
           {view === 'hoje' ? (
             <Card className="p-5 md:p-6">
               <ProgressBar value={due.length ? done / due.length : 0} height={8} color={due.length && done === due.length ? 'var(--color-good)' : undefined} />
-              <ul className="mt-4 space-y-1">
+              <ul className="mt-4 space-y-1" {...dragMark}>
                 {(organize ? habits : todayList).map((h, i, arr) => (
                   <HabitRow key={h.id} h={h} organize={organize}
                     onEdit={() => setModal({ habit: h })} onMonth={() => setMonth(h)}
@@ -142,7 +183,8 @@ function HabitRow({ h, organize, onEdit, onMonth, onUp, onDown }: {
   return (
     <li className="flex items-center gap-1.5">
       <button onClick={() => { if (!on) setFx(Date.now()); h.target ? actions.setHabitCount(h.id, on ? 0 : h.target) : actions.toggleHabit(h.id); }} aria-pressed={on}
-        aria-label={on ? `Desmarcar ${h.name}` : `Marcar ${h.name}`} className="press shrink-0 grid place-items-center size-11">
+        aria-label={on ? `Desmarcar ${h.name}` : `Marcar ${h.name}`} className="press shrink-0 grid place-items-center size-11"
+        data-hcheck={organize ? undefined : '1'} data-done={on ? '1' : '0'} style={organize ? undefined : { touchAction: 'none' }}>
         {h.target && !on ? (
           <ProgressRing value={count / h.target} size={30} stroke={3.5}>
             <span className="text-[10px] font-semibold text-ink tabular-nums">{count}</span>
@@ -166,7 +208,7 @@ function HabitRow({ h, organize, onEdit, onMonth, onUp, onDown }: {
       <button onClick={onMonth} className="flex-1 min-w-0 text-left py-2">
         <span className={cx('block text-[15.5px] truncate', on ? 'text-muted line-through decoration-ink/25' : 'text-ink')}>{h.name}</span>
         <span className="flex items-center gap-1.5 text-[12.5px] text-muted min-w-0">
-          <span className="shrink-0 grid place-items-center size-[18px] rounded-md" style={{ background: cat.color + '22', color: cat.color }}><cat.Icon size={11} /></span>
+          <span className="shrink-0 grid place-items-center size-[18px] rounded-md" style={{ background: `color-mix(in srgb, ${cat.color} 15%, transparent)`, color: cat.color }}><cat.Icon size={11} /></span>
           <span className="truncate">{sub}</span>{h.reminder && <span className="shrink-0 flex items-center gap-1"><LuBell size={11} /> {h.reminder}</span>}
         </span>
       </button>
@@ -279,7 +321,8 @@ function MonthHeatmap({ habits }: { habits: Habit[] }) {
   const [filter, setFilter] = useState<string>('todos');
   const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [sel, setSel] = useState<string | null>(null);
-  const habit = filter === 'todos' ? null : habits.find((h) => h.id === filter) ?? null;
+  const areas = filter === 'areas';
+  const habit = filter === 'todos' || areas ? null : habits.find((h) => h.id === filter) ?? null;
 
   const first = toKey(month);
   const daysIn = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
@@ -306,6 +349,30 @@ function MonthHeatmap({ habits }: { habits: Habit[] }) {
     return { v: done ? 1 : 0, text: done ? 'Feito' : 'Não feito' };
   };
 
+  /** 4 áreas do dia: true = cumprido, false = não, null = não se aplica / sem registro. */
+  const quad = (d: string) => {
+    const goalSleep = state.goals.sleep || 8, goalMeals = state.goals.meals || 4;
+    const trained = state.sessions.some((x) => x.completed && x.date === d) || (state.cardio || []).some((c) => c.date === d);
+    const planned = !!state.schedule[fromKey(d).getDay()];
+    const sl = state.sleep.find((x) => x.date === d);
+    const due = dueHabits(state, d);
+    const hr = due.length ? due.filter((h) => isHabitDone(state, h.id, d)).length / due.length : null;
+    return {
+      treino: trained ? true : planned ? false : null,
+      sono: sl ? sl.hours >= goalSleep : null,
+      refeicoes: mealsOn(state, d).length >= goalMeals,
+      habitos: hr == null ? null : hr >= 0.8,
+    };
+  };
+  const QUAD = [
+    { k: 'treino', label: 'Treino', color: 'var(--color-orange)' },
+    { k: 'sono', label: 'Sono', color: 'var(--color-sleep)' },
+    { k: 'refeicoes', label: 'Refeições', color: 'var(--color-good)' },
+    { k: 'habitos', label: 'Hábitos', color: 'var(--color-mind)' },
+  ] as const;
+  const pastDays = days.filter((d) => d <= today);
+  const quads = areas ? pastDays.map(quad) : [];
+
   const vals = days.map((d) => info(d).v).filter((v): v is number => v != null);
   const avg = vals.length ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) : 0;
   const full = vals.filter((v) => v >= 1).length;
@@ -326,7 +393,7 @@ function MonthHeatmap({ habits }: { habits: Habit[] }) {
       </div>
 
       <div className="flex gap-2 overflow-x-auto no-scrollbar mt-3 pb-1">
-        {[{ id: 'todos', name: 'Todos' }, ...habits].map((h) => (
+        {[{ id: 'todos', name: 'Todos' }, { id: 'areas', name: '4 áreas do dia' }, ...habits].map((h) => (
           <button key={h.id} onClick={() => { setFilter(h.id); setSel(null); }}
             className={cx('press shrink-0 h-9 px-3.5 rounded-full text-[13px] font-medium whitespace-nowrap max-w-[180px] truncate',
               filter === h.id ? 'bg-ink text-on-ink' : 'bg-cream text-ink/65')}>
@@ -335,22 +402,48 @@ function MonthHeatmap({ habits }: { habits: Habit[] }) {
         ))}
       </div>
 
+      {areas ? (
+        <div className="grid grid-cols-3 gap-2 mt-4">
+          <div className="rounded-2xl bg-cream px-3 py-2.5"><p className="text-[12px] text-muted">Dias completos</p><p className="text-[18px] num text-ink">{quads.filter((q) => Object.values(q).every((v) => v !== false)).length}</p></div>
+          <div className="rounded-2xl bg-cream px-3 py-2.5"><p className="text-[12px] text-muted">Treinos</p><p className="text-[18px] num text-ink">{quads.filter((q) => q.treino).length}</p></div>
+          <div className="rounded-2xl bg-cream px-3 py-2.5"><p className="text-[12px] text-muted">Noites na meta</p><p className="text-[18px] num text-ink">{quads.filter((q) => q.sono).length}</p></div>
+        </div>
+      ) : (
       <div className="grid grid-cols-3 gap-2 mt-4">
         <div className="rounded-2xl bg-cream px-3 py-2.5"><p className="text-[12px] text-muted">Média</p><p className="text-[18px] num text-ink">{avg}%</p></div>
         <div className="rounded-2xl bg-cream px-3 py-2.5"><p className="text-[12px] text-muted">Dias 100%</p><p className="text-[18px] num text-ink">{full}</p></div>
         <div className="rounded-2xl bg-cream px-3 py-2.5"><p className="text-[12px] text-muted">Dias</p><p className="text-[18px] num text-ink">{vals.length}</p></div>
       </div>
+      )}
 
       <div key={filter + first} className="grid grid-cols-7 gap-1.5 text-center mt-4 animate-fade">
         {['S', 'T', 'Q', 'Q', 'S', 'S', 'D'].map((d, i) => <span key={i} className="text-[11px] text-muted pb-0.5">{d}</span>)}
         {[...Array(lead)].map((_, i) => <span key={'l' + i} />)}
-        {days.map((d) => {
+        {areas && days.map((d) => {
+          const future = d > today;
+          const q = future ? null : quad(d);
+          return (
+            <button key={d} disabled={future} onClick={() => setSel(sel === d ? null : d)} aria-label={`Dia ${fromKey(d).getDate()}`}
+              className={cx('press relative aspect-square rounded-[10px] overflow-hidden grid grid-cols-2 grid-rows-2 gap-[2px] p-[2px]',
+                future ? 'bg-ink/[0.04] opacity-40' : 'bg-ink/[0.05]', d === today && 'ring-2 ring-ink/50', sel === d && 'ring-2 ring-ink')}>
+              {QUAD.map((a, i) => {
+                const v = q?.[a.k];
+                return <span key={a.k} className={cx(i === 0 ? 'rounded-tl-[8px]' : i === 1 ? 'rounded-tr-[8px]' : i === 2 ? 'rounded-bl-[8px]' : 'rounded-br-[8px]', v == null && !future && 'hatch')}
+                  style={{ background: v ? a.color : v === false ? 'var(--color-surface)' : undefined }} />;
+              })}
+              <span className="absolute inset-0 grid place-items-center text-[11px] font-semibold text-ink/80 pointer-events-none">
+                <span className="px-1 rounded-md" style={{ background: 'color-mix(in srgb, var(--color-surface) 75%, transparent)' }}>{fromKey(d).getDate()}</span>
+              </span>
+            </button>
+          );
+        })}
+        {!areas && days.map((d) => {
           const { v } = info(d);
           const strong = v != null && v >= 0.6;
           return (
             <button key={d} disabled={d > today} onClick={() => setSel(sel === d ? null : d)}
               className={cx('press aspect-square rounded-[10px] grid place-items-center text-[12.5px] tabular-nums transition-[box-shadow,background-color] duration-500',
-                v == null ? 'bg-ink/[0.04] text-ink/30' : strong ? 'text-white font-semibold' : 'text-ink/75',
+                v == null ? (d > today ? 'bg-ink/[0.04] text-ink/30' : 'hatch text-ink/40') : strong ? 'text-white font-semibold' : 'text-ink/75',
                 d === today && 'ring-2 ring-ink/50', sel === d && 'ring-2 ring-ink', d > today && 'opacity-40')}
               style={v != null ? { background: heatColor(v) } : undefined}>
               {fromKey(d).getDate()}
@@ -360,9 +453,15 @@ function MonthHeatmap({ habits }: { habits: Habit[] }) {
       </div>
 
       <p className="text-[13px] text-muted mt-3 min-h-[20px]">
-        {sel && selInfo ? <><span className="text-ink font-medium">{fromKey(sel).getDate()}/{fromKey(sel).getMonth() + 1}</span> · {selInfo.text}</> : 'Toque num dia para ver o detalhe.'}
+        {sel && areas ? (() => { const q = quad(sel); return <><span className="text-ink font-medium">{fromKey(sel).getDate()}/{fromKey(sel).getMonth() + 1}</span> · {QUAD.map((a) => `${a.label} ${q[a.k] ? '✓' : q[a.k] === false ? '✗' : '–'}`).join(' · ')}</>; })()
+          : sel && selInfo ? <><span className="text-ink font-medium">{fromKey(sel).getDate()}/{fromKey(sel).getMonth() + 1}</span> · {selInfo.text}</> : 'Toque num dia para ver o detalhe.'}
       </p>
-      <div className="mt-2"><HeatLegend /></div>
+      {areas ? (
+        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1.5 text-[11.5px] text-muted">
+          {QUAD.map((a, i) => <span key={a.k} className="flex items-center gap-1.5"><span className="size-3 rounded-[3px]" style={{ background: a.color }} />{['↖', '↗', '↙', '↘'][i]} {a.label}</span>)}
+          <span className="flex items-center gap-1.5"><span className="size-3 rounded-[3px] hatch" /> sem registro / descanso</span>
+        </div>
+      ) : <div className="mt-2"><HeatLegend /></div>}
     </Card>
   );
 }

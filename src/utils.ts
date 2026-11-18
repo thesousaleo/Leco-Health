@@ -1,4 +1,5 @@
 import type { AppState, DateKey, FoodEntry, Habit, ID, MealType, WorkoutSession } from './types';
+import { oneRM } from './exercises';
 
 /* ── ids ───────────────────────────────────────────────────── */
 export const uid = (): ID =>
@@ -279,3 +280,64 @@ export type ProgressV2 = ReturnType<typeof buildProgress>;
 
 /** Dia "cumprido" para cada métrica (usado em desafios e rankings). */
 export const metMetric = (metric: string, v: number) => (metric === 'score' ? v >= 80 : metric === 'habitos' ? v >= 0.8 : v >= 1);
+
+/* ── Radar da semana (6 eixos, 0–1) ─────────────────────────── */
+const avgOf = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+export const RADAR_AXES = ['Força', 'Volume', 'Sono', 'Refeições', 'Hábitos', 'Recuperação'];
+/** Força compara o melhor 1RM estimado da semana com as 4 semanas anteriores (0,92× → 0; 1,05× → 1). */
+export const radarWeek = (state: AppState, end: DateKey = todayKey()) => {
+  const goalSleep = state.goals.sleep || 8;
+  const goalMeals = state.goals.meals || 4;
+  const bestE1 = (id: ID, from: DateKey, to: DateKey) => {
+    let b = 0;
+    state.sessions.forEach((s) => { if (s.date >= from && s.date <= to) s.entries.forEach((e) => { if (e.exerciseId === id) e.sets.forEach((x) => { if (x.done) b = Math.max(b, oneRM(x.weight, x.reps)); }); }); });
+    return b;
+  };
+  const calc = (e: DateKey) => {
+    const ds = Array.from({ length: 7 }, (_, i) => addDays(e, i - 6));
+    const inWeek = new Set(ds);
+    const sess = state.sessions.filter((s) => s.completed && inWeek.has(s.date));
+    const ratios: number[] = [];
+    new Set(sess.flatMap((s) => s.entries.map((x) => x.exerciseId))).forEach((id) => {
+      const now = bestE1(id, ds[0], ds[6]);
+      const before = bestE1(id, addDays(ds[0], -28), addDays(ds[0], -1));
+      if (now && before) ratios.push(now / before);
+    });
+    const forca = ratios.length ? clamp((avgOf(ratios) - 0.92) / 0.13) : sess.length ? 0.5 : 0;
+    const planned = ds.reduce((a, d) => {
+      const sp = state.splits.find((x) => x.id === state.schedule[weekday(d)]);
+      return a + (sp ? sp.exercises.reduce((b, x) => b + x.targetSets, 0) : 0);
+    }, 0);
+    const doneSets = sess.reduce((a, s) => a + s.entries.reduce((b, x) => b + x.sets.filter((y) => y.done).length, 0), 0);
+    const volume = planned ? clamp(doneSets / planned) : sess.length ? 1 : 0;
+    const sl = state.sleep.filter((x) => inWeek.has(x.date));
+    const sono = sl.length ? clamp(avgOf(sl.map((x) => x.hours)) / goalSleep) : 0;
+    const refeicoes = clamp(ds.reduce((a, d) => a + mealsOn(state, d).length, 0) / (goalMeals * 7));
+    const hab = ds.map((d) => { const hs = dueHabits(state, d); return hs.length ? hs.filter((h) => isHabitDone(state, h.id, d)).length / hs.length : null; })
+      .filter((v): v is number => v != null);
+    const habitos = avgOf(hab);
+    const recuperacao = sl.length ? clamp(avgOf(sl.map((x) => x.quality ?? x.energy)) / 5) : 0;
+    return [forca, volume, sono, refeicoes, habitos, recuperacao];
+  };
+  const current = calc(end);
+  const prev = [1, 2, 3, 4].map((k) => calc(addDays(end, -7 * k)));
+  const reference = current.map((_, i) => avgOf(prev.map((p) => p[i])));
+  return { axes: RADAR_AXES, current, reference };
+};
+
+/* ── Peso: tendência suavizada (EWMA) e faixa de flutuação normal ── */
+export const weightTrend = (logs: { date: DateKey; weight: number }[], alpha = 0.1) => {
+  const out: { date: DateKey; weight: number; trend: number }[] = [];
+  logs.forEach((l, i) => {
+    if (!i) { out.push({ ...l, trend: l.weight }); return; }
+    const prev = out[i - 1];
+    // dias sem pesar contam: quanto maior o intervalo, mais a tendência anda
+    const gap = Math.max(1, Math.round((new Date(l.date).getTime() - new Date(prev.date).getTime()) / 86400000));
+    const a = 1 - Math.pow(1 - alpha, gap);
+    out.push({ ...l, trend: prev.trend + a * (l.weight - prev.trend) });
+  });
+  const res = out.slice(-30).map((x) => x.weight - x.trend);
+  const sd = res.length > 2 ? Math.sqrt(res.reduce((a, r) => a + r * r, 0) / (res.length - 1)) : 0.5;
+  const band = Math.max(0.3, Math.min(2, sd * 1.5));
+  return { points: out, band };
+};

@@ -1,6 +1,7 @@
 import React, { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useRipple, staggerIn } from './motion';
-import { LuActivity, LuApple, LuCircleX, LuCircleCheck, LuDumbbell, LuHouse, LuListChecks, LuSettings, LuUsers, LuCloudUpload, LuSparkles } from 'react-icons/lu';
+import { LuActivity, LuApple, LuCamera, LuCircleX, LuCircleCheck, LuDroplet, LuDumbbell, LuHouse, LuListChecks, LuMoon, LuNotebookPen, LuPlus, LuScale, LuSettings, LuTrophy, LuUsers, LuCloudUpload, LuSparkles } from 'react-icons/lu';
+import { setIntent } from './intent';
 import { SyncProvider, useSync } from './sync';
 import AuthForm from './components/AuthForm';
 import Friends from './pages/Friends';
@@ -19,6 +20,7 @@ import Nutrition from './pages/Nutrition';
 import Habits from './pages/Habits';
 import Metrics from './pages/Metrics';
 import Settings from './pages/Settings';
+import { computeBadges } from './components/Badges';
 
 type Ico = React.ComponentType<{ size?: number; fill?: string; fillOpacity?: number; strokeWidth?: number }>;
 const TABS: { id: TabId; label: string; icon: Ico }[] = [
@@ -33,9 +35,30 @@ export const TAB_INFO = TABS;
 const ALL: TabId[] = ['inicio', 'treino', 'nutricao', 'habitos', 'registros', 'amigos', 'ajustes'];
 
 /** Aplica tema, cor de destaque e tamanho do texto. */
+/** Horário típico de dormir (média dos últimos registros), em minutos desde 0h. */
+function typicalBedtime(sleep: { date: string; bedtime?: string }[]) {
+  const xs = [...sleep].filter((x) => x.bedtime).sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 10)
+    .map((x) => { const [h, m] = x.bedtime!.split(':').map(Number); let t = h * 60 + m; if (t < 12 * 60) t += 24 * 60; return t; });
+  if (!xs.length) return 23 * 60;
+  return Math.round(xs.reduce((a, b) => a + b, 0) / xs.length);
+}
+
 function useAppearance() {
   const { state } = useStore();
-  const { theme, accent, textSize, glass } = state.prefs;
+  const { theme, accent, textSize, glass, nightWarm } = state.prefs;
+  const bed = typicalBedtime(state.sleep);
+  // Noite profunda: de 2 h antes do horário de dormir até as 5 h
+  useEffect(() => {
+    const root = document.documentElement;
+    const check = () => {
+      const d = new Date(); let now = d.getHours() * 60 + d.getMinutes(); if (now < 12 * 60) now += 24 * 60;
+      const on = nightWarm !== false && now >= bed - 120 && now <= 29 * 60;
+      if ((root.dataset.night === '1') !== on) root.dataset.night = on ? '1' : '';
+    };
+    check();
+    const t = setInterval(check, 60_000);
+    return () => clearInterval(t);
+  }, [bed, nightWarm]);
   useEffect(() => {
     const root = document.documentElement;
     const mq = window.matchMedia?.('(prefers-color-scheme: dark)');
@@ -74,7 +97,26 @@ const readHash = (): TabId => {
 function Effects() {
   useAppearance();
   useReminders();
+  useBadgeWatch();
   return null;
+}
+
+/** Avisa quando um selo novo é conquistado (só depois da primeira vez, para não avisar o que já existia). */
+function useBadgeWatch() {
+  const { state, toast } = useStore();
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const KEY = 'leco-health:badges-seen';
+      let seen: string[] | null = null;
+      try { seen = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { /* */ }
+      const got = computeBadges(state).filter((b) => b.got);
+      const fresh = seen ? got.filter((b) => !seen!.includes(b.id)) : [];
+      try { localStorage.setItem(KEY, JSON.stringify(got.map((b) => b.id))); } catch { /* */ }
+      if (fresh.length === 1) toast(`Nova conquista: ${fresh[0].title}`);
+      else if (fresh.length > 1) toast(`Novas conquistas: ${fresh[0].title} e mais ${fresh.length - 1}`);
+    }, 1800);
+    return () => clearTimeout(t);
+  }, [state, toast]);
 }
 
 function Logo() {
@@ -159,7 +201,7 @@ function Shell() {
   return (
     <RestTimerProvider visible={tab === 'treino'}>
       {/* fundo bege com arcos finos */}
-      <div aria-hidden className="fixed inset-0 -z-10 overflow-hidden bg-canvas">
+      <div aria-hidden className="paper fixed inset-0 -z-10 overflow-hidden bg-canvas">
         {/* manchas neutras (claro e sombra): é o que aparece "através" dos blocos de vidro */}
         <div className="glow absolute -top-[12vh] -right-[20vw] size-[75vh] rounded-full" style={{ background: 'radial-gradient(closest-side, var(--glow-a), transparent)' }} />
         <div className="glow absolute top-[38vh] -left-[30vw] size-[65vh] rounded-full" style={{ background: 'radial-gradient(closest-side, var(--glow-b), transparent)' }} />
@@ -201,7 +243,7 @@ function Shell() {
       <main className="md:pl-64 overflow-x-clip">
         <PullToRefresh />
         <div key={tab} ref={mainRef}
-          className={cx('mx-auto max-w-[1280px] px-4 md:px-8 pt-3 md:pt-8 md:pb-12', tab === 'treino' ? 'pb-[calc(11rem+var(--sab))]' : 'pb-[calc(6.5rem+var(--sab))]')}>
+          className={cx('mx-auto max-w-[1280px] px-4 md:px-8 pt-3 md:pt-8 md:pb-12', tab === 'treino' ? 'pb-[calc(11rem+var(--sab))]' : FAB_TABS.includes(tab) ? 'pb-[calc(10rem+var(--sab))]' : 'pb-[calc(6.5rem+var(--sab))]')}>
           {page}
         </div>
       </main>
@@ -233,16 +275,18 @@ function Shell() {
         </div>
       </nav>
 
+      <QuickAdd tab={navTab} go={go} />
       <Onboarding />
       <Celebration />
 
       {toastMsg && (() => {
         const bad = /^(erro|não|falh|sem )/i.test(toastMsg.msg);
+        const pr = /^(novo recorde|nova conquista|novas conquistas)/i.test(toastMsg.msg);
         return (
           <div key={toastMsg.id} role="status"
-            className="fixed z-[70] left-1/2 top-[calc(4.6rem+var(--sat))] md:top-6 md:left-[calc(50%+8rem)] pl-2 pr-5 h-12 max-w-[calc(100vw-2rem)] rounded-full flex items-center gap-2.5 text-[14px] font-medium text-on-ink bg-ink shadow-[var(--shadow-3)] animate-toast pointer-events-none">
-            <span className={cx('grid place-items-center size-8 rounded-full shrink-0', bad ? 'bg-bad/90' : 'bg-good/90')}>
-              {bad ? <LuCircleX size={17} className="text-white" /> : <LuCircleCheck size={17} className="text-white" />}
+            className="fixed z-[70] left-1/2 top-[calc(4.6rem+var(--sat))] md:top-6 md:left-[calc(50%+8rem)] pl-2 pr-5 h-12 max-w-[calc(100vw-2rem)] rounded-full flex items-center gap-2.5 text-[14px] font-medium toast-glass shadow-[var(--shadow-3)] animate-toast pointer-events-none">
+            <span className={cx('grid place-items-center size-8 rounded-full shrink-0', pr ? 'pr-badge' : bad ? 'bg-bad/90' : 'bg-good/90')}>
+              {pr ? <LuTrophy size={16} className="text-white" /> : bad ? <LuCircleX size={17} className="text-white" /> : <LuCircleCheck size={17} className="text-white" />}
             </span>
             <span className="truncate">{toastMsg.msg}</span>
           </div>
@@ -284,6 +328,64 @@ function Splash() {
         <p className="text-[19px] font-semibold tracking-[-0.02em] text-ink">Leco Health</p>
       </div>
     </div>
+  );
+}
+
+/* ── Botão ＋: registrar qualquer coisa em 1–2 toques ─────────── */
+const FAB_TABS: TabId[] = ['inicio', 'nutricao', 'habitos', 'registros'];
+
+function QuickAdd({ tab, go }: { tab: TabId; go: (t: TabId) => void }) {
+  const { state, actions, toast } = useStore();
+  const [open, setOpen] = useState(false);
+  const [hide, setHide] = useState(false);
+  // some ao rolar para baixo (para não cobrir o conteúdo) e volta ao rolar para cima ou no fim da página
+  useEffect(() => {
+    let last = window.scrollY, raf = 0;
+    const on = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const y = window.scrollY, end = y + window.innerHeight >= document.documentElement.scrollHeight - 24;
+        if (y < 40 || end) setHide(false);
+        else if (y > last + 6) setHide(true);
+        else if (y < last - 6) setHide(false);
+        last = y;
+      });
+    };
+    window.addEventListener('scroll', on, { passive: true });
+    return () => { window.removeEventListener('scroll', on); cancelAnimationFrame(raf); };
+  }, []);
+  useEffect(() => setHide(false), [tab]);
+  if (!FAB_TABS.includes(tab)) return null;
+  const cup = state.waterSizes?.[0];
+  const run = (fn: () => void) => { setOpen(false); setTimeout(fn, 180); };
+  const items: { label: string; sub?: string; icon: React.ReactNode; color: string; fn: () => void }[] = [
+    { label: 'Refeição', sub: 'com foto', icon: <LuCamera size={22} />, color: 'var(--color-orange)', fn: () => { go('nutricao'); setIntent('nutricao', 'meal'); } },
+    { label: 'Água', sub: cup ? `+ ${cup.label}` : '+ 250 ml', icon: <LuDroplet size={22} />, color: 'var(--color-sleep)', fn: () => { actions.addWater(cup?.ml ?? 250, undefined, cup?.label); toast(`+${cup?.ml ?? 250} ml de água`); } },
+    { label: 'Peso', icon: <LuScale size={22} />, color: 'var(--color-good)', fn: () => { go('registros'); setIntent('registros', 'weight'); } },
+    { label: 'Sono', icon: <LuMoon size={22} />, color: 'var(--color-sleep)', fn: () => { go('registros'); setIntent('registros', 'sleep'); } },
+    { label: 'Hábitos', icon: <LuListChecks size={22} />, color: 'var(--color-mind)', fn: () => go('habitos') },
+    { label: 'Nota', icon: <LuNotebookPen size={22} />, color: 'var(--color-warn)', fn: () => { go('registros'); setIntent('registros', 'note'); } },
+  ];
+  return (
+    <>
+      <div className={cx('md:hidden fixed z-40 right-4 bottom-[calc(6.1rem+var(--sab))] fab-auto', hide && 'fab-hidden')}>
+        <button onClick={() => setOpen(true)} aria-label="Novo registro" tabIndex={hide ? -1 : 0}
+          className="press size-14 rounded-full fab-glass grid place-items-center text-white">
+          <LuPlus size={26} strokeWidth={2.4} />
+        </button>
+      </div>
+      <Modal open={open} onClose={() => setOpen(false)} title="Novo registro">
+        <div className="grid grid-cols-3 gap-2.5 pb-2">
+          {items.map((it) => (
+            <button key={it.label} onClick={() => run(it.fn)} className="press rounded-[22px] bg-cream px-2 py-4 flex flex-col items-center gap-2 text-center">
+              <span className="grid place-items-center size-12 rounded-2xl" style={{ background: `color-mix(in srgb, ${it.color} 16%, transparent)`, color: it.color }}>{it.icon}</span>
+              <span className="text-[14px] font-semibold text-ink leading-tight">{it.label}</span>
+              {it.sub && <span className="text-[11.5px] text-muted -mt-1.5 truncate max-w-full">{it.sub}</span>}
+            </button>
+          ))}
+        </div>
+      </Modal>
+    </>
   );
 }
 

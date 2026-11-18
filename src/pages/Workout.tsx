@@ -4,17 +4,18 @@ import {
   LuFootprints, LuHistory, LuNotebookPen, LuPencil, LuPlay, LuPlus, LuRotateCcw, LuSearch, LuShare2, LuTimer, LuTrendingUp, LuTrophy, LuWaves, LuX,
 } from 'react-icons/lu';
 import { useStore } from '../store';
-import type { CardioKind, CardioLog, Exercise, ExerciseLog, Split, WorkoutSession } from '../types';
+import type { CardioKind, CardioLog, Exercise, ExerciseLog, SetLog, Split, WorkoutSession } from '../types';
 import {
   addDays, fmtDayMonth, fmtShort, fromKey, lastPerformance, nf, relDay, round1, sessionProgress, sessionVolume, todayKey, toKey, weekday, WEEKDAYS,
 } from '../utils';
-import { MUSCLES, oneRM, searchExercises } from '../exercises';
+import { MUSCLES, oneRM, oneRMRange, searchExercises } from '../exercises';
 import {
-  Button, Card, Chip, cx, DeleteButton, Empty, Field, IconButton, Input, Modal, NumInput, PageHeader, ProgressBar, Segmented, Select, Tag, TextArea,
+  Button, Card, Chip, cx, DeleteButton, Empty, Field, IconButton, Input, Modal, NumInput, PageHeader, ProgressBar, Segmented, Select, Tag, TextArea, useCountUp,
 } from '../components/ui';
 import { BarChart, LineChart } from '../components/charts';
 import { useRestTimer } from '../components/RestTimer';
-import { shareFile } from '../native';
+import { BodyMap, muscleStats, recoveryZone, REGION_LABEL, volumeZone, type Region } from '../components/BodyMap';
+import { haptic, shareFile } from '../native';
 
 type View = 'sessao' | 'cardio' | 'fichas' | 'historico';
 
@@ -123,6 +124,9 @@ function SessionEditor({ session, past }: { session: WorkoutSession; past?: bool
   }, [session.completed, live]);
   const all = session.entries.flatMap((e) => e.sets);
   const done = all.filter((s) => s.done).length;
+  // números do modo foco "rolam" até o valor novo
+  const doneAnim = Math.round(useCountUp(done, 450));
+  const volAnim = useCountUp(sessionVolume(session) / 1000, 700);
   const secs = Math.max(0, Math.round(((session.finishedAt ?? tick) - session.startedAt) / 1000));
   const mins = Math.round(secs / 60);
   const clock = `${Math.floor(secs / 3600) ? Math.floor(secs / 3600) + ':' : ''}${String(Math.floor((secs % 3600) / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`;
@@ -143,7 +147,7 @@ function SessionEditor({ session, past }: { session: WorkoutSession; past?: bool
             </div>
             <p className="num text-[56px] leading-none mt-3 tracking-[-0.05em]">{clock}</p>
             <div className="grid grid-cols-3 gap-2 mt-4">
-              {[['Séries', `${done}/${all.length}`], ['Volume', `${nf(sessionVolume(session) / 1000, 1)} t`], ['Exercícios', `${session.entries.filter((e) => e.sets.length && e.sets.every((x) => x.done)).length}/${session.entries.length}`]].map(([l, v]) => (
+              {[['Séries', `${doneAnim}/${all.length}`], ['Volume', `${nf(volAnim, 1)} t`], ['Exercícios', `${session.entries.filter((e) => e.sets.length && e.sets.every((x) => x.done)).length}/${session.entries.length}`]].map(([l, v]) => (
                 <div key={l} className="rounded-2xl bg-white/[0.08] px-3 py-2.5">
                   <p className="text-[11.5px] text-white/55">{l}</p>
                   <p className="num text-[18px]">{v}</p>
@@ -195,7 +199,7 @@ function SessionEditor({ session, past }: { session: WorkoutSession; past?: bool
 }
 
 function ExerciseCard({ session, entry, locked, nextSetId, focus }: { session: WorkoutSession; entry: ExerciseLog; locked: boolean; nextSetId?: string; focus?: boolean }) {
-  const { state, actions } = useStore();
+  const { state, actions, toast } = useStore();
   const timer = useRestTimer();
   const exDef = state.splits.find((s) => s.id === session.splitId)?.exercises.find((e) => e.id === entry.exerciseId);
   // só sessões anteriores importam: não recalcula a cada série marcada hoje
@@ -207,6 +211,23 @@ function ExerciseCard({ session, entry, locked, nextSetId, focus }: { session: W
   const bestNow = done.reduce((b, s) => Math.max(b, s.weight), 0);
   const best1rm = done.reduce((b, s) => Math.max(b, oneRM(s.weight, s.reps)), 0);
   const isPR = last && bestNow > last.best.weight;
+  // recorde = 1RM estimado acima de tudo o que você já fez neste exercício
+  const histBest = useMemo(() => {
+    let b = 0;
+    state.sessions.forEach((x) => { if (x.date < session.date) x.entries.forEach((e) => { if (e.exerciseId === entry.exerciseId) e.sets.forEach((y) => { if (y.done) b = Math.max(b, oneRM(y.weight, y.reps)); }); }); });
+    return b;
+  }, [pastKey, entry.exerciseId, session.date]); // eslint-disable-line react-hooks/exhaustive-deps
+  const prIds = new Set<string>();
+  { let run = histBest; entry.sets.forEach((x) => { if (!x.done) return; const e = oneRM(x.weight, x.reps); if (histBest > 0 && e > run + 0.05) { prIds.add(x.id); run = e; } }); }
+  const completeSet = (s: SetLog) => {
+    setFx(s.id);
+    const e = oneRM(s.weight, s.reps);
+    const before = Math.max(histBest, ...entry.sets.filter((x) => x.done && x.id !== s.id).map((x) => oneRM(x.weight, x.reps)));
+    if (histBest > 0 && e > before + 0.05) {
+      void haptic('success'); setTimeout(() => void haptic('success'), 220);
+      toast(`Novo recorde: ${nf(s.weight, s.weight % 1 ? 1 : 0)} kg × ${s.reps} (1RM est. ${nf(e, 1)} kg)`);
+    }
+  };
   const allDone = entry.sets.length > 0 && done.length === entry.sets.length;
   const rest = exDef?.rest;
   const isCurrent = !!nextSetId && entry.sets.some((x) => x.id === nextSetId);
@@ -256,8 +277,11 @@ function ExerciseCard({ session, entry, locked, nextSetId, focus }: { session: W
       <div className="space-y-1.5">
         {entry.sets.map((s, i) => (
           <div key={s.id} className={cx('grid grid-cols-[26px_1fr_1fr_1fr_44px] gap-1.5 items-center rounded-2xl transition-all duration-300',
-            s.done && 'bg-blush/40 opacity-80', s.id === nextSetId && 'bg-surface ring-2 ring-orange shadow-[var(--shadow-1)]')}>
-            <span className={cx('text-center text-[14px] font-semibold', s.done ? 'text-orange line-through' : s.id === nextSetId ? 'text-orange' : 'text-muted')}>{i + 1}</span>
+            s.done && !prIds.has(s.id) && 'bg-blush/40 opacity-80', prIds.has(s.id) && 'pr-row', prIds.has(s.id) && fx === s.id && 'pr-flash',
+            s.id === nextSetId && 'bg-surface ring-2 ring-orange shadow-[var(--shadow-1)]', s.done && fx === s.id && 'set-stamp')}>
+            {prIds.has(s.id)
+              ? <span className="text-center text-[15px] font-bold" style={{ color: 'var(--color-gold)' }} title="Recorde">★</span>
+              : <span className={cx('text-center text-[14px] font-semibold', s.done ? 'text-orange line-through' : s.id === nextSetId ? 'text-orange' : 'text-muted')}>{i + 1}</span>}
             <NumInput disabled={locked} value={s.weight} onChange={(v) => actions.updateSet(session.id, entry.exerciseId, s.id, { weight: v })} aria-label={`Peso série ${i + 1}`} />
             <NumInput disabled={locked} value={s.reps} onChange={(v) => actions.updateSet(session.id, entry.exerciseId, s.id, { reps: Math.round(v) })} aria-label={`Repetições série ${i + 1}`} />
             <select disabled={locked} value={s.rpe} aria-label={`RPE série ${i + 1}`}
@@ -266,7 +290,7 @@ function ExerciseCard({ session, entry, locked, nextSetId, focus }: { session: W
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
             <button disabled={locked} aria-label={`Concluir série ${i + 1}`} aria-pressed={s.done}
-              onClick={() => { if (!s.done) setFx(s.id); actions.updateSet(session.id, entry.exerciseId, s.id, { done: !s.done }); if (!s.done && !session.completed) timer.start(rest); }}
+              onClick={() => { if (!s.done) completeSet(s); actions.updateSet(session.id, entry.exerciseId, s.id, { done: !s.done }); if (!s.done && !session.completed) timer.start(rest); }}
               className={cx('press relative size-11 rounded-full grid place-items-center transition-colors disabled:opacity-60', s.done ? 'bg-orange text-white' : s.id === nextSetId ? 'bg-orange/15 text-orange' : 'bg-cream text-ink/30')}>
               {s.done && fx === s.id && <span className="check-burst" aria-hidden />}
               <LuCheck size={18} strokeWidth={3} className={cx('relative', s.done && fx === s.id && 'check-pop')} key={String(s.done) + (fx === s.id ? 'fx' : '')} />
@@ -298,6 +322,42 @@ function ExerciseCard({ session, entry, locked, nextSetId, focus }: { session: W
         const prevNote = state.sessions.find((s) => s.date === last.date)?.entries.find((e) => e.exerciseId === entry.exerciseId)?.note;
         return prevNote ? <p className="mt-2 text-[12.5px] text-muted">Nota da última vez: {prevNote}</p> : null;
       })()}
+    </Card>
+  );
+}
+
+/* ─────────────────────────── Mapa do corpo ─────────────────────────── */
+function MuscleMapCard() {
+  const { state } = useStore();
+  const [mode, setMode] = useState<'volume' | 'fadiga'>('volume');
+  const [sel, setSel] = useState<Region | null>(null);
+  const st = useMemo(() => muscleStats(state), [state.sessions]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fill = (r: Region) => (mode === 'volume' ? volumeZone(st.sets(r)).color : recoveryZone(st.recovery(r)).color);
+  const legend = mode === 'volume'
+    ? [['nada', 0], ['pouco', 3], ['bom', 8], ['alto', 15], ['muito alto', 25]].map(([l, n]) => ({ l: String(l), c: volumeZone(n as number).color }))
+    : [['cansado', 30], ['recuperando', 70], ['recuperado', 100]].map(([l, n]) => ({ l: String(l), c: recoveryZone(n as number).color }));
+  return (
+    <Card className="p-5 md:p-6">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <p className="t-section text-ink">Músculos</p>
+          <p className="t-caption">{mode === 'volume' ? 'Séries nos últimos 7 dias' : 'Recuperação estimada agora'}</p>
+        </div>
+        <div className="flex gap-1 bg-cream rounded-full p-1 shrink-0">
+          {([['volume', 'Volume'], ['fadiga', 'Recuperação']] as const).map(([k, l]) => (
+            <button key={k} onClick={() => setMode(k)} className={cx('press h-8 px-3 rounded-full text-[12.5px] font-medium whitespace-nowrap', mode === k ? 'bg-ink text-on-ink' : 'text-ink/60')}>{l}</button>
+          ))}
+        </div>
+      </div>
+      <div className="mt-3"><BodyMap fill={fill} selected={sel} onPick={(r) => setSel(sel === r ? null : r)} /></div>
+      <p className="text-[13.5px] mt-2 min-h-[20px] text-center">
+        {sel ? <><b className="text-ink">{REGION_LABEL[sel]}</b> <span className="text-muted">· {nf(st.sets(sel), 1)} séries na semana ({volumeZone(st.sets(sel)).label}) · {st.recovery(sel)}% recuperado</span></>
+          : <span className="text-muted">Toque num músculo para ver o detalhe.</span>}
+      </p>
+      <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 mt-2 text-[11.5px] text-muted">
+        {legend.map((x) => <span key={x.l} className="flex items-center gap-1.5"><span className="size-2.5 rounded-full" style={{ background: x.c }} />{x.l}</span>)}
+      </div>
+      <p className="text-[11px] text-muted text-center mt-2">Estimativa: exercício principal conta 1 série, auxiliares 0,5. {mode === 'fadiga' ? 'Recuperação é um modelo simples, não uma medida do corpo.' : 'Faixas são referências gerais, não regras.'}</p>
     </Card>
   );
 }
@@ -670,32 +730,46 @@ function History({ onEdit }: { onEdit: (id: string) => void }) {
     return { id, name, best, best1 } as { id: string; name: string; best: { w: number; reps: number; date: string } | null; best1: { v: number; date: string } | null };
   }).filter((p) => p.best).sort((a, b) => (a.best!.date < b.best!.date ? 1 : -1)), [state.sessions, exercises]);
 
-  const progression = sessions.filter((s) => s.entries.some((e) => e.exerciseId === exId && e.sets.some((x) => x.done))).reverse().map((s) => {
+  const progRaw = sessions.filter((s) => s.entries.some((e) => e.exerciseId === exId && e.sets.some((x) => x.done))).reverse().map((s) => {
     const sets = s.entries.find((x) => x.exerciseId === exId)!.sets.filter((x) => x.done);
-    const v = metric === 'carga' ? Math.max(...sets.map((x) => x.weight)) : Math.max(...sets.map((x) => oneRM(x.weight, x.reps)));
-    return { label: fmtShort(s.date), value: round1(v), sub: relDay(s.date) };
+    const top = sets.reduce((b, x) => (oneRM(x.weight, x.reps) > oneRM(b.weight, b.reps) ? x : b));
+    const v = metric === 'carga' ? Math.max(...sets.map((x) => x.weight)) : oneRM(top.weight, top.reps);
+    return { label: fmtShort(s.date), value: round1(v), sub: relDay(s.date), range: oneRMRange(top.weight, top.reps) };
   });
+  const progression = progRaw.map(({ range: _r, ...p }) => p);
+  // estrelas: sessões que superaram tudo o que veio antes
+  const prStars = progRaw.reduce<{ best: number; idx: number[] }>((acc, p, i) => {
+    if (i > 0 && p.value > acc.best) acc.idx.push(i);
+    acc.best = Math.max(acc.best, p.value);
+    return acc;
+  }, { best: 0, idx: [] }).idx;
 
   if (!sessions.length && !(state.cardio || []).length)
     return <Card className="p-5"><Empty icon={<LuHistory />} title="Nenhum treino concluído ainda" text="Finalize um treino para ver o histórico, recordes e evolução de carga." /></Card>;
 
   return (
     <div className="space-y-4">
+      <MuscleMapCard />
       <MonthCalendar />
       <div className="grid lg:grid-cols-2 gap-4">
         <Card className="p-5 md:p-6">
           <div className="flex items-center justify-between gap-2 mb-3">
-            <p className="text-[16px] font-semibold text-ink">Evolução de carga</p>
+            <p className="text-[16px] font-semibold text-ink">Evolução</p>
             <div className="flex gap-1 bg-cream rounded-full p-1">
               {([['carga', 'Carga'], ['1rm', '1RM est.']] as const).map(([k, l]) => (
-                <button key={k} onClick={() => setMetric(k)} className={cx('press h-8 px-3 rounded-full text-[12.5px] font-medium', metric === k ? 'bg-ink text-on-ink' : 'text-ink/60')}>{l}</button>
+                <button key={k} onClick={() => setMetric(k)} className={cx('press h-8 px-3 rounded-full text-[12.5px] font-medium whitespace-nowrap', metric === k ? 'bg-ink text-on-ink' : 'text-ink/60')}>{l}</button>
               ))}
             </div>
           </div>
           <Select value={exId} onChange={(e) => setExId(e.target.value)} className="mb-3">
             {exercises.map(([id, n]) => <option key={id} value={id}>{n}</option>)}
           </Select>
-          <LineChart data={progression} unit=" kg" />
+          <LineChart data={progression} unit=" kg" stars={prStars} bandColor="var(--color-gold)"
+            band={metric === '1rm' ? progRaw.map((p) => ({ lo: round1(p.range.lo), hi: round1(p.range.hi) })) : undefined} />
+          <p className="text-[12px] text-muted mt-1">
+            <span style={{ color: 'var(--color-gold)' }}>★</span> recorde
+            {metric === '1rm' && <> · faixa = variação entre fórmulas (Epley, Brzycki, Lombardi): o 1RM é uma estimativa</>}
+          </p>
         </Card>
         <Card className="p-5 md:p-6">
           <p className="text-[16px] font-semibold text-ink mb-1 flex items-center gap-2"><LuTrophy size={17} className="text-orange" /> Recordes pessoais</p>

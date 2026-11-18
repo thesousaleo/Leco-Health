@@ -49,7 +49,15 @@ export function normalizeState(s: AppState): AppState {
   s.prefs.scoreWeights = { ...d.scoreWeights, ...(s.prefs.scoreWeights || {}) };
   // blocos novos entram no fim da lista do usuário
   const known = new Set(s.prefs.homeBlocks.map((b) => b.id));
-  s.prefs.homeBlocks = [...s.prefs.homeBlocks.filter((b) => DEFAULT_HOME.some((x) => x.id === b.id)), ...DEFAULT_HOME.filter((b) => !known.has(b.id))];
+  // blocos novos entram na posição padrão (logo depois do bloco que vem antes deles)
+  const blocks = s.prefs.homeBlocks.filter((b) => DEFAULT_HOME.some((x) => x.id === b.id));
+  DEFAULT_HOME.forEach((b, i) => {
+    if (known.has(b.id)) return;
+    const prev = DEFAULT_HOME[i - 1]?.id;
+    const at = prev ? blocks.findIndex((x) => x.id === prev) + 1 : 0;
+    blocks.splice(at > 0 ? at : blocks.length, 0, { ...b });
+  });
+  s.prefs.homeBlocks = blocks;
   if (!Array.isArray(s.waterLog)) s.waterLog = [];
   if (!Array.isArray(s.cardio)) s.cardio = [];
   if (!Array.isArray(s.progressPhotos)) s.progressPhotos = [];

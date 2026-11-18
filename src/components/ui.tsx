@@ -181,17 +181,20 @@ export function TextArea({ className, ...p }: React.TextareaHTMLAttributes<HTMLT
 export function NumInput({ value, onChange, step = 1, className, ...p }: {
   value: number; onChange: (v: number) => void; step?: number; className?: string;
 } & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>) {
-  const [txt, setTxt] = useState(String(value ?? ''));
+  // mostra com vírgula (padrão brasileiro) e aceita vírgula ou ponto
+  const show = (v: number | undefined) => (v == null || Number.isNaN(v) ? '' : String(v).replace('.', ','));
+  const [txt, setTxt] = useState(show(value));
   const parse = (t: string) => parseFloat(t.replace(',', '.'));
-  useEffect(() => { if (parse(txt) !== value) setTxt(String(value ?? '')); }, [value]);
+  useEffect(() => { if (parse(txt) !== value) setTxt(show(value)); }, [value]);
   return (
     <input
       inputMode="decimal"
-      className={cx(inputCls, 'text-center tabular-nums px-1', className)}
+      className={cx(inputCls, 'text-center tabular-nums', txt.length > 4 && '!text-[14px]', className)}
+      style={{ paddingInline: 4 }}
       value={txt}
       onChange={(e) => { setTxt(e.target.value); const v = parse(e.target.value); if (!isNaN(v)) onChange(v); }}
       onFocus={(e) => e.target.select()}
-      onBlur={() => { if (isNaN(parse(txt))) setTxt(String(value)); }}
+      onBlur={() => { if (isNaN(parse(txt))) setTxt(show(value)); }}
       onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
       {...p}
     />
@@ -323,7 +326,7 @@ export function Modal({ open, onClose, title, children, footer }: {
   return (
     <div className="fixed inset-0 z-[60] flex items-end md:items-center justify-center" role="dialog" aria-modal="true" aria-label={view.title}>
       <div className={cx('absolute inset-0 bg-ink/35', leaving ? 'animate-fade-out' : 'animate-fade')} style={{ opacity: Math.max(0, 1 - dy / 400) }} onClick={onClose} />
-      <div className={cx('relative w-full md:max-w-lg max-h-[92dvh] flex flex-col rounded-t-[30px] md:rounded-[30px] bg-surface shadow-[var(--shadow-3)]', leaving ? (dy > 0 ? '' : 'animate-sheet-out') : 'animate-sheet')}
+      <div className={cx('relative w-full md:max-w-lg max-h-[92dvh] flex flex-col rounded-t-[30px] md:rounded-[30px] sheet-glass', leaving ? (dy > 0 ? '' : 'animate-sheet-out') : 'animate-sheet')}
         style={{ transform: dy ? `translateY(${dy}px)` : undefined, transition: drag.current ? 'none' : 'transform .45s var(--spring)' }}>
         <div className="touch-none select-none" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
           <div className="md:hidden mx-auto mt-2.5 h-1.5 w-11 rounded-full bg-ink/15" />

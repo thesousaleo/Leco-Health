@@ -38,10 +38,16 @@ const smooth = (pts: (readonly [number, number])[]) => {
   return path;
 };
 
-export function LineChart({ data, color = 'var(--color-orange)', unit = '', height = 190, decimals = 1, goal, trend }: {
+export function LineChart({ data, color = 'var(--color-orange)', unit = '', height = 190, decimals = 1, goal, trend, band, stars, bandColor, trendLabel = 'média' }: {
   data: Pt[]; color?: string; unit?: string; height?: number; decimals?: number; goal?: number;
   /** linha de tendência (mesmo tamanho de data) */
   trend?: (number | null)[];
+  /** faixa sombreada (ex.: flutuação normal do peso ou estimativas de 1RM) */
+  band?: ({ lo: number; hi: number } | null)[];
+  /** índices marcados com estrela (ex.: recordes) */
+  stars?: number[];
+  bandColor?: string;
+  trendLabel?: string;
 }) {
   const [boxRef, W] = useWidth(); const H = height;
   const P = { l: 40, r: 14, t: 16, b: 26 };
@@ -52,7 +58,8 @@ export function LineChart({ data, color = 'var(--color-orange)', unit = '', heig
   if (data.length < 2)
     return <div className="h-40 grid place-items-center text-[13px] text-muted">Adicione ao menos 2 registros para ver o gráfico.</div>;
 
-  const vals = data.map((d) => d.value).concat(goal != null ? [goal] : []).concat((trend ?? []).filter((v): v is number => v != null));
+  const vals = data.map((d) => d.value).concat(goal != null ? [goal] : []).concat((trend ?? []).filter((v): v is number => v != null))
+    .concat((band ?? []).flatMap((b) => (b ? [b.lo, b.hi] : [])));
   const [lo, hi] = niceRange(vals);
   const x = (i: number) => P.l + (i / (data.length - 1)) * (W - P.l - P.r);
   const y = (v: number) => P.t + (1 - (v - lo) / (hi - lo)) * (H - P.t - P.b);
@@ -61,6 +68,20 @@ export function LineChart({ data, color = 'var(--color-orange)', unit = '', heig
   const area = `${path} L${pts[pts.length - 1][0]},${H - P.b} L${pts[0][0]},${H - P.b} Z`;
   const tpts = (trend ?? []).map((v, i) => (v == null ? null : ([x(i), y(v)] as const))).filter(Boolean) as (readonly [number, number])[];
   const ticks = [0, 0.5, 1].map((t) => lo + (hi - lo) * (0.12 + t * 0.76));
+  // faixa: contorno de cima (ida) e de baixo (volta)
+  const bandPath = (() => {
+    if (!band) return null;
+    const idx = band.map((b, i) => (b ? i : -1)).filter((i) => i >= 0);
+    if (idx.length < 2) return null;
+    const top = idx.map((i) => [x(i), y(band[i]!.hi)] as const);
+    const bot = idx.map((i) => [x(i), y(band[i]!.lo)] as const).reverse();
+    return `${smooth(top)} L${bot.map(([a, b]) => `${a},${b}`).join(' L')} Z`;
+  })();
+  const starPath = (cx: number, cy: number, r: number) => {
+    const p: string[] = [];
+    for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + (k * Math.PI) / 5; const rr = k % 2 ? r * 0.45 : r; p.push(`${cx + rr * Math.cos(a)},${cy + rr * Math.sin(a)}`); }
+    return `M${p.join(' L')} Z`;
+  };
 
   const onMove = (e: React.PointerEvent) => {
     const r = svgRef.current!.getBoundingClientRect();
@@ -94,7 +115,8 @@ export function LineChart({ data, color = 'var(--color-orange)', unit = '', heig
             <text x={W - P.r - 37} y={y(goal) - 8} textAnchor="middle" fontSize="10" fontWeight="600" style={{ fill: color }}>meta {nf(goal, decimals)}{unit}</text>
           </g>
         )}
-        <path d={area} fill={`url(#${gid})`} className="animate-fade" />
+        {bandPath && <path d={bandPath} className="animate-fade" style={{ fill: bandColor ?? color, fillOpacity: 0.13 }} />}
+        <path d={area} fill={`url(#${gid})`} className="animate-fade" style={bandPath ? { opacity: 0.35 } : undefined} />
         {tpts.length > 1 && <path d={smooth(tpts)} fill="none" style={{ stroke: INK(55) }} strokeWidth="2" strokeDasharray="5 5" strokeLinecap="round" />}
         <path d={path} fill="none" style={{ stroke: color, ['--len' as string]: 1 } as React.CSSProperties} pathLength={1} className="draw" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round" />
         {data.length <= 12 && pts.map(([px, py], i) => i < pts.length - 1 && hover !== i && (
@@ -109,6 +131,10 @@ export function LineChart({ data, color = 'var(--color-orange)', unit = '', heig
         {hover != null && hover !== pts.length - 1 && (
           <circle cx={pts[hover][0]} cy={pts[hover][1]} r={5} style={{ fill: color, stroke: 'var(--color-surface)' }} strokeWidth="2" />
         )}
+        {(stars ?? []).filter((i) => pts[i]).map((i) => (
+          <path key={'s' + i} d={starPath(pts[i][0], pts[i][1] - 11, 6.5)} className="animate-pop"
+            style={{ fill: 'var(--color-gold)', stroke: 'var(--color-surface)', strokeWidth: 1.5 }} />
+        ))}
         {data.map((d, i) =>
           i % labelEvery === 0 || i === data.length - 1 ? (
             <text key={i} x={x(i)} y={H - 6} textAnchor="middle" fontSize="11" style={{ fill: INK(45) }}>{d.label}</text>
@@ -121,7 +147,9 @@ export function LineChart({ data, color = 'var(--color-orange)', unit = '', heig
           style={{ left: `${(x(hover!) / W) * 100}%` }}>
           <span className="font-semibold text-on-ink tabular-nums">{nf(h.value, decimals)}{unit}</span>
           <span className="text-on-ink/60 ml-1.5">{h.sub ?? h.label}</span>
-          {trend?.[hover!] != null && <span className="text-on-ink/60 ml-1.5">· média {nf(trend[hover!]!, decimals)}</span>}
+          {trend?.[hover!] != null && <span className="text-on-ink/60 ml-1.5">· {trendLabel} {nf(trend[hover!]!, decimals)}</span>}
+          {band?.[hover!] && <span className="text-on-ink/60 ml-1.5">· {nf(band[hover!]!.lo, decimals)}–{nf(band[hover!]!.hi, decimals)}</span>}
+          {stars?.includes(hover!) && <span className="ml-1.5" style={{ color: 'var(--color-gold)' }}>★ recorde</span>}
         </div>
       )}
     </div>
@@ -181,6 +209,34 @@ export function Sparkline({ values, color = 'var(--color-orange)', width = 84, h
       <path d={`${d} L${lx},${height} L${pts[0][0]},${height} Z`} style={{ fill: color, fillOpacity: 0.12 }} />
       <path d={d} fill="none" style={{ stroke: color, ['--len' as string]: 1 } as React.CSSProperties} strokeWidth="2" strokeLinecap="round" pathLength={1} className="draw" />
       <circle cx={lx} cy={ly} r="2.8" style={{ fill: color }} />
+    </svg>
+  );
+}
+
+/** Radar de N eixos (0–1): semana atual sobre a média de referência. */
+export function RadarChart({ axes, current, reference, color = 'var(--color-orange)', size = 260 }: {
+  axes: string[]; current: number[]; reference?: number[]; color?: string; size?: number;
+}) {
+  const n = axes.length, c = size / 2, R = size / 2 - 34;
+  const pt = (i: number, v: number) => {
+    const a = -Math.PI / 2 + (i * 2 * Math.PI) / n;
+    const r = R * Math.max(0.04, Math.min(1, v));
+    return [c + r * Math.cos(a), c + r * Math.sin(a)] as const;
+  };
+  const poly = (vs: number[]) => vs.map((v, i) => pt(i, v).join(',')).join(' ');
+  return (
+    <svg viewBox={`-48 0 ${size + 96} ${size}`} className="w-full max-w-[340px] mx-auto block overflow-visible" role="img" aria-label="Radar da semana">
+      {[0.25, 0.5, 0.75, 1].map((k) => (
+        <polygon key={k} points={poly(axes.map(() => k))} fill="none" style={{ stroke: INK(k === 1 ? 14 : 8) }} />
+      ))}
+      {axes.map((_, i) => { const [x, y] = pt(i, 1); return <line key={i} x1={c} y1={c} x2={x} y2={y} style={{ stroke: INK(8) }} />; })}
+      {reference && <polygon points={poly(reference)} className="animate-fade" style={{ fill: INK(6), stroke: INK(40), strokeDasharray: '4 4' }} strokeWidth="1.5" />}
+      <polygon points={poly(current)} className="radar-in" style={{ fill: color, fillOpacity: 0.22, stroke: color, transformOrigin: `${c}px ${c}px` }} strokeWidth="2.25" strokeLinejoin="round" />
+      {current.map((v, i) => { const [x, y] = pt(i, v); return <circle key={i} cx={x} cy={y} r="3.5" className="radar-in" style={{ fill: color, transformOrigin: `${c}px ${c}px` }} />; })}
+      {axes.map((a, i) => {
+        const [x, y] = pt(i, 1.2);
+        return <text key={a} x={x} y={y + 4} textAnchor={Math.abs(x - c) < 6 ? 'middle' : x > c ? 'start' : 'end'} fontSize="11.5" fontWeight="600" style={{ fill: INK(65) }}>{a}</text>;
+      })}
     </svg>
   );
 }

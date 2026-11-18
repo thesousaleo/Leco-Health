@@ -35,3 +35,11 @@ export const searchExercises = (q: string, limit = 8) => {
 
 /** 1RM estimado (Epley). */
 export const oneRM = (weight: number, reps: number) => (reps <= 1 ? weight : weight * (1 + reps / 30));
+/** Faixa entre fórmulas (Epley, Brzycki, Lombardi): mostra que o 1RM é uma estimativa. Vale até ~12 repetições. */
+export const oneRMRange = (weight: number, reps: number) => {
+  if (reps <= 1) return { lo: weight, hi: weight };
+  const ep = weight * (1 + reps / 30);
+  const br = reps < 37 ? (weight * 36) / (37 - reps) : ep;
+  const lb = weight * Math.pow(reps, 0.1);
+  return { lo: Math.min(ep, br, lb), hi: Math.max(ep, br, lb) };
+};
