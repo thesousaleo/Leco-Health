@@ -1,21 +1,24 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { LuCloud, LuCopy, LuLogOut, LuRefreshCw, LuRotateCcw, LuUpload } from 'react-icons/lu';
+import { LuCloud, LuCopy, LuDownload, LuLogOut, LuRefreshCw, LuRotateCcw, LuUpload } from 'react-icons/lu';
 import { useStore, validateState } from '../store';
+import { useIntent } from '../intent';
 import { useSync } from '../sync';
 import AuthForm from '../components/AuthForm';
-import type { Accent, Goals, HomeBlockId, Prefs, TabId } from '../types';
+import type { Accent, Goals, HomeBlockId, ModuleId, Prefs, TabId } from '../types';
 import { DEFAULT_HOME } from '../prefs';
-import { biometricAvailable, notificationsAllowed, isNative } from '../native';
+import { biometricAvailable, notificationsAllowed, isNative, shareFile } from '../native';
+import { buildCsv, buildZip, CSV_LIST, textToB64, type CsvId } from '../export';
 import { hashPin, loadLock, PinPad, saveLock } from '../components/Lock';
 import { LuArrowDown, LuArrowUp, LuEye, LuEyeOff, LuTrash2 } from 'react-icons/lu';
-import { nf, overallStreak } from '../utils';
+import { modOn, nf, overallStreak } from '../utils';
 import { Button, Card, cx, Field, Input, Modal, NumInput, PageHeader, TextArea } from '../components/ui';
 
-type Tab = 'conta' | 'perfil' | 'metas' | 'aparencia' | 'lembretes' | 'seguranca' | 'dados';
+type Tab = 'conta' | 'perfil' | 'metas' | 'modulos' | 'aparencia' | 'lembretes' | 'seguranca' | 'dados';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'conta', label: 'Conta' },
   { id: 'perfil', label: 'Perfil' },
   { id: 'metas', label: 'Metas' },
+  { id: 'modulos', label: 'Módulos' },
   { id: 'aparencia', label: 'Aparência' },
   { id: 'lembretes', label: 'Lembretes' },
   { id: 'seguranca', label: 'Segurança' },
@@ -23,7 +26,11 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 export default function Settings({ go }: { go?: (t: TabId) => void }) {
-  const [tab, setTab] = useState<Tab>('conta');
+  const [tab, setTab] = useState<Tab>(() => {
+    try { const t = localStorage.getItem('leco-health:settings-tab') as Tab | null; if (t) { localStorage.removeItem('leco-health:settings-tab'); return t; } } catch { /* */ }
+    return 'conta';
+  });
+  useIntent('ajustes', (i) => { const t = i.startsWith('ajustes:') ? i.slice(8) as Tab : null; if (t && TABS.some((x) => x.id === t)) setTab(t); });
   return (
     <div>
       <PageHeader title="Ajustes" />
@@ -40,7 +47,8 @@ export default function Settings({ go }: { go?: (t: TabId) => void }) {
       <div className="max-w-2xl space-y-4">
         {tab === 'conta' && <AccountTab />}
         {tab === 'perfil' && <ProfileTab />}
-        {tab === 'metas' && <GoalsTab />}
+        {tab === 'metas' && <><GoalsTab /><StreakSection /></>}
+        {tab === 'modulos' && <ModulesTab />}
         {tab === 'aparencia' && <AppearanceTab go={go} />}
         {tab === 'lembretes' && <RemindersTab />}
         {tab === 'seguranca' && <SecurityTab />}
@@ -261,6 +269,7 @@ function DataTab() {
         </div>
       </Section>
 
+      <ExportSection />
       <Section title="Backup" sub="Copie tudo em texto (JSON) ou restaure um backup. As fotos das refeições não entram no backup.">
         <div className="flex flex-wrap gap-2">
           <Button variant="dark" onClick={async () => {
@@ -300,6 +309,30 @@ function DataTab() {
 }
 
 /* ── Excluir conta ─────────────────────────────────────────── */
+function ExportSection() {
+  const { state, toast } = useStore();
+  const [busy, setBusy] = useState<string | null>(null);
+  const day = new Date().toISOString().slice(0, 10);
+  const run = async (id: CsvId | 'zip') => {
+    setBusy(id);
+    try {
+      if (id === 'zip') await shareFile(`leco-health-dados-${day}.zip`, buildZip(state), 'application/zip', 'Dados do Leco Health');
+      else await shareFile(`leco-health-${id}-${day}.csv`, textToB64(buildCsv(state, id)), 'text/csv', 'Dados do Leco Health');
+    } catch { toast('Não foi possível exportar'); } finally { setBusy(null); }
+  };
+  return (
+    <Section title="Exportar planilhas (CSV)" sub="Abre no Excel, Google Planilhas ou Numbers. O relatório em PDF por profissional fica em Registros → Resumo.">
+      <Button variant="primary" className="w-full" disabled={!!busy} onClick={() => run('zip')}><LuDownload size={16} /> {busy === 'zip' ? 'Gerando…' : 'Tudo num arquivo (.zip)'}</Button>
+      <p className="text-[13px] text-muted mt-4 mb-2">Ou um módulo só:</p>
+      <div className="flex flex-wrap gap-2">
+        {CSV_LIST.map((c) => (
+          <button key={c.id} disabled={!!busy} onClick={() => run(c.id)} className="press h-9 px-3.5 rounded-full bg-cream text-[13.5px] text-ink/75 disabled:opacity-50">{busy === c.id ? 'Gerando…' : c.label}</button>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
 function DeleteAccount() {
   const { toast } = useStore();
   const sync = useSync();
@@ -336,6 +369,7 @@ const ACCENTS: { id: Accent; label: string; color: string }[] = [
 const BLOCK_LABEL: Record<HomeBlockId, string> = {
   dia: 'Seu dia', faixa: 'Seu dia em 24 h', resumo: 'Resumo da semana (domingo e segunda)', agua: 'Água', semana: 'Sua semana', habitos: 'Hábitos de hoje', refeicoes: 'Refeições de hoje', corpo: 'Corpo e sono',
 };
+const NAV_MOD: Partial<Record<TabId, ModuleId>> = { treino: 'treino', nutricao: 'nutricao', habitos: 'habitos', amigos: 'amigos' };
 const NAV_ALL: { id: TabId; label: string }[] = [
   { id: 'treino', label: 'Treino' }, { id: 'nutricao', label: 'Nutrição' }, { id: 'habitos', label: 'Hábitos' }, { id: 'registros', label: 'Registros' }, { id: 'amigos', label: 'Amigos' },
 ];
@@ -373,7 +407,8 @@ function AppearanceTab({ go }: { go?: (t: TabId) => void }) {
   const blocks = p.homeBlocks;
   const moveBlock = (i: number, d: -1 | 1) => { const b = [...blocks]; [b[i], b[i + d]] = [b[i + d], b[i]]; set({ homeBlocks: b }); };
   const nav = p.navTabs;
-  const navList = [...nav.map((id) => NAV_ALL.find((n) => n.id === id)!).filter(Boolean), ...NAV_ALL.filter((n) => !nav.includes(n.id))];
+  const navAll = NAV_ALL.filter((n) => !NAV_MOD[n.id] || modOn(state, NAV_MOD[n.id]!));
+  const navList = [...nav.map((id) => navAll.find((n) => n.id === id)!).filter(Boolean), ...navAll.filter((n) => !nav.includes(n.id))];
   const moveNav = (id: TabId, d: -1 | 1) => {
     const order = navList.map((n) => n.id); const i = order.indexOf(id); [order[i], order[i + d]] = [order[i + d], order[i]];
     set({ navTabs: order.filter((x) => nav.includes(x)) });
@@ -455,6 +490,50 @@ function AppearanceTab({ go }: { go?: (t: TabId) => void }) {
   );
 }
 
+/* ── Sequências ────────────────────────────────────────────── */
+function StreakSection() {
+  const { state, actions } = useStore();
+  return (
+    <Section title="Sequências" sub="Regras que protegem sua constância nos dias difíceis.">
+      <Toggle checked={state.prefs.streakShield !== false} onChange={(v) => actions.setPrefs({ streakShield: v })}
+        label="Escudo semanal" sub="Perdoa 1 falta por semana em cada hábito, desde que não sejam 2 dias seguidos." />
+      <p className="text-[12.5px] text-muted mt-3">Para dias doente ou viajando, use o Modo Pausa na aba Hábitos.</p>
+    </Section>
+  );
+}
+
+/* ── Central de módulos ────────────────────────────────────── */
+export const MODULES: { id: ModuleId; label: string; sub: string }[] = [
+  { id: 'treino', label: 'Treino', sub: 'fichas, séries, cardio e recordes' },
+  { id: 'nutricao', label: 'Refeições', sub: 'diário de refeições com foto' },
+  { id: 'habitos', label: 'Hábitos', sub: 'hábitos, sequências e lembretes' },
+  { id: 'agua', label: 'Água', sub: 'copos, meta e lembretes de água' },
+  { id: 'sono', label: 'Sono', sub: 'noites, qualidade e horários' },
+  { id: 'peso', label: 'Peso e medidas', sub: 'balança, fotos de progresso' },
+  { id: 'amigos', label: 'Amigos', sub: 'progresso compartilhado e desafios' },
+];
+function ModulesTab() {
+  const { state, actions, toast } = useStore();
+  const m = state.prefs.modules || {};
+  const onCount = MODULES.filter((x) => m[x.id] !== false).length;
+  return (
+    <>
+      <Section title="Central de módulos" sub="Desligue o que você não usa. Ele some do Início, da barra, do score, da busca e dos lembretes. Seus dados ficam guardados e voltam quando você religar.">
+        <div className="space-y-2">
+          {MODULES.map((x) => (
+            <Toggle key={x.id} checked={m[x.id] !== false} label={x.label} sub={x.sub}
+              onChange={(v) => {
+                if (!v && onCount <= 1) { toast('Deixe pelo menos um módulo ligado'); return; }
+                actions.setPrefs({ modules: { ...m, [x.id]: v } });
+                toast(v ? `${x.label} ligado` : `${x.label} desligado`);
+              }} />
+          ))}
+        </div>
+      </Section>
+    </>
+  );
+}
+
 /* ── Lembretes ─────────────────────────────────────────────── */
 function RemindersTab() {
   const { state, actions, toast } = useStore();
@@ -500,6 +579,16 @@ function RemindersTab() {
 }
 
 /* ── Segurança ─────────────────────────────────────────────── */
+function DiscreetSection() {
+  const { state, actions } = useStore();
+  return (
+    <Section title="Modo discreto">
+      <Toggle checked={!!state.prefs.discreet} onChange={(v) => actions.setPrefs({ discreet: v })}
+        label="Esconder o peso no Início" sub="Mostra •••. Toque no bloco para ver por 5 segundos." />
+    </Section>
+  );
+}
+
 function SecurityTab() {
   const { toast } = useStore();
   const [cfg, setCfg] = useState(loadLock);
@@ -526,6 +615,7 @@ function SecurityTab() {
   }
   return (
     <>
+      <DiscreetSection />
       <Section title="Bloquear o app" sub="Pede PIN (ou digital) ao abrir o Leco Health. Vale só para este aparelho.">
         <Toggle checked={!!cfg} onChange={(v) => (v ? setMode('new') : (update(null), toast('Bloqueio desativado')))} label="Bloqueio com PIN" sub={cfg ? 'Ativado' : 'Desativado'} />
         {cfg && (

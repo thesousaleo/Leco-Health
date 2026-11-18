@@ -77,7 +77,9 @@ jobs:
           f=$(find android/app/src/main/java -name MainActivity.java | head -1)
           pkg=$(grep -m1 '^package' "$f")
           { echo "$pkg"; echo; cat <<'JAVA'
+          import android.content.Intent;
           import android.graphics.Color;
+          import android.net.Uri;
           import android.os.Build;
           import android.os.Bundle;
           import android.view.View;
@@ -93,9 +95,12 @@ jobs:
 
           public class MainActivity extends BridgeActivity {
               private volatile float insetTop = 0f, insetBottom = 0f;
+              private volatile String pendingAction = null;
 
               public class Insets_ {
                   @JavascriptInterface public String get() { return insetTop + "," + insetBottom; }
+                  /** Atalho do ícone que abriu o app (o JS pede e a ação é consumida). */
+                  @JavascriptInterface public String takeAction() { String a = pendingAction; pendingAction = null; return a == null ? "" : a; }
                   @JavascriptInterface public void setLight(final boolean light) {
                       runOnUiThread(() -> {
                           WindowInsetsControllerCompat c = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
@@ -105,9 +110,31 @@ jobs:
                   }
               }
 
+              /** lecohealth://atalho/agua → "agua" */
+              private void readAction(Intent it, boolean live) {
+                  if (it == null) return;
+                  Uri u = it.getData();
+                  if (u == null || !"lecohealth".equals(u.getScheme())) return;
+                  String a = u.getLastPathSegment();
+                  if (a == null) return;
+                  pendingAction = a;
+                  if (live && getBridge() != null && getBridge().getWebView() != null) {
+                      final WebView wv = getBridge().getWebView();
+                      wv.post(() -> wv.evaluateJavascript("window.__lecoAction&&window.__lecoAction()", null));
+                  }
+              }
+
+              @Override
+              public void onNewIntent(Intent intent) {
+                  super.onNewIntent(intent);
+                  setIntent(intent);
+                  readAction(intent, true);
+              }
+
               @Override
               public void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
+                  readAction(getIntent(), false);
                   Window w = getWindow();
                   // Tela infinita: o app desenha por trás da barra de status e da barra de navegação.
                   WindowCompat.setDecorFitsSystemWindows(w, false);
@@ -148,6 +175,14 @@ jobs:
           JAVA
           } > "$f"
           cat "$f"
+
+      - name: Atalhos do ícone (segurar o ícone do app)
+        run: |
+          f=$(find android/app/src/main/java -name MainActivity.java | head -1)
+          jpkg=$(grep -m1 '^package' "$f" | sed -E 's/package +([^;]+);/\1/')
+          appid=$(grep -oE "appId: *'[^']+'" capacitor.config.ts | sed -E "s/appId: *'([^']+)'/\1/")
+          echo "appId=$appid pacote=$jpkg"
+          python3 android-res/shortcuts/make.py "$appid" "$jpkg"
 
       - name: Compilar APK
         working-directory: android

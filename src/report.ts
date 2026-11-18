@@ -5,6 +5,7 @@ import {
   sessionVolume, todayKey, weekStart,
 } from './utils';
 import { Pdf } from './pdf';
+import { oneRM } from './exercises';
 
 export interface PeriodReport {
   from: DateKey; to: DateKey; days: DateKey[];
@@ -64,7 +65,22 @@ export const summaryWeek = (today = todayKey()) => {
 };
 
 /* ── PDF ───────────────────────────────────────────────────── */
-export function reportPdf(state: AppState, nDays: number, name: string) {
+export type Audience = 'completo' | 'medico' | 'nutri' | 'treinador';
+export const AUDIENCES: { id: Audience; label: string; sub: string }[] = [
+  { id: 'completo', label: 'Completo', sub: 'tudo o que você registra' },
+  { id: 'medico', label: 'Médico', sub: 'peso, sono, sintomas, exames, hábitos e suplementos' },
+  { id: 'nutri', label: 'Nutricionista', sub: 'refeições por dia, horários, água, peso e suplementos' },
+  { id: 'treinador', label: 'Treinador', sub: 'treinos, volume, evolução por exercício, cardio, peso e sono' },
+];
+const FOR: Record<Audience, string> = { completo: '', medico: ' — para o médico', nutri: ' — para o nutricionista', treinador: ' — para o treinador' };
+
+export function reportPdf(state: AppState, nDays: number, name: string, audience: Audience = 'completo') {
+  const show = (part: 'geral' | 'treino' | 'treinoDet' | 'nutri' | 'nutriDet' | 'habitos' | 'sono' | 'sonoDet' | 'peso' | 'pesoDet' | 'diario') => ({
+    completo: ['geral', 'treino', 'nutri', 'habitos', 'sono', 'peso', 'diario'],
+    medico: ['habitos', 'sono', 'sonoDet', 'peso', 'pesoDet', 'nutri', 'treino', 'diario'],
+    nutri: ['nutri', 'nutriDet', 'peso', 'pesoDet', 'habitos', 'diario'],
+    treinador: ['treino', 'treinoDet', 'peso', 'pesoDet', 'sono'],
+  })[audience].includes(part);
   const to = todayKey();
   const from = addDays(to, -(nDays - 1));
   const r = buildReport(state, from, to);
@@ -76,7 +92,7 @@ export function reportPdf(state: AppState, nDays: number, name: string) {
   // cabeçalho
   pdf.rect(0, pdf.H - 110, pdf.W, 110, ORANGE);
   pdf.text('Leco Health', M, pdf.H - 52, 22, '#FFFFFF', true);
-  pdf.text(`Relatório de ${nDays} dias${name ? ` — ${name}` : ''}`, M, pdf.H - 76, 12, '#FFFFFF');
+  pdf.text(`Relatório de ${nDays} dias${FOR[audience]}${name ? ` · ${name}` : ''}`, M, pdf.H - 76, 12, '#FFFFFF');
   pdf.text(`${fmtDayMonth(from)} a ${fmtDayMonth(to)} · gerado em ${fmtLong(to)}`, M, pdf.H - 94, 10, '#FFFFFF');
   pdf.y = pdf.H - 140;
 
@@ -96,8 +112,31 @@ export function reportPdf(state: AppState, nDays: number, name: string) {
     });
     pdf.y -= 6;
   };
+  const clip = (t: string, maxW: number, size: number, bold = false) => {
+    if (pdf.width(t, size, bold) <= maxW) return t;
+    let x = t; while (x.length > 1 && pdf.width(x + '…', size, bold) > maxW) x = x.slice(0, -1);
+    return x + '…';
+  };
+  /** tabela simples: larguras em fração da página; 'r' alinha à direita */
+  const table = (cols: { w: number; r?: boolean }[], head: string[], rows: string[][]) => {
+    const xs: number[] = []; let x = M; cols.forEach((c) => { xs.push(x); x += c.w * W; });
+    const row = (cells: string[], bold: boolean, color: string) => {
+      pdf.ensure(16);
+      cells.forEach((t, i) => {
+        const cw = cols[i].w * W - 6, tt = clip(t, cw, 9.5, bold);
+        pdf.text(tt, cols[i].r ? xs[i] + cw - pdf.width(tt, 9.5, bold) : xs[i], pdf.y - 10, 9.5, color, bold);
+      });
+      pdf.y -= 15;
+    };
+    row(head, true, MUTED);
+    pdf.line(M, pdf.y + 3, M + W, pdf.y + 3);
+    rows.forEach((r2) => row(r2, false, INK));
+    pdf.y -= 10;
+  };
+  const inP = (d: string) => d >= from && d <= to;
   const diff = (a: number, b: number, unit = '') => (b ? ` (${a - b >= 0 ? '+' : ''}${nf(a - b, unit === ' t' ? 1 : 0)}${unit} vs período anterior)` : '');
 
+  if (show('geral')) {
   section('Visão geral');
   kv([
     ['Score médio', `${r.scoreAvg}%${diff(r.scoreAvg, prev.scoreAvg, ' pts')}`],
@@ -117,13 +156,53 @@ export function reportPdf(state: AppState, nDays: number, name: string) {
   pdf.text(fmtDayMonth(from), M, pdf.y - 9, 8, MUTED);
   pdf.text(fmtDayMonth(to), M + W - pdf.width(fmtDayMonth(to), 8), pdf.y - 9, 8, MUTED);
   pdf.y -= 26;
+  }
 
+  if (show('treino')) {
   section('Treino');
   kv([
     ['Treinos de musculação', `${r.workouts}${diff(r.workouts, prev.workouts)}`],
     ['Volume total levantado', `${nf(r.volumeT, 1)} t`],
     ['Cardio', r.cardio ? `${r.cardio} sessões · ${r.cardioMin} min${r.cardioKm ? ` · ${nf(r.cardioKm, 1)} km` : ''}` : '—'],
   ]);
+  }
+  if (show('treinoDet')) {
+    const ss = state.sessions.filter((x) => x.completed && inP(x.date)).sort((a, b) => (a.date < b.date ? -1 : 1));
+    if (ss.length) {
+      section('Treinos do período');
+      table([{ w: 0.16 }, { w: 0.42 }, { w: 0.14, r: true }, { w: 0.14, r: true }, { w: 0.14, r: true }], ['Data', 'Ficha', 'Séries', 'Volume', 'Duração'],
+        ss.map((x) => {
+          const sp = state.splits.find((y) => y.id === x.splitId);
+          const sets = x.entries.reduce((a, e) => a + e.sets.filter((z) => z.done).length, 0);
+          const min = x.finishedAt ? Math.round((x.finishedAt - x.startedAt) / 60000) : 0;
+          return [fmtDayMonth(x.date), sp ? `${sp.letter} · ${sp.name}` : '—', String(sets), `${nf(sessionVolume(x) / 1000, 1)} t`, min > 0 && min < 400 ? `${min} min` : '—'];
+        }));
+      // evolução por exercício: melhor 1RM estimado no começo e no fim do período
+      const ex = new Map<string, { name: string; first: number; last: number; best: string; n: number }>();
+      ss.forEach((x) => x.entries.forEach((e) => {
+        const done = e.sets.filter((z) => z.done && z.weight > 0);
+        if (!done.length) return;
+        const top = done.reduce((a, z) => (oneRM(z.weight, z.reps) > oneRM(a.weight, a.reps) ? z : a));
+        const v = oneRM(top.weight, top.reps);
+        const cur = ex.get(e.exerciseId);
+        if (!cur) ex.set(e.exerciseId, { name: e.name, first: v, last: v, best: `${nf(top.weight, 1)} kg × ${top.reps}`, n: 1 });
+        else { cur.last = v; cur.best = `${nf(top.weight, 1)} kg × ${top.reps}`; cur.n++; }
+      }));
+      const list = [...ex.values()].sort((a, b) => b.last - a.last);
+      if (list.length) {
+        section('Evolução por exercício (1RM estimado)');
+        table([{ w: 0.4 }, { w: 0.2, r: true }, { w: 0.14, r: true }, { w: 0.14, r: true }, { w: 0.12, r: true }], ['Exercício', 'Melhor série', 'Início', 'Fim', 'Variação'],
+          list.map((e) => [e.name, e.best, `${nf(e.first, 0)} kg`, `${nf(e.last, 0)} kg`, e.n > 1 ? `${e.last >= e.first ? '+' : ''}${nf(((e.last - e.first) / e.first) * 100, 0)}%` : '—']));
+      }
+    }
+    const cc = (state.cardio || []).filter((c) => inP(c.date)).sort((a, b) => (a.date < b.date ? -1 : 1));
+    if (cc.length) {
+      section('Cardio');
+      table([{ w: 0.18 }, { w: 0.4 }, { w: 0.2, r: true }, { w: 0.22, r: true }], ['Data', 'Tipo', 'Minutos', 'Distância'],
+        cc.map((c) => [fmtDayMonth(c.date), c.kind, String(c.minutes), c.distanceKm ? `${nf(c.distanceKm, 1)} km` : '—']));
+    }
+  }
+  if (show('nutri')) {
   section('Alimentação e água');
   kv([
     ['Refeições registradas', `${r.meals}`],
@@ -131,6 +210,28 @@ export function reportPdf(state: AppState, nDays: number, name: string) {
     ['Água por dia (média)', `${nf(r.waterAvgL, 1)} L`],
     ['Dias com meta de água', `${r.waterDaysMet} de ${r.days.length}`],
   ]);
+  }
+  if (show('nutriDet')) {
+    const ms = (state.meals || []).filter((m) => inP(m.date)).sort((a, b) => (a.date + a.time < b.date + b.time ? -1 : 1));
+    if (ms.length) {
+      section('Refeições por dia');
+      const KIND: Record<string, string> = { cafe: 'Café', almoco: 'Almoço', lanche: 'Lanche', jantar: 'Jantar', treino: 'Treino', outro: 'Outro' };
+      let day = '';
+      ms.forEach((m) => {
+        if (m.date !== day) {
+          day = m.date; pdf.ensure(34); pdf.y -= 4;
+          const w = state.water[m.date];
+          pdf.text(`${fmtDayMonth(m.date)}${w ? ` · água ${nf(w / 1000, 1)} L` : ''}`, M, pdf.y - 11, 10.5, INK, true); pdf.y -= 17;
+        }
+        pdf.ensure(15);
+        pdf.text(`${m.time}  ${KIND[m.kind] ?? m.kind}`, M + 8, pdf.y - 10, 9.5, MUTED);
+        pdf.text(clip(`${m.description || '—'}${m.note ? ` (${m.note})` : ''}`, W - 110, 9.5), M + 100, pdf.y - 10, 9.5, INK);
+        pdf.y -= 14;
+      });
+      pdf.y -= 8;
+    }
+  }
+  if (show('habitos')) {
   section('Hábitos');
   kv([
     ['Conclusão dos hábitos', `${r.habitPct}%`],
@@ -147,6 +248,8 @@ export function reportPdf(state: AppState, nDays: number, name: string) {
     });
     pdf.y -= 8;
   }
+  }
+  if (show('sono')) {
   section('Sono');
   kv([
     ['Noites registradas', `${r.sleepNights}`],
@@ -154,13 +257,34 @@ export function reportPdf(state: AppState, nDays: number, name: string) {
     ['Noites na meta', r.sleepNights ? `${r.sleepNightsMet} de ${r.sleepNights}` : '—'],
     ['Qualidade média', r.sleepNights ? `${nf(r.sleepQuality, 1)} de 5` : '—'],
   ]);
+  }
+  if (show('sonoDet')) {
+    const sl = state.sleep.filter((x) => inP(x.date)).sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 31);
+    if (sl.length) {
+      section('Noites');
+      table([{ w: 0.15 }, { w: 0.13, r: true }, { w: 0.13, r: true }, { w: 0.12, r: true }, { w: 0.12, r: true }, { w: 0.35 }], ['Data', 'Dormiu', 'Acordou', 'Horas', 'Qualid.', 'Observações'],
+        sl.map((x) => [fmtDayMonth(x.date), x.bedtime ?? '—', x.wake ?? '—', nf(x.hours, 1), x.quality ? `${x.quality}/5` : '—', [...(x.tags || []), x.note].filter(Boolean).join(', ')]));
+    }
+  }
+  if (show('peso')) {
   section('Peso');
   kv([
     ['Início do período', r.weightStart != null ? `${nf(r.weightStart, 1)} kg` : '—'],
     ['Fim do período', r.weightEnd != null ? `${nf(r.weightEnd, 1)} kg` : '—'],
     ['Variação', r.weightStart != null && r.weightEnd != null ? `${r.weightEnd - r.weightStart > 0 ? '+' : ''}${nf(r.weightEnd - r.weightStart, 1)} kg` : '—'],
   ]);
-  const notes = state.notes.filter((n) => n.date >= from).sort((a, b) => (a.date < b.date ? 1 : -1));
+  }
+  if (show('pesoDet')) {
+    const bs = state.body.filter((b) => inP(b.date) && (b.weight != null || b.waist != null)).sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 40);
+    if (bs.length) {
+      section('Pesagens e medidas');
+      table([{ w: 0.2 }, { w: 0.2, r: true }, { w: 0.2, r: true }, { w: 0.2, r: true }, { w: 0.2, r: true }], ['Data', 'Peso', '% gordura', 'Cintura', 'Quadril'],
+        bs.map((b) => [fmtDayMonth(b.date), b.weight != null ? `${nf(b.weight, 1)} kg` : '—', b.bodyFat != null ? `${nf(b.bodyFat, 1)}%` : '—', b.waist != null ? `${nf(b.waist, 1)} cm` : '—', b.hip != null ? `${nf(b.hip, 1)} cm` : '—']));
+    }
+  }
+  // diário: o médico vê sintomas e exames; o nutricionista, as notas de dieta
+  const kinds = audience === 'medico' ? ['Sintoma', 'Exame', 'Nota'] : audience === 'nutri' ? ['Dieta'] : null;
+  const notes = show('diario') ? state.notes.filter((n) => n.date >= from && (!kinds || kinds.includes(n.kind))).sort((a, b) => (a.date < b.date ? 1 : -1)) : [];
   if (notes.length) {
     section('Diário de saúde');
     notes.forEach((n) => {

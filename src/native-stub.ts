@@ -8,6 +8,7 @@ export const NotificationType = { Success: 'SUCCESS' } as const;
 export const LocalNotifications = {
   checkPermissions: async () => ({ display: 'denied' }), requestPermissions: async () => ({ display: 'denied' }),
   getPending: async () => ({ notifications: [] as { id: number }[] }), cancel: noop, schedule: noop,
+  registerActionTypes: noop, addListener: async () => ({ remove: () => {} }),
 };
 export const Directory = { Cache: 'CACHE' } as const;
 export const Filesystem = { writeFile: async () => ({ uri: '' }) };

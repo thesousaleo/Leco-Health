@@ -6,12 +6,12 @@ import {
 } from 'react-icons/lu';
 import { deletePhoto, savePhoto } from '../photos';
 import { PhotoViewer, Thumb } from './Nutrition';
-import { buildReport, reportPdf, weekRange } from '../report';
+import { AUDIENCES, buildReport, reportPdf, weekRange, type Audience } from '../report';
 import { shareFile } from '../native';
 import { useSync } from '../sync';
 import { useStore } from '../store';
 import type { NoteEntry, NoteKind, SleepLog } from '../types';
-import { addDays, fmtShort, lastNDays, nf, radarWeek, relDay, round1, todayKey, fmtWeekdayShort, weightTrend } from '../utils';
+import { addDays, fmtShort, lastNDays, modOn, nf, radarWeek, relDay, round1, todayKey, fmtWeekdayShort, weightTrend } from '../utils';
 import {
   Button, Card, Chip, cx, DeleteButton, Empty, Field, IconButton, Input, Modal, NumInput, PageHeader, Segmented, Select, Stars, Tag, TextArea,
 } from '../components/ui';
@@ -22,28 +22,31 @@ import { BadgeShelf } from '../components/Badges';
 type View = 'peso' | 'sono' | 'diario' | 'resumo';
 
 export default function Metrics() {
+  const { state } = useStore();
+  const mP = modOn(state, 'peso'), mS = modOn(state, 'sono');
   const [view, setView] = useState<View>(() => {
     try { const v = localStorage.getItem('leco-health:metrics-view') as View | null; if (v) { localStorage.removeItem('leco-health:metrics-view'); return v; } } catch { /* */ }
-    return 'peso';
+    return mP ? 'peso' : mS ? 'sono' : 'diario';
   });
+  const shown: View = (view === 'peso' && !mP) || (view === 'sono' && !mS) ? 'diario' : view;
   // ações rápidas do botão ＋
   const [focus, setFocus] = useState<{ i: Intent; k: number } | null>(null);
-  useIntent('registros', (i) => { setView(i === 'weight' ? 'peso' : i === 'sleep' ? 'sono' : 'diario'); setFocus({ i, k: Date.now() }); });
+  useIntent('registros', (i) => { setView(i === 'weight' ? 'peso' : i === 'sleep' ? 'sono' : i === 'resumo' ? 'resumo' : 'diario'); setFocus({ i, k: Date.now() }); });
   return (
     <div>
-      <PageHeader title="Registros" sub="Peso, sono e diário de saúde" />
+      <PageHeader title="Registros" sub={[mP && 'Peso', mS && 'sono', 'diário de saúde'].filter(Boolean).join(', ').replace(/^./, (c) => c.toUpperCase())} />
       <div className="mb-4">
-        <Segmented value={view} onChange={setView} options={[
-          { value: 'peso', label: <><LuScale size={15} /> Peso</> },
-          { value: 'sono', label: <><LuMoon size={15} /> Sono</> },
+        <Segmented value={shown} onChange={setView} options={[
+          ...(mP ? [{ value: 'peso' as View, label: <><LuScale size={15} /> Peso</> }] : []),
+          ...(mS ? [{ value: 'sono' as View, label: <><LuMoon size={15} /> Sono</> }] : []),
           { value: 'diario', label: <><LuNotebookPen size={15} /> Diário</> },
           { value: 'resumo', label: <><LuChartColumn size={15} /> Resumo</> },
         ]} />
       </div>
-      {view === 'peso' && <Weight focusKey={focus?.i === 'weight' ? focus.k : 0} />}
-      {view === 'sono' && <Sleep />}
-      {view === 'diario' && <Journal newKey={focus?.i === 'note' ? focus.k : 0} />}
-      {view === 'resumo' && <ReportView />}
+      {shown === 'peso' && <Weight focusKey={focus?.i === 'weight' ? focus.k : 0} />}
+      {shown === 'sono' && <Sleep />}
+      {shown === 'diario' && <Journal newKey={focus?.i === 'note' ? focus.k : 0} />}
+      {shown === 'resumo' && <ReportView />}
     </div>
   );
 }
@@ -578,6 +581,7 @@ function ReportView() {
   const r = buildReport(state, from, to > today ? today : to);
   const p = buildReport(state, addDays(from, -7), addDays(from, -1));
   const [pdfDays, setPdfDays] = useState<7 | 30 | 90>(30);
+  const [aud, setAud] = useState<Audience>('completo');
   const [busy, setBusy] = useState(false);
   const [stories, setStories] = useState(false);
   const cmp = (a: number, b: number, unit = '') => {
@@ -633,7 +637,16 @@ function ReportView() {
       <Card className="p-5 md:p-6"><BadgeShelf state={state} /></Card>
       <Card className="p-5 md:p-6">
         <p className="text-[16px] font-semibold text-ink flex items-center gap-2"><LuFileDown size={17} /> Relatório em PDF</p>
-        <p className="text-[13px] text-muted mt-1 mb-4">Para mostrar ao nutricionista, médico ou personal. Inclui score, treinos, refeições, água, hábitos, sono, peso e diário.</p>
+        <p className="text-[13px] text-muted mt-1 mb-3">Escolha para quem é: cada profissional recebe só o que importa para ele.</p>
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          {AUDIENCES.map((a) => (
+            <button key={a.id} onClick={() => setAud(a.id)} aria-pressed={aud === a.id}
+              className={cx('press rounded-2xl px-3.5 py-2.5 text-left', aud === a.id ? 'bg-ink text-on-ink' : 'bg-cream text-ink')}>
+              <span className="block text-[14px] font-medium">{a.label}</span>
+            </button>
+          ))}
+        </div>
+        <p className="text-[12.5px] text-muted mb-4 min-h-[2.4em]">{AUDIENCES.find((a) => a.id === aud)?.sub}</p>
         <div className="flex gap-1 p-1 rounded-full bg-cream mb-4">
           {([7, 30, 90] as const).map((d) => (
             <button key={d} onClick={() => setPdfDays(d)} className={cx('press flex-1 h-9 rounded-full text-[13.5px] font-medium', pdfDays === d ? 'bg-ink text-on-ink' : 'text-ink/60')}>{d} dias</button>
@@ -642,8 +655,8 @@ function ReportView() {
         <Button variant="primary" className="w-full" disabled={busy} onClick={async () => {
           setBusy(true);
           try {
-            const b64 = reportPdf(state, pdfDays, sync.profile?.display_name || state.profile.name || '');
-            await shareFile(`leco-health-relatorio-${pdfDays}d-${today}.pdf`, b64, 'application/pdf', 'Relatório Leco Health');
+            const b64 = reportPdf(state, pdfDays, sync.profile?.display_name || state.profile.name || '', aud);
+            await shareFile(`leco-health-${aud === 'completo' ? 'relatorio' : aud}-${pdfDays}d-${today}.pdf`, b64, 'application/pdf', 'Relatório Leco Health');
           } catch { toast('Não foi possível gerar o PDF'); } finally { setBusy(false); }
         }}><LuFileDown size={16} /> {busy ? 'Gerando…' : 'Gerar e compartilhar'}</Button>
       </Card>

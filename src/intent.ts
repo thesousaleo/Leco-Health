@@ -2,7 +2,10 @@
 import { useEffect } from 'react';
 import type { TabId } from './types';
 
-export type Intent = 'meal' | 'weight' | 'sleep' | 'note';
+export type Intent = 'meal' | 'weight' | 'sleep' | 'note'
+  | 'sessao' | 'cardio' | 'fichas' | 'historico' // Treino
+  | 'diario' | 'resumo' // Registros
+  | `ajustes:${string}`; // aba dos Ajustes
 let pending: { tab: TabId; intent: Intent } | null = null;
 
 export function setIntent(tab: TabId, intent: Intent) {

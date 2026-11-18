@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { LuApple, LuDroplet, LuDumbbell, LuMoon } from 'react-icons/lu';
 import { useStore } from '../store';
-import { dueHabits, isHabitDone, mealsOn, nf, todayKey } from '../utils';
+import { dueHabits, isHabitDone, mealsOn, modOn, nf, todayKey } from '../utils';
 import { Card } from './ui';
 import { Thumb } from '../pages/Nutrition';
 
@@ -15,15 +15,16 @@ export function DayStrip() {
   const [now, setNow] = useState(() => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); });
   useEffect(() => { const t = setInterval(() => { const d = new Date(); setNow(d.getHours() * 60 + d.getMinutes()); }, 60000); return () => clearInterval(t); }, []);
 
-  const sl = state.sleep.find((x) => x.date === today);
+  const mS = modOn(state, 'sono'), mT = modOn(state, 'treino'), mN = modOn(state, 'nutricao'), mA = modOn(state, 'agua');
+  const sl = mS ? state.sleep.find((x) => x.date === today) : undefined;
   const bed = toMin(sl?.bedtime), wake = toMin(sl?.wake);
   // noite: da hora de dormir (se foi depois da meia-noite) até acordar
   const sleepSeg = sl && wake != null ? { a: bed != null && bed < wake ? bed : 0, b: wake } : null;
-  const sess = state.sessions.find((s) => s.date === today);
+  const sess = mT ? state.sessions.find((s) => s.date === today) : undefined;
   const minOf = (t: number) => { const d = new Date(t); return d.getHours() * 60 + d.getMinutes(); };
   const workSeg = sess ? { a: minOf(sess.startedAt), b: sess.finishedAt ? minOf(sess.finishedAt) : now } : null;
-  const meals = mealsOn(state, today).map((m) => ({ m, t: toMin(m.time) ?? 0 })).sort((a, b) => a.t - b.t);
-  const water = (state.waterLog || []).filter((w) => w.date === today).map((w) => toMin(w.time)).filter((t): t is number => t != null);
+  const meals = (mN ? mealsOn(state, today) : []).map((m) => ({ m, t: toMin(m.time) ?? 0 })).sort((a, b) => a.t - b.t);
+  const water = (mA ? state.waterLog || [] : []).filter((w) => w.date === today).map((w) => toMin(w.time)).filter((t): t is number => t != null);
   const due = dueHabits(state, today);
   const hDone = due.filter((h) => isHabitDone(state, h.id, today)).length;
 
@@ -69,10 +70,10 @@ export function DayStrip() {
         ))}
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11.5px] text-muted">
-        <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full" style={{ background: 'var(--color-sleep)' }} /> sono</span>
-        <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-orange" /> treino</span>
-        <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full ring-2 ring-[color:var(--color-good)]" /> refeições</span>
-        <span className="flex items-center gap-1.5"><LuDroplet size={11} style={{ color: 'var(--color-sleep)' }} /> água</span>
+        {mS && <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full" style={{ background: 'var(--color-sleep)' }} /> sono</span>}
+        {mT && <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-orange" /> treino</span>}
+        {mN && <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full ring-2 ring-[color:var(--color-good)]" /> refeições</span>}
+        {mA && <span className="flex items-center gap-1.5"><LuDroplet size={11} style={{ color: 'var(--color-sleep)' }} /> água</span>}
         <span className="flex items-center gap-1.5"><span className="w-[2px] h-3 bg-ink rounded-full" /> agora</span>
       </div>
     </Card>

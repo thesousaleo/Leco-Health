@@ -1,4 +1,4 @@
-import type { AppState, DateKey, FoodEntry, Habit, ID, MealType, WorkoutSession } from './types';
+import type { AppState, DateKey, FoodEntry, Habit, HabitAuto, ID, MealType, ModuleId, PausePeriod, WorkoutSession } from './types';
 import { oneRM } from './exercises';
 
 /* ── ids ───────────────────────────────────────────────────── */
@@ -120,9 +120,63 @@ export const lastPerformance = (state: AppState, exerciseId: ID, before: DateKey
   return null;
 };
 
+/* ── módulos (Central de módulos) ──────────────────────────── */
+export const modOn = (state: AppState, m: ModuleId) => state.prefs?.modules?.[m] !== false;
+
+/* ── Modo Pausa ────────────────────────────────────────────── */
+export const pauseOn = (state: AppState, day: DateKey = todayKey()) =>
+  (state.pauses || []).find((p) => day >= p.from && (!p.to || day <= p.to));
+export const isPaused = (state: AppState, day: DateKey) => !!pauseOn(state, day);
+export const PAUSE_LABEL: Record<PausePeriod['reason'], string> = { doente: 'Doente', viagem: 'Viagem', descanso: 'Descanso' };
+
 /* ── hábitos ───────────────────────────────────────────────── */
-export const isHabitDone = (state: AppState, habitId: ID, day: DateKey) =>
-  (state.habitLogs[day] || []).includes(habitId);
+const habitIndex = new WeakMap<Habit[], Map<ID, Habit>>();
+export const habitById = (state: AppState, id: ID) => {
+  let m = habitIndex.get(state.habits);
+  if (!m) { m = new Map(state.habits.map((h) => [h.id, h])); habitIndex.set(state.habits, m); }
+  return m.get(id);
+};
+
+export const AUTO_LABEL: Record<HabitAuto, string> = {
+  treino: 'ao concluir um treino ou cardio',
+  agua: 'ao bater a meta de água',
+  sono: 'ao dormir a meta de sono',
+  refeicoes: 'ao registrar todas as refeições',
+};
+/** O hábito automático já foi cumprido pelos seus registros? */
+export const autoDone = (state: AppState, auto: HabitAuto, day: DateKey) => {
+  switch (auto) {
+    case 'treino': return state.sessions.some((s) => s.date === day && s.completed) || (state.cardio || []).some((c) => c.date === day);
+    case 'agua': return (state.water[day] || 0) >= (state.goals.water || 1);
+    case 'sono': { const x = state.sleep.find((l) => l.date === day); return !!x && x.hours >= (state.goals.sleep || 8); }
+    case 'refeicoes': return (state.meals || []).filter((m) => m.date === day).length >= (state.goals.meals || 4);
+  }
+  return false;
+};
+
+/** Nível alcançado num hábito com quantidade: mínimo, meta ou extra. */
+export const habitLevel = (h: Habit, count: number): 'extra' | 'meta' | 'min' | null => {
+  if (!h.target) return null;
+  if (h.extra && count >= h.extra) return 'extra';
+  if (count >= h.target) return 'meta';
+  if (h.min && count >= h.min) return 'min';
+  return null;
+};
+
+export const isHabitFailed = (state: AppState, habitId: ID, day: DateKey) => (state.habitFails?.[day] || []).includes(habitId);
+
+export const isHabitDone = (state: AppState, habitId: ID, day: DateKey): boolean => {
+  const h = habitById(state, habitId);
+  // evitar: conta como feito até você marcar que falhou (só de hoje para trás)
+  if (h?.avoid) return day <= todayKey() && (!h.createdAt || day >= h.createdAt) && !isHabitFailed(state, habitId, day);
+  if ((state.habitLogs[day] || []).includes(habitId)) return true;
+  if (h?.target && h.min) { const c = state.habitCounts?.[day]?.[habitId]; if (c != null && c >= h.min) return true; }
+  if (h?.auto && autoDone(state, h.auto, day)) return true;
+  return false;
+};
+/** Feito pelos registros (⚡), sem marcação manual. */
+export const isAutoDone = (state: AppState, h: Habit, day: DateKey) =>
+  !!h.auto && !(state.habitLogs[day] || []).includes(h.id) && autoDone(state, h.auto, day);
 
 export const habitCount = (state: AppState, habitId: ID, day: DateKey) => state.habitCounts?.[day]?.[habitId] ?? 0;
 
@@ -145,6 +199,7 @@ export const activeHabits = (state: AppState, day?: DateKey): Habit[] =>
 
 /** Hábitos que contam no score do dia: diários, os do dia da semana e os semanais feitos naquele dia. */
 export const dueHabits = (state: AppState, day: DateKey): Habit[] =>
+  !modOn(state, 'habitos') || isPaused(state, day) ? [] :
   activeHabits(state, day).filter((h) =>
     h.freq?.type === 'weekly' ? isHabitDone(state, h.id, day) : isHabitScheduled(h, day));
 
@@ -157,43 +212,63 @@ export const freqLabel = (h: Habit) => {
   return [...f.days].sort().map((d) => names[d]).join(', ');
 };
 
-/** Sequência: diários = dias seguidos; dias da semana = dias programados seguidos; semanais = semanas seguidas com a meta. */
-export const habitStreak = (state: AppState, habitId: ID, ref = todayKey()) => {
-  const h = state.habits.find((x) => x.id === habitId);
+/** Sequência: diários = dias seguidos; dias da semana = dias programados seguidos; semanais = semanas seguidas com a meta.
+    Dias em Modo Pausa não contam nem quebram. O escudo perdoa 1 falta por semana (nunca 2 seguidas). */
+export const habitStreakInfo = (state: AppState, habitId: ID, ref = todayKey()) => {
+  const h = habitById(state, habitId);
+  const shields: DateKey[] = [];
   if (h?.freq?.type === 'weekly') {
     const t = h.freq.times;
     let ws = weekStart(ref);
     let n = 0;
     if (weekDoneCount(state, habitId, addDays(ws, 6) > ref ? ref : addDays(ws, 6)) < t) ws = addDays(ws, -7);
-    while (n < 520 && weekDoneCount(state, habitId, addDays(ws, 6)) >= t) { n++; ws = addDays(ws, -7); }
-    return n;
+    while (n < 520 && (weekDoneCount(state, habitId, addDays(ws, 6)) >= t || isPaused(state, ws))) { n++; ws = addDays(ws, -7); }
+    return { n, shields };
   }
+  const shieldOn = state.prefs?.streakShield !== false;
+  const counts = (d: DateKey) => !h || (isHabitScheduled(h, d) && !isPaused(state, d));
+  const prevDay = (d: DateKey) => { let x = addDays(d, -1); for (let i = 0; i < 14 && !counts(x); i++) x = addDays(x, -1); return x; };
+  const started = (d: DateKey) => !h?.createdAt || d >= h.createdAt;
+  const usedWeeks = new Set<DateKey>();
   let d = isHabitDone(state, habitId, ref) ? ref : addDays(ref, -1);
   let n = 0, guard = 0;
   while (guard++ < 2000) {
-    if (h && !isHabitScheduled(h, d)) { d = addDays(d, -1); continue; }
-    if (!isHabitDone(state, habitId, d)) break;
+    if (!counts(d)) { d = addDays(d, -1); continue; }
+    if (!isHabitDone(state, habitId, d)) {
+      const p = prevDay(d);
+      const fresh = n > 0 || d === addDays(ref, -1); // falta no meio da sequência (ou ontem, com hoje ainda aberto)
+      if (shieldOn && fresh && started(d) && started(p) && !usedWeeks.has(weekStart(d)) && isHabitDone(state, habitId, p)) {
+        usedWeeks.add(weekStart(d)); shields.push(d); d = p; continue;
+      }
+      break;
+    }
     n++;
     d = addDays(d, -1);
   }
-  return n;
+  return { n, shields };
 };
+export const habitStreak = (state: AppState, habitId: ID, ref = todayKey()) => habitStreakInfo(state, habitId, ref).n;
 
-/** Sequência geral: dias seguidos com ≥ 80% dos hábitos do dia concluídos. */
+/** Sequência geral: dias seguidos com ≥ 80% dos hábitos do dia concluídos (com escudo e Modo Pausa). */
 export const overallStreak = (state: AppState, ref = todayKey()) => {
   if (!activeHabits(state).length) return 0;
   const ok = (d: DateKey) => {
     const hs = dueHabits(state, d).filter((h) => h.freq?.type !== 'weekly');
     return hs.length === 0 ? null : hs.filter((h) => isHabitDone(state, h.id, d)).length / hs.length >= 0.8;
   };
+  const shieldOn = state.prefs?.streakShield !== false;
+  const usedWeeks = new Set<DateKey>();
   let d = ok(ref) ? ref : addDays(ref, -1);
-  let n = 0, guard = 0;
+  let n = 0, guard = 0, empty = 0;
   while (guard++ < 999) {
     const r = ok(d);
-    if (r === false) break;
-    if (r === true) n++;
+    if (r === false) {
+      let p = addDays(d, -1); for (let i = 0; i < 14 && ok(p) === null; i++) p = addDays(p, -1);
+      if (shieldOn && (n > 0 || d === addDays(ref, -1)) && !usedWeeks.has(weekStart(d)) && ok(p) === true) { usedWeeks.add(weekStart(d)); d = p; continue; }
+      break;
+    }
+    if (r === true) { n++; empty = 0; } else if (++empty > 60) break;
     d = addDays(d, -1);
-    if (r === null && guard > 60) break;
   }
   return n;
 };
@@ -207,7 +282,8 @@ export const dayScore = (state: AppState, day: DateKey = todayKey()) => {
   if (start && day < start) return { total: 0, workout: 0, nutrition: 0, habits: 0, isRest: !splitId, hasWorkout: false, hasHabits: false, parts: 1 };
   const session = state.sessions.find((s) => s.date === day);
   const cardioToday = (state.cardio || []).some((c) => c.date === day);
-  const workout = cardioToday ? 1 : session ? sessionProgress(session) : splitId ? 0 : 1; // descanso = meta cumprida
+  const paused = isPaused(state, day);
+  const workout = cardioToday ? 1 : session ? sessionProgress(session) : splitId && !paused ? 0 : 1; // descanso (ou pausa) = meta cumprida
 
   // alimentação: refeições registradas no dia vs. meta
   const nutrition = clamp(mealsOn(state, day).length / (state.goals.meals || 4));
@@ -218,14 +294,14 @@ export const dayScore = (state: AppState, day: DateKey = todayKey()) => {
 
   // só entram no score as partes configuradas, com o peso escolhido pelo usuário
   const w = state.prefs?.scoreWeights ?? { treino: 1, refeicoes: 1, habitos: 1 };
-  const hasWorkout = state.splits.length > 0 || (state.cardio || []).length > 0;
+  const hasWorkout = modOn(state, 'treino') && (state.splits.length > 0 || (state.cardio || []).length > 0);
   const hasHabits = hs.length > 0;
-  const parts: [number, number][] = [[nutrition, w.refeicoes]];
+  const parts: [number, number][] = modOn(state, 'nutricao') ? [[nutrition, w.refeicoes]] : [];
   if (hasWorkout) parts.push([workout, w.treino]);
   if (hasHabits) parts.push([habits, w.habitos]);
   const wsum = parts.reduce((a, [, k]) => a + k, 0) || 1;
   const total = Math.round((parts.reduce((a, [v, k]) => a + v * k, 0) / wsum) * 100);
-  return { total, workout, nutrition, habits, isRest: !splitId, hasWorkout, hasHabits, parts: parts.filter(([, k]) => k > 0).length };
+  return { total, workout, nutrition, habits, isRest: !splitId || paused, hasWorkout, hasHabits, parts: parts.filter(([, k]) => k > 0).length, paused };
 };
 
 /* ── resumo público para amigos (cada categoria pode ser escondida por amigo) ── */

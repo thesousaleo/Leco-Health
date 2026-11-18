@@ -116,10 +116,28 @@ export interface Habit {
   createdAt: DateKey;
   archived?: boolean;
   freq?: HabitFreq; // padrão: todo dia
-  target?: number; // hábito com quantidade (ex.: 20)
+  target?: number; // hábito com quantidade (ex.: 20) — com cronômetro, em minutos
   unit?: string; // ex.: "páginas"
   reminder?: string; // 'HH:MM'
+  min?: number; // nível mínimo: já conta como feito e mantém a sequência
+  extra?: number; // nível extra (acima da meta)
+  timer?: boolean; // quantidade em minutos, marcada com cronômetro
+  avoid?: boolean; // hábito de evitar: feito por padrão, você marca quando falhar
+  auto?: HabitAuto; // marca sozinho a partir dos seus registros
 }
+
+export type HabitAuto = 'treino' | 'agua' | 'sono' | 'refeicoes';
+
+/** Modo Pausa: dias em que sequências e score de hábitos ficam protegidos. */
+export interface PausePeriod {
+  id: ID;
+  from: DateKey;
+  to?: DateKey; // inclusivo; sem fim = até você retomar
+  reason: 'doente' | 'viagem' | 'descanso';
+}
+
+/** Partes do app que podem ser desligadas na Central de módulos. */
+export type ModuleId = 'treino' | 'nutricao' | 'habitos' | 'agua' | 'sono' | 'peso' | 'amigos';
 
 /* ── Registros / Biometria ─────────────────────────────────── */
 export interface BodyLog {
@@ -176,6 +194,9 @@ export interface Prefs {
   onboarded: boolean;
   reminders: { water: { on: boolean; start: string; end: string; every: number } };
   height?: number; // cm (IMC)
+  modules?: Partial<Record<ModuleId, boolean>>; // false = desligado (o padrão é ligado)
+  discreet?: boolean; // esconde o peso no Início
+  streakShield?: boolean; // escudo semanal da sequência (padrão: ligado)
 }
 
 /* ── Estado raiz ───────────────────────────────────────────── */
@@ -196,6 +217,8 @@ export interface AppState {
   habits: Habit[];
   habitLogs: Record<DateKey, ID[]>;
   habitCounts: Record<DateKey, Record<ID, number>>;
+  habitFails?: Record<DateKey, ID[]>; // hábitos de evitar: dias em que você falhou
+  pauses?: PausePeriod[];
   body: BodyLog[];
   progressPhotos: { id: ID; date: DateKey; photoId: ID; weight?: number; note?: string }[];
   sleep: SleepLog[];

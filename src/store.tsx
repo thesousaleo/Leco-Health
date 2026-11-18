@@ -1,12 +1,12 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type {
-  AppState, BodyLog, MealLog, WaterSize, Prefs, HomeBlockId, CardioLog, DateKey, Exercise, FoodEntry, Goals, Habit, ID, NoteEntry, SetLog, SleepLog, Split, WorkoutSession,
+  AppState, BodyLog, MealLog, WaterSize, Prefs, HomeBlockId, CardioLog, DateKey, Exercise, FoodEntry, Goals, Habit, ID, NoteEntry, PausePeriod, SetLog, SleepLog, Split, WorkoutSession,
 } from './types';
 import { buildEmptyState, buildMockState } from './mock';
 import { DEFAULT_HOME, defaultPrefs } from './prefs';
 import { haptic } from './native';
 export { DEFAULT_HOME, defaultPrefs };
-import { lastPerformance, todayKey, uid } from './utils';
+import { addDays, lastPerformance, todayKey, uid } from './utils';
 
 /* ─────────────────────────────────────────────────────────────
    Camada de persistência (adapter). Hoje: localStorage.
@@ -63,6 +63,8 @@ export function normalizeState(s: AppState): AppState {
   if (!Array.isArray(s.progressPhotos)) s.progressPhotos = [];
   if (!Array.isArray(s.mealFavorites)) s.mealFavorites = [];
   if (!s.habitCounts || typeof s.habitCounts !== 'object') s.habitCounts = {};
+  if (!s.habitFails || typeof s.habitFails !== 'object') s.habitFails = {};
+  if (!Array.isArray(s.pauses)) s.pauses = [];
   if (!Array.isArray(s.waterSizes) || !s.waterSizes.length)
     s.waterSizes = [{ id: 'copo', label: 'Copo', ml: 250 }, { id: 'garrafa', label: 'Garrafa', ml: 500 }];
   return s;
@@ -213,10 +215,40 @@ function makeActions(mutate: (fn: (d: AppState) => void) => void, get: () => App
     toggleHabit: (id: ID, date: DateKey = todayKey()) => {
       if (get().prefs?.haptics) haptic('light');
       mutate((d) => {
+        const h = d.habits.find((x) => x.id === id);
+        if (h?.avoid) { // evitar: alterna "falhei"
+          const f = (d.habitFails ||= {});
+          const l = f[date] || [];
+          f[date] = l.includes(id) ? l.filter((x) => x !== id) : [...l, id];
+          return;
+        }
         const list = d.habitLogs[date] || [];
+        const on = list.includes(id) || (!!h?.target && !!h.min && (d.habitCounts[date]?.[id] ?? 0) >= h.min);
+        if (h?.target) { // quantidade: alterna entre zero e a meta
+          d.habitCounts[date] = { ...(d.habitCounts[date] || {}), [id]: on ? 0 : h.target };
+          d.habitLogs[date] = on ? list.filter((x) => x !== id) : [...list.filter((x) => x !== id), id];
+          return;
+        }
         d.habitLogs[date] = list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
       });
     },
+    /** Hábitos de "evitar": marca/desmarca que você falhou no dia. */
+    setHabitFailed: (id: ID, failed: boolean, date: DateKey = todayKey()) => mutate((d) => {
+      const f = (d.habitFails ||= {});
+      const l = (f[date] || []).filter((x) => x !== id);
+      f[date] = failed ? [...l, id] : l;
+    }),
+    pauseHabits: (reason: PausePeriod['reason'], from: DateKey, to?: DateKey) => mutate((d) => {
+      // só uma pausa por vez: as que cruzam o novo período terminam na véspera
+      d.pauses = (d.pauses || [])
+        .map((p) => (!p.to || p.to >= from ? { ...p, to: addDays(from, -1) } : p))
+        .filter((p) => !p.to || p.to >= p.from);
+      d.pauses.push({ id: uid(), reason, from, to });
+    }),
+    /** Retoma: a pausa termina ontem (ou some, se começou hoje). */
+    resumeHabits: (today: DateKey = todayKey()) => mutate((d) => {
+      d.pauses = (d.pauses || []).map((p) => (p.from <= today && (!p.to || p.to >= today) ? { ...p, to: addDays(today, -1) } : p)).filter((p) => !p.to || p.to >= p.from);
+    }),
     setHabitCount: (id: ID, n: number, date: DateKey = todayKey()) => {
       if (get().prefs?.haptics) haptic('light');
       mutate((d) => {
@@ -224,7 +256,7 @@ function makeActions(mutate: (fn: (d: AppState) => void) => void, get: () => App
         const v = Math.max(0, n);
         d.habitCounts[date] = { ...(d.habitCounts[date] || {}), [id]: v };
         const list = (d.habitLogs[date] || []).filter((x) => x !== id);
-        d.habitLogs[date] = h?.target && v >= h.target ? [...list, id] : list;
+        d.habitLogs[date] = h?.target && v >= (h.min || h.target) ? [...list, id] : list;
       });
     },
     moveHabit: (id: ID, dir: -1 | 1) =>

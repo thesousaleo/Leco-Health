@@ -1,3 +1,4 @@
+import { useIntent } from '../intent';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   LuBike, LuCalendarDays, LuCheck, LuChevronDown, LuChevronLeft, LuChevronRight, LuChevronUp, LuClipboardList, LuClock, LuDumbbell,
@@ -24,6 +25,7 @@ export default function Workout() {
   const today = todayKey();
   const scheduled = state.schedule[weekday(today)];
   const [view, setView] = useState<View>('sessao');
+  useIntent('treino', (i) => { if (i === 'sessao' || i === 'cardio' || i === 'fichas' || i === 'historico') { setView(i); setEditing(null); } });
   const [editing, setEditing] = useState<string | null>(null); // sessão antiga em edição
   const editingSession = state.sessions.find((s) => s.id === editing);
 

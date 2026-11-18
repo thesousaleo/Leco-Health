@@ -2,14 +2,15 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { haptic } from '../native';
 import {
   LuArchive, LuArchiveRestore, LuArrowDown, LuArrowUp, LuBell, LuBrain, LuCheck, LuChevronLeft, LuChevronRight, LuFlame, LuHeartPulse,
-  LuMinus, LuPencil, LuPill, LuPlus, LuSun,
+  LuMinus, LuCirclePause, LuX, LuPencil, LuPill, LuPlus, LuShield, LuSun, LuZap,
 } from 'react-icons/lu';
 import { useStore } from '../store';
-import type { Habit, HabitCategory, HabitFreq } from '../types';
+import type { Habit, HabitAuto, HabitCategory, HabitFreq } from '../types';
 import {
-  activeHabits, addDays, dueHabits, fmtWeekdayShort, freqLabel, fromKey, habitCount, habitStreak, isHabitDone, isHabitScheduled, lastNDays,
-  mealsOn, overallStreak, todayKey, toKey, weekDoneCount,
+  activeHabits, addDays, AUTO_LABEL, dueHabits, fmtWeekdayShort, freqLabel, fromKey, habitCount, habitStreak, habitStreakInfo, isHabitDone, isHabitScheduled, isPaused, lastNDays,
+  mealsOn, overallStreak, pauseOn, todayKey, toKey, weekDoneCount, weekStart,
 } from '../utils';
+import { habitState, HabitDot, LEVEL_COLOR, LEVEL_LABEL, PauseBanner, PauseModal, TimerButton } from '../components/HabitBits';
 import { Button, Card, cx, DeleteButton, Empty, Field, heatColor, HeatLegend, IconButton, Input, Modal, NumInput, PageHeader, ProgressBar, ProgressRing, Segmented } from '../components/ui';
 
 const CATS: { id: HabitCategory; icon: React.ReactNode }[] = [
@@ -75,6 +76,8 @@ export default function Habits() {
   const [modal, setModal] = useState<{ habit?: Habit } | null>(null);
   const [month, setMonth] = useState<Habit | null>(null);
   const [organize, setOrganize] = useState(false);
+  const [pause, setPause] = useState(false);
+  const paused = !!pauseOn(state);
   const dragMark = useDragMark(toast);
   const todayList = habits.filter((h) => isHabitScheduled(h, today));
   const due = dueHabits(state, today);
@@ -83,7 +86,14 @@ export default function Habits() {
 
   return (
     <div>
-      <PageHeader title="Hábitos" sub={habits.length ? `${done} de ${due.length || todayList.length} feitos hoje${streak > 1 ? ` · ${streak} dias seguidos` : ''}` : 'Pequenas ações todos os dias'} />
+      <PageHeader title="Hábitos" sub={habits.length ? (paused ? `Em pausa${streak > 1 ? ` · sequência de ${streak} dias guardada` : ''}` : `${done} de ${due.length || todayList.length} feitos hoje${streak > 1 ? ` · ${streak} dias seguidos` : ''}`) : 'Pequenas ações todos os dias'}
+        right={habits.length > 0 && !paused ? (
+          <button onClick={() => setPause(true)} className="press h-10 pl-3 pr-4 rounded-full glass flex items-center gap-1.5 text-[13.5px] font-medium text-ink/75 shrink-0">
+            <LuCirclePause size={16} /> Pausar
+          </button>
+        ) : undefined} />
+      <PauseBanner />
+      <PauseModal open={pause} onClose={() => setPause(false)} />
 
       {habits.length === 0 ? (
         <Card className="p-5">
@@ -154,13 +164,19 @@ export default function Habits() {
 function HabitRow({ h, organize, onEdit, onMonth, onUp, onDown }: {
   h: Habit; organize: boolean; onEdit: () => void; onMonth: () => void; onUp?: () => void; onDown?: () => void;
 }) {
-  const { state, actions } = useStore();
+  const { state, actions, toast } = useStore();
   const today = todayKey();
-  const on = isHabitDone(state, h.id, today);
-  const st = habitStreak(state, h.id);
-  const count = habitCount(state, h.id, today);
+  const hs = habitState(state, h, today);
+  const { on, count, failed, auto, level } = hs;
+  const info = habitStreakInfo(state, h.id);
+  const st = info.n;
+  const shieldWeek = info.shields.some((d) => d >= weekStart(today));
   const weekly = h.freq?.type === 'weekly';
-  const sub = h.target ? `${count} de ${h.target} ${h.unit ?? ''}` : weekly ? `${weekDoneCount(state, h.id, today)} de ${(h.freq as { times: number }).times} nesta semana` : freqLabel(h);
+  const unit = h.timer ? 'min' : h.unit ?? '';
+  const sub = h.avoid ? (failed ? 'falhou hoje · toque para desfazer' : 'mantido hoje')
+    : h.target ? `${count} de ${h.target} ${unit}${level ? ` · ${LEVEL_LABEL[level]} ✓` : h.min ? ` · mínimo ${h.min}` : ''}`
+    : weekly ? `${weekDoneCount(state, h.id, today)} de ${(h.freq as { times: number }).times} nesta semana`
+    : auto ? 'feito pelos seus registros' : h.auto ? `automático ${AUTO_LABEL[h.auto]}` : freqLabel(h);
   const cat = CAT_STYLE[h.category] ?? CAT_STYLE['Rotina'];
   // comemora 7, 30 e 100 dias seguidos
   const prevSt = useRef(st);
@@ -180,22 +196,31 @@ function HabitRow({ h, organize, onEdit, onMonth, onUp, onDown }: {
       </li>
     );
   }
+  const tap = () => {
+    if (auto) { toast('Feito pelos seus registros ⚡'); return; }
+    if (h.avoid) { if (!failed) toast(`Anotado: ${h.name} falhou hoje`); actions.toggleHabit(h.id); return; }
+    if (!on) setFx(Date.now());
+    if (h.target) actions.setHabitCount(h.id, count >= h.target ? 0 : h.target);
+    else actions.toggleHabit(h.id);
+  };
+  // arrastar só marca hábitos comuns (nem evitar, nem automáticos)
+  const draggable = !h.avoid && !auto;
+  const ringColor = level ? LEVEL_COLOR[level] : undefined;
   return (
     <li className="flex items-center gap-1.5">
-      <button onClick={() => { if (!on) setFx(Date.now()); h.target ? actions.setHabitCount(h.id, on ? 0 : h.target) : actions.toggleHabit(h.id); }} aria-pressed={on}
-        aria-label={on ? `Desmarcar ${h.name}` : `Marcar ${h.name}`} className="press shrink-0 grid place-items-center size-11"
-        data-hcheck={organize ? undefined : '1'} data-done={on ? '1' : '0'} style={organize ? undefined : { touchAction: 'none' }}>
-        {h.target && !on ? (
-          <ProgressRing value={count / h.target} size={30} stroke={3.5}>
-            <span className="text-[10px] font-semibold text-ink tabular-nums">{count}</span>
-          </ProgressRing>
-        ) : (
-          <span className="relative grid place-items-center">
-            {on && fx > 0 && <span key={fx} className="check-burst" aria-hidden />}
-            <span key={String(on) + fx} className={cx('relative grid place-items-center size-7 rounded-full border-2 transition-colors', on ? 'bg-orange border-orange text-white' : 'border-ink/20', on && fx > 0 && 'check-pop')}>
-              {on && <LuCheck size={16} strokeWidth={3} />}
-            </span>
+      <button onClick={tap} aria-pressed={h.avoid ? !failed : on}
+        aria-label={h.avoid ? (failed ? `Desfazer falha em ${h.name}` : `Marcar que falhei em ${h.name}`) : on ? `Desmarcar ${h.name}` : `Marcar ${h.name}`}
+        className="press shrink-0 grid place-items-center size-11"
+        data-hcheck={draggable ? '1' : undefined} data-done={on ? '1' : '0'} style={draggable ? { touchAction: 'none' } : undefined}>
+        {h.target && count < h.target ? (
+          <span className="relative">
+            <ProgressRing value={count / h.target} size={30} stroke={3.5} color={ringColor}>
+              <span className="text-[10px] font-semibold text-ink tabular-nums">{count}</span>
+            </ProgressRing>
+            {level === 'min' && <span className="absolute -right-1 -bottom-1 grid place-items-center size-[14px] rounded-full text-white" style={{ background: LEVEL_COLOR.min }}><LuCheck size={9} strokeWidth={3.4} /></span>}
           </span>
+        ) : (
+          <HabitDot h={h} st={hs} fx={fx > 0} />
         )}
       </button>
       {milestone && (
@@ -206,13 +231,17 @@ function HabitRow({ h, organize, onEdit, onMonth, onUp, onDown }: {
         </div>
       )}
       <button onClick={onMonth} className="flex-1 min-w-0 text-left py-2">
-        <span className={cx('block text-[15.5px] truncate', on ? 'text-muted line-through decoration-ink/25' : 'text-ink')}>{h.name}</span>
+        <span className={cx('block text-[15.5px] truncate', on && !h.avoid ? 'text-muted line-through decoration-ink/25' : failed ? 'text-[color:var(--color-bad)]' : 'text-ink')}>{h.name}</span>
         <span className="flex items-center gap-1.5 text-[12.5px] text-muted min-w-0">
           <span className="shrink-0 grid place-items-center size-[18px] rounded-md" style={{ background: `color-mix(in srgb, ${cat.color} 15%, transparent)`, color: cat.color }}><cat.Icon size={11} /></span>
+          {h.avoid && <span className="shrink-0 font-medium" style={{ color: 'var(--color-good)' }}>Evitar</span>}
+          {h.auto && <LuZap size={11} className="shrink-0" style={{ color: 'var(--color-warn)' }} />}
           <span className="truncate">{sub}</span>{h.reminder && <span className="shrink-0 flex items-center gap-1"><LuBell size={11} /> {h.reminder}</span>}
         </span>
       </button>
-      {h.target ? (
+      {h.timer ? (
+        <TimerButton h={h} />
+      ) : h.target ? (
         <div className="flex items-center gap-1 shrink-0">
           <button aria-label="Menos" onClick={() => actions.setHabitCount(h.id, count - 1)} disabled={count <= 0}
             className="press size-9 rounded-full bg-cream grid place-items-center text-ink disabled:opacity-30"><LuMinus size={15} /></button>
@@ -220,7 +249,9 @@ function HabitRow({ h, organize, onEdit, onMonth, onUp, onDown }: {
             className="press size-9 rounded-full bg-ink text-on-ink grid place-items-center"><LuPlus size={15} /></button>
         </div>
       ) : st > 1 ? (
-        <span className="flex items-center gap-0.5 text-[13px] text-orange font-medium tabular-nums shrink-0 pr-1"><LuFlame size={14} />{st}{weekly ? 'sem' : ''}</span>
+        <span className="flex items-center gap-0.5 text-[13px] text-orange font-medium tabular-nums shrink-0 pr-1" title={shieldWeek ? 'Escudo usado nesta semana' : undefined}>
+          {shieldWeek ? <LuShield size={13} style={{ color: 'var(--color-sleep)' }} /> : <LuFlame size={14} />}{st}{weekly ? 'sem' : ''}
+        </span>
       ) : null}
       <IconButton label={`Editar ${h.name}`} onClick={onEdit} className="shrink-0"><LuPencil size={15} /></IconButton>
     </li>
@@ -245,10 +276,14 @@ function WeekView({ onMonth }: { onMonth: (h: Habit) => void }) {
             {days.map((d) => {
               const on = isHabitDone(state, h.id, d);
               const sched = isHabitScheduled(h, d);
+              const failed = !!h.avoid && sched && d <= today && !on && d >= (h.createdAt || d);
+              const paused = isPaused(state, d);
               return (
                 <button key={d} onClick={() => actions.toggleHabit(h.id, d)} aria-label={`${h.name} em ${d}`} aria-pressed={on}
                   className="press mx-auto size-8 grid place-items-center">
-                  <span className={cx('block rounded-full transition-all', on ? 'size-4 md:size-5 bg-orange' : sched ? 'size-2.5 bg-ink/15' : 'size-2.5 border border-ink/15')} />
+                  {failed ? <span className="grid place-items-center size-4 md:size-5 rounded-full text-white" style={{ background: 'var(--color-bad)' }}><LuX size={10} strokeWidth={3.4} /></span>
+                    : <span className={cx('block rounded-full transition-all', on ? 'size-4 md:size-5' : paused ? 'size-2.5 hatch' : sched ? 'size-2.5 bg-ink/15' : 'size-2.5 border border-ink/15')}
+                      style={on ? { background: h.avoid ? 'var(--color-good)' : 'var(--color-orange)' } : undefined} />}
                 </button>
               );
             })}
@@ -472,8 +507,9 @@ const DAY_NAMES = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 function HabitModal({ open, habit, onClose, onSave, onArchive, onDelete }: {
   open: boolean; habit?: Habit; onClose: () => void; onSave: (v: Partial<Habit>) => void; onArchive?: () => void; onDelete?: () => void;
 }) {
-  const [f, setF] = useState<{ name: string; category: HabitCategory; freq: HabitFreq; qty: boolean; target: number; unit: string; reminder: string }>({
-    name: '', category: 'Saúde', freq: { type: 'daily' }, qty: false, target: 10, unit: '', reminder: '',
+  type Kind = 'check' | 'qty' | 'timer' | 'avoid';
+  const [f, setF] = useState<{ name: string; category: HabitCategory; freq: HabitFreq; kind: Kind; target: number; min: number; extra: number; unit: string; reminder: string; auto: HabitAuto | '' }>({
+    name: '', category: 'Saúde', freq: { type: 'daily' }, kind: 'check', target: 10, min: 0, extra: 0, unit: '', reminder: '', auto: '',
   });
   const key = open ? habit?.id ?? 'new' : '';
   const [last, setLast] = useState('');
@@ -481,16 +517,32 @@ function HabitModal({ open, habit, onClose, onSave, onArchive, onDelete }: {
     setLast(key);
     if (open) setF({
       name: habit?.name ?? '', category: habit?.category ?? 'Saúde', freq: habit?.freq ?? { type: 'daily' },
-      qty: !!habit?.target, target: habit?.target ?? 10, unit: habit?.unit ?? '', reminder: habit?.reminder ?? '',
+      kind: habit?.avoid ? 'avoid' : habit?.timer ? 'timer' : habit?.target ? 'qty' : 'check',
+      target: habit?.target ?? 10, min: habit?.min ?? 0, extra: habit?.extra ?? 0, unit: habit?.unit ?? '', reminder: habit?.reminder ?? '', auto: habit?.auto ?? '',
     });
   }
-  const suggestions = ['Tomar creatina', 'Ler', 'Tomar sol', 'Zero açúcar', 'Alongar', 'Ômega 3', 'Passos', 'Sem telas antes de dormir'];
+  const suggestions: { n: string; k?: Partial<typeof f> }[] = [
+    { n: 'Tomar creatina' }, { n: 'Ler', k: { kind: 'timer', target: 20, min: 5, extra: 45 } }, { n: 'Tomar sol' }, { n: 'Zero açúcar', k: { kind: 'avoid' } },
+    { n: 'Treinar', k: { auto: 'treino' } }, { n: 'Beber água', k: { auto: 'agua' } }, { n: 'Meditar', k: { kind: 'timer', target: 10, min: 3 } },
+    { n: 'Sem telas antes de dormir', k: { kind: 'avoid' } }, { n: 'Alongar' }, { n: 'Ômega 3' },
+  ];
   const ft = f.freq.type;
-  const valid = !!f.name.trim() && (f.freq.type !== 'days' || f.freq.days.length > 0) && (!f.qty || f.target > 0);
+  const qty = f.kind === 'qty' || f.kind === 'timer';
+  const levelsOk = !qty || ((!f.min || f.min < f.target) && (!f.extra || f.extra > f.target));
+  const valid = !!f.name.trim() && (f.freq.type !== 'days' || f.freq.days.length > 0) && (!qty || f.target > 0) && levelsOk;
   const save = () => onSave({
-    name: f.name.trim(), category: f.category, freq: f.freq,
-    target: f.qty ? f.target : undefined, unit: f.qty ? f.unit.trim() || undefined : undefined, reminder: f.reminder || undefined,
+    name: f.name.trim(), category: f.category, freq: f.kind === 'avoid' && f.freq.type === 'weekly' ? { type: 'daily' } : f.freq,
+    target: qty ? f.target : undefined, unit: f.kind === 'qty' ? f.unit.trim() || undefined : f.kind === 'timer' ? 'min' : undefined,
+    min: qty && f.min ? f.min : undefined, extra: qty && f.extra ? f.extra : undefined,
+    timer: f.kind === 'timer' || undefined, avoid: f.kind === 'avoid' || undefined,
+    auto: f.kind === 'check' && f.auto ? f.auto : undefined, reminder: f.reminder || undefined,
   });
+  const KINDS: { id: Kind; l: string; sub: string }[] = [
+    { id: 'check', l: 'Simples', sub: 'feito ou não feito' },
+    { id: 'qty', l: 'Quantidade', sub: 'ex.: 20 páginas' },
+    { id: 'timer', l: 'Tempo', sub: 'com cronômetro' },
+    { id: 'avoid', l: 'Evitar', sub: 'feito até você falhar' },
+  ];
   return (
     <Modal open={open} onClose={onClose} title={habit ? 'Editar hábito' : 'Novo hábito'}
       footer={<>
@@ -502,14 +554,14 @@ function HabitModal({ open, habit, onClose, onSave, onArchive, onDelete }: {
         <Field label="Nome do hábito"><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Ex: Ler" /></Field>
         {!habit && (
           <div className="flex flex-wrap gap-2 -mt-2">
-            {suggestions.map((s) => <button key={s} type="button" onClick={() => setF({ ...f, name: s })} className="press h-8 px-3 rounded-full bg-cream text-[13px] text-ink/70">{s}</button>)}
+            {suggestions.map((x) => <button key={x.n} type="button" onClick={() => setF({ ...f, kind: 'check', auto: '', min: 0, extra: 0, ...x.k, name: x.n })} className="press h-8 px-3 rounded-full bg-cream text-[13px] text-ink/70">{x.n}</button>)}
           </div>
         )}
 
         <div>
           <p className="text-[13px] text-muted mb-2">Frequência</p>
           <div className="flex gap-1 p-1 rounded-full bg-cream">
-            {([['daily', 'Todo dia'], ['days', 'Dias'], ['weekly', 'X/semana']] as const).map(([t, l]) => (
+            {([['daily', 'Todo dia'], ['days', 'Dias'], ['weekly', 'X/semana']] as const).filter(([t]) => f.kind !== 'avoid' || t !== 'weekly').map(([t, l]) => (
               <button key={t} type="button" onClick={() => setF({ ...f, freq: t === 'daily' ? { type: 'daily' } : t === 'days' ? { type: 'days', days: [1, 2, 3, 4, 5] } : { type: 'weekly', times: 3 } })}
                 className={cx('press flex-1 h-9 rounded-full text-[13px] font-medium', ft === t ? 'bg-ink text-on-ink' : 'text-ink/60')}>{l}</button>
             ))}
@@ -535,14 +587,41 @@ function HabitModal({ open, habit, onClose, onSave, onArchive, onDelete }: {
         </div>
 
         <div>
-          <button type="button" onClick={() => setF({ ...f, qty: !f.qty })} className="w-full flex items-center justify-between gap-3 rounded-2xl bg-cream px-4 py-3 text-left">
-            <span><span className="block text-[14.5px] text-ink">Hábito com quantidade</span><span className="block text-[12.5px] text-muted">Ex.: ler 20 páginas, 10 mil passos</span></span>
-            <span className={cx('relative w-12 h-7 rounded-full shrink-0 transition-colors', f.qty ? 'bg-orange' : 'bg-ink/20')}><span className={cx('absolute top-1 size-5 rounded-full bg-surface transition-all', f.qty ? 'left-6' : 'left-1')} /></span>
-          </button>
-          {f.qty && (
-            <div className="grid grid-cols-2 gap-2 mt-2">
-              <Field label="Meta por dia"><NumInput value={f.target} onChange={(v) => setF({ ...f, target: Math.max(1, Math.round(v)) })} /></Field>
-              <Field label="Unidade"><Input value={f.unit} onChange={(e) => setF({ ...f, unit: e.target.value })} placeholder="páginas, passos…" /></Field>
+          <p className="text-[13px] text-muted mb-2">Tipo</p>
+          <div className="grid grid-cols-2 gap-2">
+            {KINDS.map((k) => (
+              <button key={k.id} type="button" aria-pressed={f.kind === k.id}
+                onClick={() => setF({ ...f, kind: k.id, target: k.id === 'timer' && f.kind !== 'timer' ? 20 : f.target, freq: k.id === 'avoid' && f.freq.type === 'weekly' ? { type: 'daily' } : f.freq })}
+                className={cx('press rounded-2xl px-3.5 py-2.5 text-left', f.kind === k.id ? 'bg-ink text-on-ink' : 'bg-cream text-ink')}>
+                <span className="block text-[14.5px] font-medium">{k.l}</span>
+                <span className="block text-[12px] opacity-60">{k.sub}</span>
+              </button>
+            ))}
+          </div>
+          {qty && (
+            <div className="mt-3 rounded-2xl bg-cream p-3.5">
+              <div className="grid grid-cols-3 gap-2">
+                <Field label="Mínimo"><NumInput value={f.min} onChange={(v) => setF({ ...f, min: Math.max(0, Math.round(v)) })} /></Field>
+                <Field label={f.kind === 'timer' ? 'Meta (min)' : 'Meta'}><NumInput value={f.target} onChange={(v) => setF({ ...f, target: Math.max(1, Math.round(v)) })} /></Field>
+                <Field label="Extra"><NumInput value={f.extra} onChange={(v) => setF({ ...f, extra: Math.max(0, Math.round(v)) })} /></Field>
+              </div>
+              {f.kind === 'qty' && <Field label="Unidade" className="mt-2"><Input value={f.unit} onChange={(e) => setF({ ...f, unit: e.target.value })} placeholder="páginas, passos…" /></Field>}
+              <p className={cx('text-[12.5px] mt-2', levelsOk ? 'text-muted' : 'text-[color:var(--color-bad)]')}>
+                {levelsOk ? 'Mínimo e extra são opcionais (0 = sem). Bater o mínimo já mantém a sequência nos dias difíceis.' : 'O mínimo precisa ser menor que a meta, e o extra maior.'}
+              </p>
+            </div>
+          )}
+          {f.kind === 'avoid' && <p className="text-[12.5px] text-muted mt-2">Ex.: sem telas depois das 23h, zero açúcar. O dia conta como feito; toque no círculo só quando escapar.</p>}
+          {f.kind === 'check' && (
+            <div className="mt-3">
+              <p className="text-[13px] text-muted mb-2 flex items-center gap-1.5"><LuZap size={13} style={{ color: 'var(--color-warn)' }} /> Marcar sozinho</p>
+              <div className="flex flex-wrap gap-2">
+                {([['', 'Não'], ['treino', 'Ao treinar'], ['agua', 'Meta de água'], ['sono', 'Meta de sono'], ['refeicoes', 'Todas as refeições']] as const).map(([v, l]) => (
+                  <button key={v} type="button" aria-pressed={f.auto === v} onClick={() => setF({ ...f, auto: v })}
+                    className={cx('press h-9 px-3.5 rounded-full text-[13px] font-medium', f.auto === v ? 'bg-orange text-white' : 'bg-cream text-ink/70')}>{l}</button>
+                ))}
+              </div>
+              {f.auto && <p className="text-[12.5px] text-muted mt-2">Fica marcado {AUTO_LABEL[f.auto]}. Você ainda pode marcar à mão.</p>}
             </div>
           )}
         </div>

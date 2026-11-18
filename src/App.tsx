@@ -1,18 +1,18 @@
 import React, { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useRipple, staggerIn } from './motion';
-import { LuActivity, LuApple, LuCamera, LuCircleX, LuCircleCheck, LuDroplet, LuDumbbell, LuHouse, LuListChecks, LuMoon, LuNotebookPen, LuPlus, LuScale, LuSettings, LuTrophy, LuUsers, LuCloudUpload, LuSparkles } from 'react-icons/lu';
+import { LuActivity, LuApple, LuCamera, LuCircleX, LuCircleCheck, LuDroplet, LuDumbbell, LuHouse, LuListChecks, LuMoon, LuNotebookPen, LuPlus, LuScale, LuSearch, LuSettings, LuTrophy, LuUsers, LuCloudUpload, LuSparkles } from 'react-icons/lu';
 import { setIntent } from './intent';
 import { SyncProvider, useSync } from './sync';
 import AuthForm from './components/AuthForm';
 import Friends from './pages/Friends';
 import { StoreProvider, useStore } from './store';
-import type { TabId } from './types';
-import { dayScore } from './utils';
+import type { ModuleId, TabId } from './types';
+import { dayScore, habitCount, isHabitDone, modOn, todayKey } from './utils';
 import { RestTimerProvider } from './components/RestTimer';
 import { Button, cx, Modal, ProgressBar } from './components/ui';
 import { Celebration, SetupWizard } from './components/Extras';
 import { LockGate } from './components/Lock';
-import { leaveApp, onBackButton, setSystemBars, syncReminders } from './native';
+import { leaveApp, onBackButton, onNotificationAction, setSystemBars, snoozeNotification, syncReminders, takeShortcutAction } from './native';
 import { popBack } from './back';
 import Dashboard from './pages/Dashboard';
 import Workout from './pages/Workout';
@@ -21,6 +21,7 @@ import Habits from './pages/Habits';
 import Metrics from './pages/Metrics';
 import Settings from './pages/Settings';
 import { computeBadges } from './components/Badges';
+import { SearchSheet } from './components/Search';
 
 type Ico = React.ComponentType<{ size?: number; fill?: string; fillOpacity?: number; strokeWidth?: number }>;
 const TABS: { id: TabId; label: string; icon: Ico }[] = [
@@ -33,6 +34,8 @@ const TABS: { id: TabId; label: string; icon: Ico }[] = [
 ];
 export const TAB_INFO = TABS;
 const ALL: TabId[] = ['inicio', 'treino', 'nutricao', 'habitos', 'registros', 'amigos', 'ajustes'];
+/** Abas que somem quando o módulo é desligado. */
+export const TAB_MODULE: Partial<Record<TabId, ModuleId>> = { treino: 'treino', nutricao: 'nutricao', habitos: 'habitos', amigos: 'amigos' };
 
 /** Aplica tema, cor de destaque e tamanho do texto. */
 /** Horário típico de dormir (média dos últimos registros), em minutos desde 0h. */
@@ -81,7 +84,8 @@ function useAppearance() {
 /** Reagenda lembretes quando hábitos/preferências mudam (só no app Android). */
 function useReminders() {
   const { state } = useStore();
-  const key = JSON.stringify([state.prefs.reminders, state.habits.map((h) => [h.id, h.name, h.reminder, h.freq, h.archived])]);
+  const key = JSON.stringify([state.prefs.reminders, state.prefs.modules, state.pauses, state.waterSizes?.[0], new Date().toDateString(),
+    state.habits.map((h) => [h.id, h.name, h.reminder, h.freq, h.archived, h.avoid])]);
   useEffect(() => {
     const t = setTimeout(() => syncReminders(state), 800);
     return () => clearTimeout(t);
@@ -123,21 +127,28 @@ function Logo() {
   return (
     <div className="flex items-center gap-2.5">
       <LogoMark className="size-9 shrink-0" />
-      <p className="font-semibold text-ink tracking-[-0.02em] text-[17px]">Leco Health</p>
+      <p className="font-semibold text-ink tracking-[-0.02em] text-[16px] min-[360px]:text-[17px] whitespace-nowrap">Leco Health</p>
     </div>
   );
 }
 
 function Shell() {
-  const { state, toastMsg } = useStore();
+  const { state, toastMsg, actions, toast } = useStore();
   const [tab, setTab] = useState<TabId>(readHash);       // página exibida
   const [navTab, setNavTab] = useState<TabId>(tab);       // aba destacada: muda no instante do toque
   const tabRef = useRef(tab); tabRef.current = tab;
   const dirRef = useRef<'r' | 'l'>('r');
   const score = dayScore(state).total;
-  const navIds = (state.prefs.navTabs || []).filter((id) => TABS.some((t) => t.id === id)).slice(0, 5);
+  const tabOn = (id: TabId) => !(id in TAB_MODULE) || modOn(state, TAB_MODULE[id]!);
+  const navIds = (state.prefs.navTabs || []).filter((id) => TABS.some((t) => t.id === id) && tabOn(id)).slice(0, 5);
   const mobileTabs = [TABS[0], ...navIds.map((id) => TABS.find((t) => t.id === id)!)];
-  const sideTabs = [TABS[0], ...navIds.map((id) => TABS.find((t) => t.id === id)!), ...TABS.slice(1).filter((t) => !navIds.includes(t.id))];
+  const sideTabs = [TABS[0], ...navIds.map((id) => TABS.find((t) => t.id === id)!), ...TABS.slice(1).filter((t) => !navIds.includes(t.id) && tabOn(t.id))];
+  // aba de um módulo desligado: volta ao Início
+  useEffect(() => {
+    if (tabOn(tab)) return;
+    setNavTab('inicio'); setTab('inicio');
+    try { history.replaceState(null, '', '#inicio'); } catch { /* */ }
+  });
 
   useEffect(() => {
     const on = () => { const t = readHash(); setNavTab(t); setTab(t); };
@@ -146,6 +157,17 @@ function Shell() {
   }, []);
 
   useRipple();
+  const [search, setSearch] = useState(false);
+  // "/" ou Ctrl+K abre a busca (teclado físico)
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (e.key === '/' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k')) { e.preventDefault(); setSearch(true); }
+    };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, []);
   const go = useCallback((t: TabId) => {
     if (t === tabRef.current) { window.scrollTo({ top: 0, behavior: 'smooth' }); setNavTab(t); return; }
     dirRef.current = ALL.indexOf(t) >= ALL.indexOf(tabRef.current) ? 'r' : 'l';
@@ -154,6 +176,49 @@ function Shell() {
     startTransition(() => setTab(t));
     try { if (window.location.hash !== '#' + t) history.replaceState(null, '', '#' + t); } catch { /* frame */ }
   }, []);
+  // Atalhos do ícone do app e botões das notificações
+  const stRef = useRef(state); stRef.current = state;
+  useEffect(() => {
+    const today = () => todayKey();
+    const cupOf = () => stRef.current.waterSizes?.[0];
+    const shortcut = (a: string) => {
+      const s = stRef.current;
+      if (a === 'agua') { const c = cupOf(); actions.addWater(c?.ml ?? 250, undefined, c?.label); toast(`+${c?.ml ?? 250} ml de água`); go('inicio'); }
+      else if (a === 'refeicao') { go('nutricao'); setIntent('nutricao', 'meal'); }
+      else if (a === 'peso') { go('registros'); setIntent('registros', 'weight'); }
+      else if (a === 'busca') setSearch(true);
+      else if (a === 'treino') {
+        const sp = s.splits.find((x) => x.id === s.schedule[new Date().getDay()]);
+        if (sp && !s.sessions.some((x) => x.date === today())) { actions.startSession(sp.id); toast(`Treino ${sp.letter} iniciado`); }
+        go('treino'); setIntent('treino', 'sessao');
+      }
+    };
+    (window as any).__lecoAction = () => { const a = takeShortcutAction(); if (a) shortcut(a); };
+    const t = setTimeout(() => (window as any).__lecoAction(), 500);
+    const un = onNotificationAction((n) => {
+      const s = stRef.current;
+      if (n.extra.kind === 'water') {
+        if (n.action === 'add') { const c = cupOf(); actions.addWater(c?.ml ?? 250, undefined, c?.label); toast(`+${c?.ml ?? 250} ml de água`); }
+        else if (n.action === 'snooze') { void snoozeNotification(n, 30); toast('Lembrete adiado por 30 min'); }
+        else go('inicio');
+        return;
+      }
+      if (n.extra.kind === 'habit') {
+        const h = s.habits.find((x) => x.id === n.extra.habitId);
+        if (!h) return;
+        if (n.action === 'done') {
+          if (h.target) actions.setHabitCount(h.id, Math.max(habitCount(s, h.id, today()), h.target));
+          else if (!isHabitDone(s, h.id, today())) actions.toggleHabit(h.id);
+          toast(`${h.name}: feito ✓`);
+        } else if (n.action === 'failed') { actions.setHabitFailed(h.id, true); toast(`Anotado: ${h.name} falhou hoje`); }
+        else if (n.action === 'kept') { actions.setHabitFailed(h.id, false); toast(`${h.name}: mantido ✓`); }
+        else if (n.action === 'snooze') { void snoozeNotification(n, 60); toast('Lembrete adiado por 1 h'); }
+        else go('habitos');
+      }
+    });
+    return () => { clearTimeout(t); un(); };
+  }, [go, actions, toast]);
+
   // Botão "voltar" do Android: fecha a janela aberta; senão volta ao Início; no Início, sai para a tela do celular
   const navRef = useRef(navTab); navRef.current = navTab;
   useEffect(() => onBackButton(() => {
@@ -213,7 +278,10 @@ function Shell() {
 
       {/* Sidebar desktop */}
       <aside className="hidden md:flex fixed top-4 bottom-4 left-4 w-56 flex-col rounded-[28px] nav-glass px-3 py-6 z-40">
-        <div className="px-3 mb-8"><Logo /></div>
+        <div className="px-3 mb-6"><Logo /></div>
+        <button onClick={() => setSearch(true)} className="press mx-1 mb-4 h-10 px-3 rounded-full bg-cream flex items-center gap-2 text-[14px] text-ink/55">
+          <LuSearch size={16} /> Buscar <kbd className="ml-auto text-[11px] px-1.5 rounded-md border border-line text-ink/45">/</kbd>
+        </button>
         <nav className="flex flex-col gap-1">{sideTabs.map((t) => navBtn(t.id, t.label, t.icon))}</nav>
         <div className="mt-auto space-y-3">
           <div className="rounded-[20px] bg-cream p-4">
@@ -230,10 +298,13 @@ function Shell() {
       {/* Top bar mobile */}
       <header className="gpu md:hidden sticky top-0 z-40 flex items-center justify-between px-4 pt-[var(--sat)] h-[calc(4rem+var(--sat))] bg-canvas/75 backdrop-blur-xl backdrop-saturate-150">
         <Logo />
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 min-[360px]:gap-2">
+          <button onClick={() => setSearch(true)} aria-label="Buscar" className="press grid place-items-center size-9 min-[360px]:size-10 rounded-full text-ink bg-surface">
+            <LuSearch size={18} />
+          </button>
           <span className="text-[13px] font-semibold tabular-nums text-white px-3 h-8 rounded-full bg-orange grid place-items-center">{score}%</span>
           <button onClick={() => go('ajustes')} aria-label="Ajustes"
-            className={cx('press grid place-items-center size-10 rounded-full', navTab === 'ajustes' ? 'text-on-ink bg-ink' : 'text-ink bg-surface')}>
+            className={cx('press grid place-items-center size-9 min-[360px]:size-10 rounded-full', navTab === 'ajustes' ? 'text-on-ink bg-ink' : 'text-ink bg-surface')}>
             <LuSettings size={18} />
           </button>
         </div>
@@ -292,6 +363,7 @@ function Shell() {
           </div>
         );
       })()}
+      <SearchSheet open={search} onClose={() => setSearch(false)} go={go} />
       <Splash />
     </RestTimerProvider>
   );
@@ -358,14 +430,14 @@ function QuickAdd({ tab, go }: { tab: TabId; go: (t: TabId) => void }) {
   if (!FAB_TABS.includes(tab)) return null;
   const cup = state.waterSizes?.[0];
   const run = (fn: () => void) => { setOpen(false); setTimeout(fn, 180); };
-  const items: { label: string; sub?: string; icon: React.ReactNode; color: string; fn: () => void }[] = [
-    { label: 'Refeição', sub: 'com foto', icon: <LuCamera size={22} />, color: 'var(--color-orange)', fn: () => { go('nutricao'); setIntent('nutricao', 'meal'); } },
-    { label: 'Água', sub: cup ? `+ ${cup.label}` : '+ 250 ml', icon: <LuDroplet size={22} />, color: 'var(--color-sleep)', fn: () => { actions.addWater(cup?.ml ?? 250, undefined, cup?.label); toast(`+${cup?.ml ?? 250} ml de água`); } },
-    { label: 'Peso', icon: <LuScale size={22} />, color: 'var(--color-good)', fn: () => { go('registros'); setIntent('registros', 'weight'); } },
-    { label: 'Sono', icon: <LuMoon size={22} />, color: 'var(--color-sleep)', fn: () => { go('registros'); setIntent('registros', 'sleep'); } },
-    { label: 'Hábitos', icon: <LuListChecks size={22} />, color: 'var(--color-mind)', fn: () => go('habitos') },
+  const items: { label: string; sub?: string; icon: React.ReactNode; color: string; fn: () => void; mod?: ModuleId }[] = ([
+    { label: 'Refeição', mod: 'nutricao', sub: 'com foto', icon: <LuCamera size={22} />, color: 'var(--color-orange)', fn: () => { go('nutricao'); setIntent('nutricao', 'meal'); } },
+    { label: 'Água', mod: 'agua', sub: cup ? `+ ${cup.label}` : '+ 250 ml', icon: <LuDroplet size={22} />, color: 'var(--color-sleep)', fn: () => { actions.addWater(cup?.ml ?? 250, undefined, cup?.label); toast(`+${cup?.ml ?? 250} ml de água`); } },
+    { label: 'Peso', mod: 'peso', icon: <LuScale size={22} />, color: 'var(--color-good)', fn: () => { go('registros'); setIntent('registros', 'weight'); } },
+    { label: 'Sono', mod: 'sono', icon: <LuMoon size={22} />, color: 'var(--color-sleep)', fn: () => { go('registros'); setIntent('registros', 'sleep'); } },
+    { label: 'Hábitos', mod: 'habitos', icon: <LuListChecks size={22} />, color: 'var(--color-mind)', fn: () => go('habitos') },
     { label: 'Nota', icon: <LuNotebookPen size={22} />, color: 'var(--color-warn)', fn: () => { go('registros'); setIntent('registros', 'note'); } },
-  ];
+  ] as { label: string; sub?: string; icon: React.ReactNode; color: string; fn: () => void; mod?: ModuleId }[]).filter((it) => !it.mod || modOn(state, it.mod));
   return (
     <>
       <div className={cx('md:hidden fixed z-40 right-4 bottom-[calc(6.1rem+var(--sab))] fab-auto', hide && 'fab-hidden')}>

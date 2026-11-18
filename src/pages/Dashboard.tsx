@@ -1,18 +1,19 @@
 import React from 'react';
 import {
-  LuApple, LuArrowRight, LuCheck, LuChevronRight, LuDumbbell, LuListChecks, LuMoon, LuPlay, LuPlus, LuScale, LuCamera, LuSun, LuSunrise, LuSunset,
+  LuApple, LuArrowRight, LuCheck, LuChevronRight, LuDumbbell, LuListChecks, LuEyeOff, LuMoon, LuPlay, LuPlus, LuScale, LuCamera, LuSun, LuSunrise, LuSunset,
 } from 'react-icons/lu';
 import { useStore } from '../store';
-import type { TabId } from '../types';
+import type { AppState, HomeBlockId, ModuleId, TabId } from '../types';
 import {
   activeHabits, addDays, dayScore, fmtLong, fmtWeekdayShort, greeting, isHabitDone, lastNDays, mealLabel, mealsOn, nf,
-  overallStreak, relDay, sessionProgress, todayKey, weekday, isHabitScheduled, habitCount, weekDoneCount, dueHabits,
+  overallStreak, relDay, sessionProgress, todayKey, weekday, isHabitScheduled, habitCount, weekDoneCount, dueHabits, modOn, pauseOn,
 } from '../utils';
 import { Card, cx, ProgressBar, ProgressRing, useCountUp } from '../components/ui';
 import { ScoreRings, type RingPart } from '../components/ScoreRings';
 import { ScoreDetail } from '../components/ScoreDetail';
 import { DayStrip } from '../components/DayStrip';
 import { WeekStories } from '../components/WeekStories';
+import { HabitDot, habitState, PauseBanner } from '../components/HabitBits';
 import { Sparkline } from '../components/charts';
 import { Thumb } from './Nutrition';
 import { WaterCard } from '../components/Water';
@@ -45,7 +46,8 @@ export default function Dashboard({ go }: { go: (t: TabId) => void }) {
       </header>
 
       <div className="lg:columns-2 gap-5 [&>*]:break-inside-avoid [&>*]:mb-4 md:[&>*]:mb-5">
-        {state.prefs.homeBlocks.filter((b) => b.on).map((b) => {
+        {pauseOn(state) && <div><PauseBanner compact /></div>}
+        {state.prefs.homeBlocks.filter((b) => b.on && blockOn(state, b.id)).map((b) => {
           switch (b.id) {
             case 'dia': return <div key={b.id}><TodayCard go={go} /></div>;
             case 'faixa': return <div key={b.id}><DayStrip /></div>;
@@ -62,6 +64,11 @@ export default function Dashboard({ go }: { go: (t: TabId) => void }) {
     </div>
   );
 }
+
+/** Bloco do Início ligado aos módulos ativos. */
+const blockOn = (state: AppState, id: HomeBlockId) =>
+  id === 'agua' ? modOn(state, 'agua') : id === 'habitos' ? modOn(state, 'habitos') : id === 'refeicoes' ? modOn(state, 'nutricao')
+    : id === 'corpo' ? modOn(state, 'peso') || modOn(state, 'sono') : true;
 
 /* ── peças comuns ─────────────────────────────────────────── */
 function GreetIcon() {
@@ -104,6 +111,8 @@ function TodayCard({ go }: { go: (t: TabId) => void }) {
     workout = { title: 'Treino', sub: 'Crie sua primeira ficha de treino', done: false, action: 'Criar', onAction: () => go('treino') };
   } else if (!split) {
     workout = { title: 'Treino', sub: 'Hoje é dia de descanso', done: true, onAction: () => go('treino') };
+  } else if (score.paused && !session) {
+    workout = { title: 'Treino', sub: 'Pausa: conta como descanso', done: true, onAction: () => go('treino') };
   } else if (session?.completed) {
     workout = { title: `Treino ${split.letter}`, sub: `${split.name} · concluído`, done: true, onAction: () => go('treino') };
   } else if (session) {
@@ -115,27 +124,30 @@ function TodayCard({ go }: { go: (t: TabId) => void }) {
     };
   }
 
+  const mT = modOn(state, 'treino'), mN = modOn(state, 'nutricao'), mH = modOn(state, 'habitos');
   const rows = [
-    { icon: <LuDumbbell size={18} />, ...workout },
-    {
+    ...(mT ? [{ icon: <LuDumbbell size={18} />, ...workout }] : []),
+    ...(mN ? [{
       icon: <LuApple size={18} />, title: 'Refeições', sub: `${meals.length} de ${mealGoal} registradas`,
-      done: meals.length >= mealGoal, action: 'Registrar', onAction: () => go('nutricao'),
-    },
-    habits.length
-      ? { icon: <LuListChecks size={18} />, title: 'Hábitos', sub: `${habitsDone} de ${habits.length} feitos`, done: habitsDone / habits.length >= 0.8, action: undefined, onAction: () => go('habitos') }
-      : { icon: <LuListChecks size={18} />, title: 'Hábitos', sub: 'Adicione os hábitos que quer acompanhar', done: false, action: 'Criar', onAction: () => go('habitos') },
+      done: meals.length >= mealGoal, action: 'Registrar' as string | undefined, onAction: () => go('nutricao'),
+    }] : []),
+    ...(!mH ? [] : score.paused
+      ? [{ icon: <LuListChecks size={18} />, title: 'Hábitos', sub: 'Em pausa', done: true, action: undefined, onAction: () => go('habitos') }]
+      : habits.length
+        ? [{ icon: <LuListChecks size={18} />, title: 'Hábitos', sub: `${habitsDone} de ${habits.length} feitos`, done: habitsDone / habits.length >= 0.8, action: undefined, onAction: () => go('habitos') }]
+        : [{ icon: <LuListChecks size={18} />, title: 'Hábitos', sub: 'Adicione os hábitos que quer acompanhar', done: false, action: 'Criar', onAction: () => go('habitos') }]),
   ];
 
   const color = score.total >= 80 ? 'var(--color-good)' : 'var(--color-orange)';
   const shown = Math.round(useCountUp(score.total));
   const sleepToday = state.sleep.find((x) => x.date === today);
   const goalSleep = state.goals.sleep || 8;
-  const ringParts: RingPart[] = [
+  const ringParts: RingPart[] = ([
     { key: 'treino', label: 'Treino', value: score.workout, color: 'var(--color-orange)', detail: workout.sub },
     { key: 'refeicoes', label: 'Refeições', value: score.nutrition, color: 'var(--color-good)', detail: `${meals.length} de ${mealGoal} registradas` },
     { key: 'habitos', label: 'Hábitos', value: habits.length ? habitsDone / habits.length : 0, color: 'var(--color-mind)', detail: habits.length ? `${habitsDone} de ${habits.length} feitos` : 'nenhum programado' },
     { key: 'sono', label: 'Sono', value: sleepToday ? Math.min(1, sleepToday.hours / goalSleep) : 0, color: 'var(--color-sleep)', detail: sleepToday ? `${nf(sleepToday.hours, 1)} h de ${goalSleep} h` : 'noite não registrada' },
-  ];
+  ] as RingPart[]).filter((r) => modOn(state, r.key === 'refeicoes' ? 'nutricao' : r.key as ModuleId));
   const ringsRef = React.useRef<HTMLButtonElement>(null);
   const [detail, setDetail] = React.useState<DOMRect | null>(null);
 
@@ -143,9 +155,9 @@ function TodayCard({ go }: { go: (t: TabId) => void }) {
   const pending = rows.filter((r) => !r.done);
   const habitsLeft = habits.length - habitsDone;
   const parts: string[] = [];
-  if (!workout.done && split) parts.push(session ? 'terminar o treino' : 'o treino');
-  if (habitsLeft > 0) parts.push(habitsLeft === 1 ? '1 hábito' : `${habitsLeft} hábitos`);
-  if (meals.length < mealGoal) parts.push(mealGoal - meals.length === 1 ? '1 refeição' : `${mealGoal - meals.length} refeições`);
+  if (mT && !workout.done && split) parts.push(session ? 'terminar o treino' : 'o treino');
+  if (mH && !score.paused && habitsLeft > 0) parts.push(habitsLeft === 1 ? '1 hábito' : `${habitsLeft} hábitos`);
+  if (mN && meals.length < mealGoal) parts.push(mealGoal - meals.length === 1 ? '1 refeição' : `${mealGoal - meals.length} refeições`);
   const msg = score.total >= 100 ? 'Dia completo. Mandou muito bem!'
     : score.total >= 75 ? `Ótimo ritmo! Falta só ${parts.join(' e ') || 'um detalhe'}.`
       : score.total === 0 && new Date().getHours() < 12 ? 'Um dia novo pela frente. Comece pelo mais fácil.'
@@ -205,7 +217,7 @@ function TodayCard({ go }: { go: (t: TabId) => void }) {
 
 /* ── 3. Hábitos de hoje ───────────────────────────────────── */
 function HabitsCard({ go }: { go: (t: TabId) => void }) {
-  const { state, actions } = useStore();
+  const { state, actions, toast } = useStore();
   const today = todayKey();
   const habits = activeHabits(state, today).filter((h) => isHabitScheduled(h, today));
   const streak = overallStreak(state);
@@ -220,21 +232,25 @@ function HabitsCard({ go }: { go: (t: TabId) => void }) {
       ) : (
         <ul className="space-y-1.5">
           {habits.map((h) => {
-            const done = isHabitDone(state, h.id, today);
+            const hs = habitState(state, h, today);
+            const done = hs.on;
+            const tap = () => {
+              if (hs.auto) { toast('Feito pelos seus registros ⚡'); return; }
+              if (h.timer) { go('habitos'); return; }
+              if (h.avoid) { if (!hs.failed) toast(`Anotado: ${h.name} falhou hoje`); actions.toggleHabit(h.id); return; }
+              if (!done) setFx(h.id + Date.now());
+              if (h.target) actions.setHabitCount(h.id, hs.count + 1); else actions.toggleHabit(h.id);
+            };
             return (
               <li key={h.id}>
-                <button onClick={() => { if (!done) setFx(h.id + Date.now()); h.target ? actions.setHabitCount(h.id, habitCount(state, h.id, today) + 1) : actions.toggleHabit(h.id); }} aria-pressed={done}
+                <button onClick={tap} aria-pressed={h.avoid ? !hs.failed : done}
                   className="press w-full flex items-center gap-3 h-12 px-3 rounded-2xl hover:bg-cream transition-colors text-left">
-                  <span className="relative grid place-items-center shrink-0">
-                    {done && fx?.startsWith(h.id) && <span key={fx} className="check-burst" aria-hidden />}
-                    <span className={cx('relative grid place-items-center size-6 rounded-full border-2 transition-colors',
-                      done ? 'bg-orange border-orange text-white' : 'border-ink/20', done && fx?.startsWith(h.id) && 'check-pop')} key={String(done) + (fx?.startsWith(h.id) ? fx : '')}>
-                      {done && <LuCheck size={14} strokeWidth={3} />}
-                    </span>
-                  </span>
-                  <span className={cx('flex-1 text-[15px] truncate', done ? 'text-muted line-through decoration-ink/25' : 'text-ink')}>{h.name}</span>
-                  {h.target ? <span className="text-[12.5px] text-muted tabular-nums shrink-0">{habitCount(state, h.id, today)}/{h.target} {h.unit}</span>
-                    : h.freq?.type === 'weekly' ? <span className="text-[12.5px] text-muted tabular-nums shrink-0">{weekDoneCount(state, h.id, today)}/{h.freq.times} na semana</span> : null}
+                  <HabitDot h={h} st={hs} size={24} fx={!!fx?.startsWith(h.id)} />
+                  <span className={cx('flex-1 text-[15px] truncate', done && !h.avoid ? 'text-muted line-through decoration-ink/25' : hs.failed ? 'text-[color:var(--color-bad)]' : 'text-ink')}>{h.name}</span>
+                  {h.avoid ? <span className="text-[12.5px] shrink-0" style={{ color: hs.failed ? 'var(--color-bad)' : 'var(--color-good)' }}>{hs.failed ? 'falhou' : 'mantido'}</span>
+                    : h.target ? <span className="text-[12.5px] text-muted tabular-nums shrink-0">{hs.count}/{h.target} {h.timer ? 'min' : h.unit}</span>
+                    : h.freq?.type === 'weekly' ? <span className="text-[12.5px] text-muted tabular-nums shrink-0">{weekDoneCount(state, h.id, today)}/{h.freq.times} na semana</span>
+                    : hs.auto ? <span className="text-[12.5px] shrink-0" style={{ color: 'var(--color-warn)' }}>automático</span> : null}
                 </button>
               </li>
             );
@@ -285,7 +301,7 @@ function WeekCard() {
     <Card className="p-5 md:p-6">
       <div className="flex items-baseline justify-between mb-4">
         <h2 className="t-section text-ink">Sua semana</h2>
-        <p className="text-[13px] text-muted">média <b className="text-ink font-semibold tabular-nums">{avg}%</b> · {workouts} {workouts === 1 ? 'treino' : 'treinos'}</p>
+        <p className="text-[13px] text-muted">média <b className="text-ink font-semibold tabular-nums">{avg}%</b>{modOn(state, 'treino') ? ` · ${workouts} ${workouts === 1 ? 'treino' : 'treinos'}` : ''}</p>
       </div>
       <div className="grid grid-cols-7 gap-2 items-end">
         {days.map(({ d, s }, i) => (
@@ -315,23 +331,30 @@ function BodyCard({ go }: { go: (t: TabId) => void }) {
   const good = diff == null ? null : goalW != null && w0 != null ? Math.abs(w0 - goalW) <= Math.abs((w1 ?? w0) - goalW) : Math.abs(diff) < 0.5;
   const wVals = body.slice(0, 10).reverse().map((b) => b.weight!);
   const sVals = sleeps.slice(0, 10).reverse().map((x) => x.hours);
+  // modo discreto: o peso fica escondido até você tocar (volta a esconder em 5 s)
+  const [peek, setPeek] = React.useState(false);
+  React.useEffect(() => { if (!peek) return; const t = setTimeout(() => setPeek(false), 5000); return () => clearTimeout(t); }, [peek]);
+  const hide = !!state.prefs.discreet && !peek && w0 != null;
+  const mP = modOn(state, 'peso'), mS = modOn(state, 'sono');
   return (
     <Card className="p-5 md:p-6">
-      <SectionTitle title="Corpo e sono" action="Registros" onAction={() => go('registros')} />
-      <div className="grid grid-cols-2 gap-3">
-        <button onClick={() => go('registros')} className="press rounded-2xl bg-cream p-4 text-left min-w-0">
-          <p className="eyebrow flex items-center gap-1.5"><LuScale size={12} /> Peso</p>
+      <SectionTitle title={mP && mS ? 'Corpo e sono' : mP ? 'Corpo' : 'Sono'} action="Registros" onAction={() => go('registros')} />
+      <div className={cx('grid gap-3', mP && mS ? 'grid-cols-2' : 'grid-cols-1')}>
+        {mP && <button onClick={() => (hide ? setPeek(true) : go('registros'))} aria-label={hide ? 'Mostrar peso' : undefined} className="press rounded-2xl bg-cream p-4 text-left min-w-0">
+          <p className="eyebrow flex items-center gap-1.5"><LuScale size={12} /> Peso{state.prefs.discreet && <LuEyeOff size={11} className="ml-auto opacity-60" />}</p>
           <p className="num text-[26px] text-ink mt-1.5 leading-none">
-            {w0 != null ? nf(w0, 1) : '—'}<span className="unit">kg</span>
+            {hide ? <span className="tracking-[0.1em] opacity-50">•••</span> : w0 != null ? nf(w0, 1) : '—'}<span className="unit">kg</span>
           </p>
           <div className="flex items-end justify-between gap-2 mt-2">
-            <p className={cx('text-[12px] font-medium truncate', diff == null ? 'text-muted' : good ? 'text-good' : 'text-warn')}>
-              {diff != null ? `${Math.abs(diff) < 0.05 ? '●' : diff > 0 ? '▲' : '▼'} ${diff > 0 ? '+' : ''}${nf(diff, 1)} kg` : body[0] ? relDay(body[0].date) : 'Registrar'}
-            </p>
-            <Sparkline values={wVals} width={56} height={22} color="var(--color-ink)" />
+            {hide ? <p className="text-[12px] text-muted truncate">toque para ver</p> : <>
+              <p className={cx('text-[12px] font-medium truncate', diff == null ? 'text-muted' : good ? 'text-good' : 'text-warn')}>
+                {diff != null ? `${Math.abs(diff) < 0.05 ? '●' : diff > 0 ? '▲' : '▼'} ${diff > 0 ? '+' : ''}${nf(diff, 1)} kg` : body[0] ? relDay(body[0].date) : 'Registrar'}
+              </p>
+              <Sparkline values={wVals} width={56} height={22} color="var(--color-ink)" />
+            </>}
           </div>
-        </button>
-        <button onClick={() => go('registros')} className="press rounded-2xl bg-cream p-4 text-left min-w-0">
+        </button>}
+        {mS && <button onClick={() => go('registros')} className="press rounded-2xl bg-cream p-4 text-left min-w-0">
           <p className="eyebrow flex items-center gap-1.5"><LuMoon size={12} /> Sono</p>
           <p className="num text-[26px] text-ink mt-1.5 leading-none">
             {sleep ? nf(sleep.hours, 1) : '—'}<span className="unit">h</span>
@@ -342,7 +365,7 @@ function BodyCard({ go }: { go: (t: TabId) => void }) {
             </p>
             <Sparkline values={sVals} width={56} height={22} color="var(--color-sleep)" />
           </div>
-        </button>
+        </button>}
       </div>
     </Card>
   );
