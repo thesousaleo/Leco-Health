@@ -76,11 +76,10 @@ function Effects() {
 function Logo() {
   return (
     <div className="flex items-center gap-2.5">
-      <div className="grid place-items-center size-9 rounded-full bg-orange">
-        <svg viewBox="0 0 24 24" className="size-[18px]" fill="none" stroke="white" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M3 12h4l2.5-6 4 12 2.5-6H21" />
-        </svg>
-      </div>
+      <svg viewBox="0 0 100 100" className="size-9 shrink-0" aria-hidden>
+        <rect width="100" height="100" rx="26" fill="var(--color-orange)" />
+        <path d="M28 22 V68 H42 L48 56 L56 78 L62 62 H72" fill="none" stroke="white" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
       <p className="font-semibold text-ink tracking-[-0.02em] text-[17px]">Leco Health</p>
     </div>
   );
