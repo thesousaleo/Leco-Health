@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { leadOf, weekHeads } from '../units';
 import { haptic } from '../native';
 import {
   LuArchive, LuArchiveRestore, LuArrowDown, LuArrowUp, LuBell, LuBrain, LuCheck, LuChevronLeft, LuChevronRight, LuFlame, LuHeartPulse,
@@ -336,7 +337,7 @@ function MonthModal({ habit, onClose }: { habit: Habit; onClose: () => void }) {
   const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const first = toKey(month);
   const daysIn = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-  const lead = (month.getDay() + 6) % 7;
+  const lead = leadOf(month);
   const today = todayKey();
   const days = [...Array(daysIn)].map((_, i) => addDays(first, i));
   const sched = days.filter((d) => d <= today && isHabitScheduled(habit, d) && d >= habit.createdAt);
@@ -364,7 +365,7 @@ function MonthModal({ habit, onClose }: { habit: Habit; onClose: () => void }) {
         <IconButton label="Próximo mês" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}><LuChevronRight size={18} /></IconButton>
       </div>
       <div className="grid grid-cols-7 gap-1.5 text-center">
-        {['S', 'T', 'Q', 'Q', 'S', 'S', 'D'].map((d, i) => <span key={i} className="text-[11px] text-muted">{d}</span>)}
+        {weekHeads().map((d, i) => <span key={i} className="text-[11px] text-muted">{d}</span>)}
         {[...Array(lead)].map((_, i) => <span key={'l' + i} />)}
         {days.map((d) => {
           const on = isHabitDone(state, habit.id, d);
@@ -396,7 +397,7 @@ function MonthHeatmap({ habits }: { habits: Habit[] }) {
 
   const first = toKey(month);
   const daysIn = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-  const lead = (month.getDay() + 6) % 7;
+  const lead = leadOf(month);
   const days = [...Array(daysIn)].map((_, i) => addDays(first, i));
 
   /** 0–1 = quanto do dia foi cumprido; null = nada a cumprir (ou futuro). */
@@ -435,10 +436,10 @@ function MonthHeatmap({ habits }: { habits: Habit[] }) {
     };
   };
   const QUAD = [
-    { k: 'treino', label: 'Treino', color: 'var(--color-orange)' },
-    { k: 'sono', label: 'Sono', color: 'var(--color-sleep)' },
-    { k: 'refeicoes', label: 'Refeições', color: 'var(--color-good)' },
-    { k: 'habitos', label: 'Hábitos', color: 'var(--color-mind)' },
+    { k: 'treino', label: 'Treino', color: 'var(--area-treino)' },
+    { k: 'sono', label: 'Sono', color: 'var(--area-sono)' },
+    { k: 'refeicoes', label: 'Refeições', color: 'var(--area-nutri)' },
+    { k: 'habitos', label: 'Hábitos', color: 'var(--area-habitos)' },
   ] as const;
   const pastDays = days.filter((d) => d <= today);
   const quads = areas ? pastDays.map(quad) : [];
@@ -487,7 +488,7 @@ function MonthHeatmap({ habits }: { habits: Habit[] }) {
       )}
 
       <div key={filter + first} className="grid grid-cols-7 gap-1.5 text-center mt-4 animate-fade">
-        {['S', 'T', 'Q', 'Q', 'S', 'S', 'D'].map((d, i) => <span key={i} className="text-[11px] text-muted pb-0.5">{d}</span>)}
+        {weekHeads().map((d, i) => <span key={i} className="text-[11px] text-muted pb-0.5">{d}</span>)}
         {[...Array(lead)].map((_, i) => <span key={'l' + i} />)}
         {areas && days.map((d) => {
           const future = d > today;

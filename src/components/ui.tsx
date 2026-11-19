@@ -373,18 +373,25 @@ export function Segmented<T extends string>({ value, onChange, options }: {
 }) {
   const box = useRef<HTMLDivElement>(null);
   const [ind, setInd] = useState<{ x: number; w: number } | null>(null);
+  // sem espaço (texto grande ou tela estreita): esconde os ícones e aperta o texto
+  const [tight, setTight] = useState(false);
+  const need = useRef(0);
   useEffect(() => {
     const el = box.current; if (!el) return;
     const upd = () => {
+      const btns = [...el.querySelectorAll<HTMLElement>('[data-seg]')];
+      if (!el.classList.contains('seg-tight')) {
+        if (btns.some((b) => b.scrollWidth > b.clientWidth + 1)) { need.current = el.clientWidth + 1; setTight(true); }
+      } else if (el.clientWidth > need.current) setTight(false);
       const btn = el.querySelector<HTMLElement>(`[data-seg="${CSS.escape(value)}"]`);
       if (btn) setInd({ x: btn.offsetLeft, w: btn.offsetWidth });
     };
     upd();
     const ro = new ResizeObserver(upd); ro.observe(el);
     return () => ro.disconnect();
-  }, [value, options.length]);
+  }, [value, options.length, tight]);
   return (
-    <div ref={box} className="relative inline-flex p-1 rounded-full glass gap-1 w-full md:w-auto">
+    <div ref={box} className={cx('relative inline-flex p-1 rounded-full glass gap-1 w-full md:w-auto', tight && 'seg-tight')}>
       {ind && <span aria-hidden className="seg-ind" style={{ width: ind.w, transform: `translateX(${ind.x}px)` }} />}
       {options.map((o) => (
         <button key={o.value} type="button" data-seg={o.value} onClick={() => onChange(o.value)}

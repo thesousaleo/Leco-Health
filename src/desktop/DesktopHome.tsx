@@ -1,5 +1,7 @@
 /* Início no computador: painel de controle com indicadores, treino, hábitos, tendências e os últimos dias. */
 import React, { useMemo, useState } from 'react';
+import { quoteOfDay } from '../quotes';
+import { fmtCup, fmtVolShort, fmtW, numW, toW, vUnit, wUnit } from '../units';
 import {
   LuApple, LuCamera, LuDroplet, LuDumbbell, LuFlame, LuListChecks, LuMoon, LuPlay, LuPlus, LuScale, LuSearch, LuSparkles,
 } from 'react-icons/lu';
@@ -105,8 +107,8 @@ function Home({ go }: { go: (t: TabId) => void }) {
     <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 mb-6">
       <div className="min-w-[300px] flex-1">
         <p className="eyebrow">{fmtLong(today)}</p>
-        <h1 className="text-[34px] font-semibold tracking-[-0.03em] text-ink leading-tight mt-1">{greeting()}{name ? `, ${name}` : ''}</h1>
-        <p className="text-[14.5px] text-muted mt-1">{message}</p>
+        {state.prefs.greeting === 'nada' ? <h1 className="sr-only">Início</h1> : <h1 className="text-[34px] font-semibold tracking-[-0.03em] text-ink leading-tight mt-1">{greeting()}{name ? `, ${name}` : ''}</h1>}
+        <p className="text-[14.5px] text-muted mt-1">{state.prefs.greeting === 'frase' ? <><span className="italic">“{quoteOfDay()}”</span> · {message}</> : message}</p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <button onClick={openSearch} className="press h-11 pl-4 pr-3 rounded-full glass flex items-center gap-2 text-[14px] text-ink/55 desk-hover">
@@ -136,18 +138,18 @@ function Home({ go }: { go: (t: TabId) => void }) {
           chart={<Sparkline values={sleeps.slice(0, 14).reverse().map((x) => x.hours)} width={72} height={30} color="var(--color-sleep)" />}
           delta={lastSleep && <Delta text={lastSleep.hours >= gS ? '● na meta' : `▼ ${nf(gS - lastSleep.hours, 1)} h abaixo`} tone={lastSleep.hours >= gS ? 'good' : 'warn'} />}
           foot={s7.length ? `média ${nf(sAvg, 1)} h` : 'sem registros'} />}
-        {mP && <Kpi label="Peso" icon={<LuScale size={12} />} value={wLast ? (discreet ? '•••' : nf(wLast.weight, 1)) : '—'} unit="kg"
+        {mP && <Kpi label="Peso" icon={<LuScale size={12} />} value={wLast ? (discreet ? '•••' : numW(wLast.weight, 1)) : '—'} unit={wUnit()}
           chart={!discreet && wt.points.length > 1 ? <Sparkline values={wt.points.slice(-20).map((p) => p.trend)} width={72} height={30} color="var(--color-ink)" /> : undefined}
-          delta={wDelta != null && !discreet && <Delta text={delta(wDelta, ' kg', 1)} tone={wTone} />} foot={wDelta != null && !discreet ? 'em 7 dias' : wLast ? relDay(wLast.date) : 'sem registros'} />}
+          delta={wDelta != null && !discreet && <Delta text={delta(toW(wDelta), ` ${wUnit()}`, 1)} tone={wTone} />} foot={wDelta != null && !discreet ? 'em 7 dias' : wLast ? relDay(wLast.date) : 'sem registros'} />}
         {mK && <Kpi label="Calorias" icon={<LuFlame size={12} />} accent="var(--color-prot)" value={nf(km.kcal, 0)} unit="kcal" onClick={() => go('nutricao')}
           chart={<KcalRing value={km.kcal} goal={kg.kcal} size={42} />}
           delta={<span className="flex gap-1 flex-1 max-w-[120px]">{(['protein', 'carbs', 'fat'] as const).map((k) => <span key={k} className="flex-1 h-1.5 rounded-full bg-cream overflow-hidden"><span className="block h-full rounded-full" style={{ width: `${Math.min(100, (km[k] / (kg[k] || 1)) * 100)}%`, background: MACRO_COLORS[k] }} /></span>)}</span>}
           foot={`de ${nf(kg.kcal, 0)} · P ${nf(km.protein, 0)} g`} />}
-        {mA && <Kpi label="Água" icon={<LuDroplet size={12} />} accent="var(--color-sleep)" value={nf(water / 1000, 1)} unit="L"
-          chart={<button onClick={() => { actions.addWater(cup?.ml ?? 250, undefined, cup?.label); toast(`+${cup?.ml ?? 250} ml de água`); }}
-            className="press h-8 px-3 rounded-full text-[12.5px] font-semibold text-white flex items-center gap-1" style={{ background: 'var(--color-sleep)' }}><LuPlus size={13} /> {cup?.ml ?? 250} ml</button>}
+        {mA && <Kpi label="Água" icon={<LuDroplet size={12} />} accent="var(--color-sleep)" value={fmtVolShort(water).replace(/ (L|oz)$/, '')} unit={vUnit() === 'oz' ? 'oz' : 'L'}
+          chart={<button onClick={() => { actions.addWater(cup?.ml ?? 250, undefined, cup?.label); toast(`+${fmtCup(cup?.ml ?? 250)} de água`); }}
+            className="press h-8 px-3 rounded-full text-[12.5px] font-semibold text-white flex items-center gap-1" style={{ background: 'var(--color-sleep)' }}><LuPlus size={13} /> {fmtCup(cup?.ml ?? 250)}</button>}
           delta={<span className="flex-1 max-w-[110px]"><span className="block h-1.5 rounded-full bg-cream overflow-hidden"><span className="block h-full rounded-full" style={{ width: `${Math.min(100, (water / (state.goals.water || 1)) * 100)}%`, background: 'var(--color-sleep)' }} /></span></span>}
-          foot={`de ${nf(state.goals.water / 1000, 1)} L`} />}
+          foot={`de ${fmtVolShort(state.goals.water)}`} />}
         {mH && <Kpi label="Sequência" icon={<LuFlame size={12} />} accent="var(--color-orange)" value={streak} unit={streak === 1 ? 'dia' : 'dias'}
           onClick={() => go('habitos')} delta={<Delta text={`${hDone} de ${due.length} hábitos hoje`} tone={due.length && hDone / due.length >= 0.8 ? 'good' : 'neutral'} />} />}
       </div>
@@ -214,8 +216,8 @@ function TodayWorkout({ start }: { start: () => void }) {
           cols={[
             { key: 'n', label: 'Exercício', render: (r) => <span className="font-medium text-ink">{r.ex.name}<span className="block text-[12px] text-muted font-normal">{r.ex.muscle}</span></span> },
             { key: 'a', label: 'Meta', render: (r) => `${r.ex.targetSets} × ${r.ex.targetReps}` },
-            { key: 'l', label: 'Última vez', render: (r) => r.last ? <span>{nf(r.last.best.weight, 1)} kg × {r.last.best.reps}<span className="block text-[12px] text-muted">{relDay(r.last.date)}</span></span> : <span className="text-muted">primeira vez</span> },
-            { key: 'r', label: '1RM est.', align: 'right', render: (r) => r.last ? `${nf(oneRM(r.last.best.weight, r.last.best.reps), 0)} kg` : '—' },
+            { key: 'l', label: 'Última vez', render: (r) => r.last ? <span>{fmtW(r.last.best.weight, 1)} × {r.last.best.reps}<span className="block text-[12px] text-muted">{relDay(r.last.date)}</span></span> : <span className="text-muted">primeira vez</span> },
+            { key: 'r', label: '1RM est.', align: 'right', render: (r) => r.last ? `${fmtW(oneRM(r.last.best.weight, r.last.best.reps), 0)}` : '—' },
             { key: 'h', label: 'Hoje', align: 'right', render: (r) => r.entry ? <span className="tabular-nums">{r.entry.sets.filter((x) => x.done).length}/{r.entry.sets.length}</span> : <span className="text-muted">—</span> },
           ]} />
       ) : (
@@ -289,7 +291,7 @@ function Trends() {
       const pts = weightTrend(state.body.filter((b) => b.weight != null).sort((a, b) => (a.date < b.date ? -1 : 1)).map((b) => ({ date: b.date, weight: b.weight! })));
       const shown = pts.points.filter((p) => p.date >= days[0]);
       if (state.prefs.discreet) return <p className="h-[250px] grid place-items-center text-[13.5px] text-muted">Peso escondido (modo discreto).</p>;
-      return <LineChart data={shown.map((p) => ({ label: fmtShort(p.date), value: p.weight, sub: relDay(p.date) }))} unit=" kg" height={250} goal={state.goals.weight}
+      return <LineChart data={shown.map((p) => ({ label: fmtShort(p.date), value: p.weight, sub: relDay(p.date) }))} weight height={250} goal={state.goals.weight}
         trend={shown.map((p) => Math.round(p.trend * 10) / 10)} trendLabel="tendência" band={shown.map((p) => ({ lo: Math.round((p.trend - pts.band) * 10) / 10, hi: Math.round((p.trend + pts.band) * 10) / 10 }))} color="var(--color-ink)" />;
     }
     if (m === 'volume') return <BarChart data={days.map((d) => { const s = state.sessions.find((x) => x.date === d && x.completed); return { label: fmtShort(d).slice(0, 2), value: s ? sessionVolume(s) / 1000 : 0 }; })} unit=" t" decimals={1} height={250} />;
@@ -359,8 +361,8 @@ function RecentDays() {
       : modOn(state, 'nutricao') && { key: 'r', label: 'Refeições', align: 'right' as const, render: (d: R) => `${mealsOn(state, d).length}/${state.goals.meals || 4}` },
     modOn(state, 'habitos') && { key: 'h', label: 'Hábitos', align: 'right' as const, render: (d: R) => { const due = dueHabits(state, d); return due.length ? `${due.filter((h) => isHabitDone(state, h.id, d)).length}/${due.length}` : <span className="text-muted">—</span>; } },
     modOn(state, 'sono') && { key: 'z', label: 'Sono', align: 'right' as const, render: (d: R) => { const s = sleepBy.get(d); return s ? <span style={{ color: s.hours >= (state.goals.sleep || 8) ? undefined : 'var(--color-warn)' }}>{nf(s.hours, 1)} h</span> : <span className="text-muted">—</span>; } },
-    modOn(state, 'agua') && { key: 'a', label: 'Água', align: 'right' as const, render: (d: R) => { const w = state.water[d] || 0; return w ? <span style={{ color: w >= state.goals.water ? 'var(--color-good)' : undefined }}>{nf(w / 1000, 1)} L</span> : <span className="text-muted">—</span>; } },
-    modOn(state, 'peso') && { key: 'p', label: 'Peso', align: 'right' as const, render: (d: R) => bodyBy.has(d) ? (discreet ? '•••' : `${nf(bodyBy.get(d)!, 1)} kg`) : <span className="text-muted">—</span> },
+    modOn(state, 'agua') && { key: 'a', label: 'Água', align: 'right' as const, render: (d: R) => { const w = state.water[d] || 0; return w ? <span style={{ color: w >= state.goals.water ? 'var(--color-good)' : undefined }}>{fmtVolShort(w)}</span> : <span className="text-muted">—</span>; } },
+    modOn(state, 'peso') && { key: 'p', label: 'Peso', align: 'right' as const, render: (d: R) => bodyBy.has(d) ? (discreet ? '•••' : `${fmtW(bodyBy.get(d)!, 1)}`) : <span className="text-muted">—</span> },
   ].filter(Boolean) as { key: string; label: string; align?: 'right'; render: (d: R) => React.ReactNode }[];
   return (
     <Panel title="Últimos 14 dias" sub="Clique num dia para ver tudo o que aconteceu nele">

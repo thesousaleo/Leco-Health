@@ -41,23 +41,23 @@ export function DayStrip() {
         {/* sono */}
         {sleepSeg && (
           <div className="absolute top-[34px] h-[18px] rounded-full band-in flex items-center justify-center overflow-hidden"
-            style={{ left: pct(sleepSeg.a), width: `calc(${pct(sleepSeg.b - sleepSeg.a)})`, background: 'var(--color-sleep)' }} title={`Sono ${nf(sl!.hours, 1)} h`}>
+            style={{ left: pct(sleepSeg.a), width: `calc(${pct(sleepSeg.b - sleepSeg.a)})`, background: 'var(--area-sono)' }} title={`Sono ${nf(sl!.hours, 1)} h`}>
             <LuMoon size={11} className="text-white" />
           </div>
         )}
         {/* treino */}
         {workSeg && workSeg.b > workSeg.a && (
-          <div className="absolute top-[34px] h-[18px] rounded-full band-in grid place-items-center" style={{ left: pct(workSeg.a), width: `max(18px, ${pct(workSeg.b - workSeg.a)})`, background: 'var(--color-orange)' }}>
+          <div className="absolute top-[34px] h-[18px] rounded-full band-in grid place-items-center" style={{ left: pct(workSeg.a), width: `max(18px, ${pct(workSeg.b - workSeg.a)})`, background: 'var(--area-treino)' }}>
             <LuDumbbell size={11} className="text-white" />
           </div>
         )}
         {/* água: risquinhos */}
-        {water.map((t, i) => <span key={i} className="absolute top-[56px] h-[7px] w-[3px] rounded-full" style={{ left: pct(t), background: 'var(--color-sleep)', opacity: 0.55 }} />)}
+        {water.map((t, i) => <span key={i} className="absolute top-[56px] h-[7px] w-[3px] rounded-full" style={{ left: pct(t), background: 'var(--area-agua)', opacity: 0.55 }} />)}
         {/* refeições: fotos redondas acima do trilho */}
         {meals.map(({ m, t }, i) => (
           <div key={m.id} className="absolute top-0 -translate-x-1/2 size-[28px] rounded-full ring-2 ring-surface shadow-[var(--shadow-1)] overflow-hidden animate-pop"
             style={{ left: pct(t), animationDelay: `${i * 60}ms`, background: 'var(--color-cream)' }} title={`${m.time} · ${m.description}`}>
-            {m.photos[0] ? <Thumb id={m.photos[0]} className="size-full" /> : <span className="size-full grid place-items-center" style={{ color: 'var(--color-good)' }}><LuApple size={13} /></span>}
+            {m.photos[0] ? <Thumb id={m.photos[0]} className="size-full" /> : <span className="size-full grid place-items-center" style={{ color: 'var(--area-nutri)' }}><LuApple size={13} /></span>}
           </div>
         ))}
         {/* agora */}
@@ -70,10 +70,10 @@ export function DayStrip() {
         ))}
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11.5px] text-muted">
-        {mS && <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full" style={{ background: 'var(--color-sleep)' }} /> sono</span>}
+        {mS && <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full" style={{ background: 'var(--area-sono)' }} /> sono</span>}
         {mT && <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-orange" /> treino</span>}
-        {mN && <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full ring-2 ring-[color:var(--color-good)]" /> refeições</span>}
-        {mA && <span className="flex items-center gap-1.5"><LuDroplet size={11} style={{ color: 'var(--color-sleep)' }} /> água</span>}
+        {mN && <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full ring-2 ring-[color:var(--area-nutri)]" /> refeições</span>}
+        {mA && <span className="flex items-center gap-1.5"><LuDroplet size={11} style={{ color: 'var(--area-agua)' }} /> água</span>}
         <span className="flex items-center gap-1.5"><span className="w-[2px] h-3 bg-ink rounded-full" /> agora</span>
       </div>
     </Card>

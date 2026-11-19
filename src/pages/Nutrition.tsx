@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { fmtCup, fmtVol, fmtVolShort, vUnit } from '../units';
 import { pushBack } from '../back';
 import { useIntent } from '../intent';
 import {
@@ -24,7 +25,7 @@ export function WaterButtons({ onAdd, compact }: { onAdd: (ml: number) => void; 
     <div className="flex flex-wrap gap-2">
       {[250, 500].map((ml) => (
         <button key={ml} type="button" onClick={(e) => { e.stopPropagation(); onAdd(ml); }}
-          className="press h-10 px-4 rounded-full bg-surface text-ink text-[14px] font-medium tabular-nums">+{ml} ml</button>
+          className="press h-10 px-4 rounded-full bg-surface text-ink text-[14px] font-medium tabular-nums">+{fmtCup(ml)}</button>
       ))}
       {!compact && (
         <button type="button" onClick={() => onAdd(-250)} aria-label="Remover 250 ml"
@@ -204,8 +205,8 @@ function NutritionKpis({ onGoals }: { onGoals: () => void }) {
         <Kpi label="Refeições hoje" value={meals} unit={`de ${state.goals.meals || 4}`} foot="registradas" />
         <Kpi label="Fotos" icon={<LuImages size={12} />} value={state.meals.filter((m) => m.photos.length).length} foot="na galeria" />
       </>}
-      <Kpi label="Água hoje" icon={<LuDroplets size={12} />} value={nf(water / 1000, 2)} unit="L" accent="var(--color-sleep)"
-        delta={<MiniBar v={water} g={state.goals.water || 1} c="var(--color-sleep)" />} foot={`meta ${nf((state.goals.water || 0) / 1000, 1)} L`} />
+      <Kpi label="Água hoje" icon={<LuDroplets size={12} />} value={fmtVol(water).replace(/ (L|oz)$/, '')} unit={vUnit() === 'oz' ? 'oz' : 'L'} accent="var(--color-sleep)"
+        delta={<MiniBar v={water} g={state.goals.water || 1} c="var(--color-sleep)" />} foot={`meta ${fmtVolShort(state.goals.water || 0)}`} />
     </div>
   );
 }

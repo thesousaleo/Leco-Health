@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { fmtCup, fromV, toV, vUnit } from '../units';
 import { LuChevronRight, LuDroplets, LuPlus, LuX } from 'react-icons/lu';
 import { useStore } from '../store';
 import type { WaterSize } from '../types';
@@ -7,7 +8,7 @@ import { Button, Card, cx, Field, Input, Modal, NumInput, ProgressBar, ProgressR
 
 /* Água: card resumido (Início/Alimentação) + painel com recipientes, valor livre, histórico e meta. */
 
-const fmtL = (ml: number) => (ml >= 1000 ? `${nf(ml / 1000, ml % 1000 ? 2 : 0)} L` : `${ml} ml`);
+const fmtL = (ml: number) => (vUnit() === 'oz' ? fmtCup(ml) : ml >= 1000 ? `${nf(ml / 1000, ml % 1000 ? 2 : 0)} L` : `${ml} ml`);
 
 export function WaterCard({ day = todayKey() }: { day?: string }) {
   const { state, actions, toast } = useStore();
@@ -33,7 +34,7 @@ export function WaterCard({ day = todayKey() }: { day?: string }) {
           {state.waterSizes.slice(0, 3).map((s) => (
             <button key={s.id} onClick={() => { actions.addWater(s.ml, day, s.label); toast(`+${fmtL(s.ml)} de água`); }}
               className="press h-11 rounded-full bg-cream text-ink text-[14px] font-medium tabular-nums truncate px-2">
-              + {s.label} <span className="text-muted font-normal">{s.ml}</span>
+              + {s.label} <span className="text-muted font-normal">{vUnit() === 'oz' ? fmtCup(s.ml) : s.ml}</span>
             </button>
           ))}
         </div>
@@ -55,7 +56,7 @@ export function WaterSheet({ open, day, onClose }: { open: boolean; day: string;
   const untracked = Math.max(0, water - logged);
 
   const addCustom = () => {
-    const ml = Math.round(parseFloat(custom.replace(',', '.')));
+    const ml = fromV(parseFloat(custom.replace(',', '.')));
     if (!ml || ml <= 0) return;
     actions.addWater(ml, day, 'Outro');
     setCustom('');
@@ -83,13 +84,13 @@ export function WaterSheet({ open, day, onClose }: { open: boolean; day: string;
               <button key={s.id} onClick={() => { actions.addWater(s.ml, day, s.label); }}
                 className="press h-14 rounded-2xl bg-cream text-left px-4">
                 <span className="block text-[14.5px] font-medium text-ink">+ {s.label}</span>
-                <span className="block text-[12.5px] text-muted tabular-nums">{s.ml} ml</span>
+                <span className="block text-[12.5px] text-muted tabular-nums">{fmtCup(s.ml)}</span>
               </button>
             ))}
           </div>
           <div className="flex gap-2 mt-3">
             <Input inputMode="numeric" value={custom} onChange={(e) => setCustom(e.target.value.replace(/[^\d]/g, ''))}
-              onKeyDown={(e) => e.key === 'Enter' && addCustom()} placeholder="Outra quantidade (ml)" />
+              onKeyDown={(e) => e.key === 'Enter' && addCustom()} placeholder={`Outra quantidade (${vUnit()})`} />
             <Button variant="dark" disabled={!custom} onClick={addCustom}><LuPlus size={16} /> Adicionar</Button>
           </div>
           <button onClick={() => { setSizes(state.waterSizes); setEditing(true); }} className="mt-3 text-[13.5px] text-muted hover:text-ink underline underline-offset-4">
@@ -104,8 +105,8 @@ export function WaterSheet({ open, day, onClose }: { open: boolean; day: string;
               <Input className="!bg-surface" value={s.label} maxLength={14} placeholder="Nome"
                 onChange={(e) => setSizes(sizes.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} />
               <div className="relative w-28 shrink-0">
-                <NumInput className="!bg-surface pr-8" value={s.ml} onChange={(v) => setSizes(sizes.map((x, j) => (j === i ? { ...x, ml: Math.max(1, Math.round(v)) } : x)))} />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-muted pointer-events-none">ml</span>
+                <NumInput className="!bg-surface pr-8" value={toV(s.ml)} onChange={(v) => setSizes(sizes.map((x, j) => (j === i ? { ...x, ml: Math.max(1, fromV(v)) } : x)))} />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-muted pointer-events-none">{vUnit()}</span>
               </div>
               <button aria-label="Remover recipiente" disabled={sizes.length <= 1} onClick={() => setSizes(sizes.filter((_, j) => j !== i))}
                 className="press size-10 rounded-full grid place-items-center text-ink/40 hover:text-orange disabled:opacity-30 shrink-0"><LuX size={16} /></button>
@@ -116,8 +117,8 @@ export function WaterSheet({ open, day, onClose }: { open: boolean; day: string;
               + Adicionar recipiente
             </button>
           )}
-          <Field label="Meta diária (ml)">
-            <NumInput className="!bg-surface" value={goal} onChange={(v) => actions.setGoals({ ...state.goals, water: Math.max(250, Math.round(v)) })} />
+          <Field label={`Meta diária (${vUnit()})`}>
+            <NumInput className="!bg-surface" value={toV(goal)} onChange={(v) => actions.setGoals({ ...state.goals, water: Math.max(250, fromV(v)) })} />
           </Field>
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>Cancelar</Button>

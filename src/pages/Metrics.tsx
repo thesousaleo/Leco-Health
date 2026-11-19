@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { fmtW, fromW, numW, wUnit } from '../units';
 import { useIntent, type Intent } from '../intent';
 import {
   LuActivity, LuApple, LuDumbbell, LuFileText, LuMoon, LuNotebookPen, LuPencil, LuPlus, LuScale, LuSearch, LuStethoscope, LuTag,
@@ -75,7 +76,7 @@ function MetricsKpis({ go }: { go: (v: View) => void }) {
       {mP && <Kpi label="Peso" icon={<LuScale size={12} />} value={last ? nf(last.weight!, 1) : '—'} unit={last ? 'kg' : undefined} onClick={() => go('peso')}
         foot={last ? `registrado ${relDay(last.date).toLowerCase()}` : 'sem registros'} />}
       {mP && <Kpi label="Em 30 dias" value={d30 == null ? '—' : `${d30 > 0 ? '+' : d30 < 0 ? '−' : ''}${nf(Math.abs(d30), 1)}`} unit={d30 == null ? undefined : 'kg'} onClick={() => go('peso')}
-        accent={tone(d30, (state.goals.weight ?? 0) < (last?.weight ?? 0))} foot={state.goals.weight ? `meta ${nf(state.goals.weight, 1)} kg` : 'sem meta de peso'} />}
+        accent={tone(d30, (state.goals.weight ?? 0) < (last?.weight ?? 0))} foot={state.goals.weight ? `meta ${fmtW(state.goals.weight, 1)}` : 'sem meta de peso'} />}
       {mS && <Kpi label="Sono · 7 dias" icon={<LuMoon size={12} />} value={sAvg == null ? '—' : nf(sAvg, 1)} unit={sAvg == null ? undefined : 'h'} accent="var(--color-sleep)" onClick={() => go('sono')}
         foot={`meta ${state.goals.sleep ?? 8} h · ${sl.length} noites`} />}
       {mS && <Kpi label="Disposição" value={eAvg == null ? '—' : nf(eAvg, 1)} unit={eAvg == null ? undefined : 'de 5'} onClick={() => go('sono')} foot="média dos últimos 7 dias" />}
@@ -100,8 +101,8 @@ function Weight({ focusKey = 0 }: { focusKey?: number }) {
   const lastPt = wt.points[wt.points.length - 1];
   const flux = lastPt && wt.points.length >= 4 ? (() => {
     const d = lastPt.weight - lastPt.trend;
-    if (Math.abs(d) <= wt.band) return { dir: 0, text: `Último registro dentro da flutuação normal (tendência ${nf(lastPt.trend, 1)} kg)` };
-    return { dir: Math.sign(d), text: `Último registro ${nf(Math.abs(d), 1)} kg ${d > 0 ? 'acima' : 'abaixo'} da tendência: provavelmente água/sal, veja nos próximos dias` };
+    if (Math.abs(d) <= wt.band) return { dir: 0, text: `Último registro dentro da flutuação normal (tendência ${fmtW(lastPt.trend, 1)})` };
+    return { dir: Math.sign(d), text: `Último registro ${fmtW(Math.abs(d), 1)} ${d > 0 ? 'acima' : 'abaixo'} da tendência: provavelmente água/sal, veja nos próximos dias` };
   })() : null;
   const [date, setDate] = useState(today);
   const [val, setVal] = useState('');
@@ -113,12 +114,12 @@ function Weight({ focusKey = 0 }: { focusKey?: number }) {
   const shown = period ? logs.filter((l) => l.date >= addDays(today, -period)) : logs;
 
   const save = () => {
-    const w = round1(parseFloat(val.replace(',', '.')));
+    const w = Math.round(fromW(parseFloat(val.replace(',', '.'))) * 100) / 100;
     if (!w || w < 20 || w > 400) return;
     actions.upsertWeight(date, w);
     setVal('');
     setDate(today);
-    toast(`${nf(w, 1)} kg registrado`);
+    toast(`${fmtW(w, 1)} registrado`);
   };
 
   // a variação é "boa" quando aproxima da meta; sem meta, fica neutra
@@ -133,7 +134,7 @@ function Weight({ focusKey = 0 }: { focusKey?: number }) {
       <div className={cx('rounded-2xl px-4 py-3', t === 'good' ? 'bg-good/10' : t === 'warn' ? 'bg-warn/10' : 'bg-cream')}>
         <p className="text-[12.5px] text-muted">{label}</p>
         <p className={cx('text-[18px] num flex items-center gap-1', t === 'good' ? 'text-good' : t === 'warn' ? 'text-warn' : 'text-ink')}>
-          {v == null ? '—' : <>{v < 0 ? <LuTrendingDown size={16} /> : v > 0 ? <LuTrendingUp size={16} /> : null}{v > 0 ? '+' : ''}{nf(v, 1)}<span className="unit">kg</span></>}
+          {v == null ? '—' : <>{v < 0 ? <LuTrendingDown size={16} /> : v > 0 ? <LuTrendingUp size={16} /> : null}{v > 0 ? '+' : ''}{numW(v, 1)}<span className="unit">{wUnit()}</span></>}
         </p>
       </div>
     );
@@ -145,7 +146,7 @@ function Weight({ focusKey = 0 }: { focusKey?: number }) {
         <Card className="p-5 md:p-6">
           <p className="eyebrow">Peso atual</p>
           <p className="num text-[56px] text-ink leading-none mt-2">
-            {last ? nf(last.weight!, 1) : '—'}<span className="unit">kg</span>
+            {last ? numW(last.weight!, 1) : '—'}<span className="unit">{wUnit()}</span>
           </p>
           <p className="text-[13px] text-muted mt-1.5">{last ? `registrado ${relDay(last.date).toLowerCase()}` : 'Nenhum registro ainda'}</p>
           <div className="grid grid-cols-2 gap-2 mt-5">
@@ -155,7 +156,7 @@ function Weight({ focusKey = 0 }: { focusKey?: number }) {
           {last && <Bmi weight={last.weight!} />}
           {goal != null && last && (
             <p className="text-[13.5px] text-ink/80 mt-4">
-              Meta: <b className="font-semibold">{nf(goal, 1)} kg</b> · {Math.abs(last.weight! - goal) < 0.1 ? 'meta atingida 🎉' : `faltam ${nf(Math.abs(last.weight! - goal), 1)} kg`}
+              Meta: <b className="font-semibold">{fmtW(goal, 1)}</b> · {Math.abs(last.weight! - goal) < 0.1 ? 'meta atingida 🎉' : `faltam ${fmtW(Math.abs(last.weight! - goal), 1)}`}
             </p>
           )}
         </Card>
@@ -164,8 +165,8 @@ function Weight({ focusKey = 0 }: { focusKey?: number }) {
           <p className="text-[16px] font-semibold text-ink mb-4">Registrar peso</p>
           <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); save(); }}>
             <div className="grid grid-cols-2 gap-2">
-              <Field label="Peso (kg)">
-                <Input id="peso-input" inputMode="decimal" value={val} onChange={(e) => setVal(e.target.value)} placeholder={last ? nf(last.weight!, 1) : '80,0'} className="text-[18px] font-medium" />
+              <Field label={`Peso (${wUnit()})`}>
+                <Input id="peso-input" inputMode="decimal" value={val} onChange={(e) => setVal(e.target.value)} placeholder={last ? numW(last.weight!, 1) : wUnit() === 'lb' ? '176,0' : '80,0'} className="text-[18px] font-medium" />
               </Field>
               <Field label="Dia"><Input type="date" className="min-w-0 px-3" value={date} max={today} onChange={(e) => setDate(e.target.value || today)} /></Field>
             </div>
@@ -184,7 +185,7 @@ function Weight({ focusKey = 0 }: { focusKey?: number }) {
               ))}
             </div>
           </div>
-          <LineChart data={shown.map((l) => ({ label: fmtShort(l.date), value: l.weight!, sub: relDay(l.date) }))} unit=" kg" goal={goal}
+          <LineChart data={shown.map((l) => ({ label: fmtShort(l.date), value: l.weight!, sub: relDay(l.date) }))} weight goal={goal}
             trend={shown.map((l) => round1(trendBy.get(l.date) ?? l.weight!))} trendLabel="tendência"
             band={shown.map((l) => { const t = trendBy.get(l.date); return t == null ? null : { lo: round1(t - wt.band), hi: round1(t + wt.band) }; })} />
           {flux && (
@@ -192,7 +193,7 @@ function Weight({ focusKey = 0 }: { focusKey?: number }) {
               {flux.dir === 0 ? '●' : flux.dir > 0 ? '▲' : '▼'} {flux.text}
             </p>
           )}
-          <p className="text-[12px] text-muted mt-1">Tracejado = tendência (média suavizada, ignora água e sal do dia a dia). Faixa = flutuação normal (±{nf(wt.band, 1)} kg).</p>
+          <p className="text-[12px] text-muted mt-1">Tracejado = tendência (média suavizada, ignora água e sal do dia a dia). Faixa = flutuação normal (±{fmtW(wt.band, 1)}).</p>
         </Card>
 
         <ProgressPhotos lastWeight={last?.weight} />
@@ -207,7 +208,7 @@ function Weight({ focusKey = 0 }: { focusKey?: number }) {
                   <li key={l.id} className="flex items-center gap-3 px-3 py-3">
                     <span className="flex-1 text-[14.5px] text-ink/80">{relDay(l.date)}</span>
                     {d != null && d !== 0 && <span className={cx('text-[12.5px] tabular-nums', tone(d) === 'good' ? 'text-good' : tone(d) === 'warn' ? 'text-warn' : 'text-muted')}>{d > 0 ? '▲ +' : '▼ '}{nf(d, 1)}</span>}
-                    <span className="text-[15px] font-semibold text-ink tabular-nums w-20 text-right">{nf(l.weight!, 1)} kg</span>
+                    <span className="text-[15px] font-semibold text-ink tabular-nums w-20 text-right">{fmtW(l.weight!, 1)}</span>
                     <DeleteButton onConfirm={() => actions.deleteBody(l.id)} />
                   </li>
                 );
@@ -542,12 +543,12 @@ function ProgressPhotos({ lastWeight }: { lastWeight?: number }) {
                 <div key={p.id}>
                   <Thumb id={p.photoId} className="w-full aspect-[3/4] rounded-2xl" />
                   <p className="text-[13.5px] text-ink mt-2 font-medium">{relDay(p.date)}</p>
-                  <p className="text-[12.5px] text-muted">{p.weight ? `${nf(p.weight, 1)} kg` : 'sem peso'}</p>
+                  <p className="text-[12.5px] text-muted">{p.weight ? `${fmtW(p.weight, 1)}` : 'sem peso'}</p>
                 </div>
               ))}
             </div>
             <p className="text-[14px] text-ink/80 mt-4">
-              {days} dias de diferença{a.weight && b.weight ? ` · ${b.weight - a.weight > 0 ? '+' : ''}${nf(b.weight - a.weight, 1)} kg` : ''}
+              {days} dias de diferença{a.weight && b.weight ? ` · ${b.weight - a.weight > 0 ? '+' : ''}${fmtW(b.weight - a.weight, 1)}` : ''}
             </p>
             <div className="flex gap-2 mt-4">
               <DeleteButton compact={false} label="Apagar a mais antiga" onConfirm={() => { deletePhoto(a.photoId); actions.deleteProgressPhoto(a.id); setCompare(null); }} />
@@ -671,7 +672,7 @@ function ReportView() {
           <Row l="Hábitos concluídos" v={`${r.habitPct}%`} c={cmp(r.habitPct, p.habitPct, ' pts')} />
           {r.topHabit && <Row l="Hábito mais feito" v={`${r.topHabit.name} (${r.topHabit.done}x)`} />}
           <Row l="Sono médio" v={r.sleepNights ? `${nf(r.sleepAvg, 1)} h` : '—'} c={r.sleepNights ? `${r.sleepNightsMet} de ${r.sleepNights} noites na meta` : undefined} />
-          <Row l="Peso" v={r.weightEnd != null ? `${nf(r.weightEnd, 1)} kg` : '—'} c={r.weightStart != null && r.weightEnd != null && r.weightStart !== r.weightEnd ? `${r.weightEnd - r.weightStart > 0 ? '+' : ''}${nf(r.weightEnd - r.weightStart, 1)} kg na semana` : undefined} />
+          <Row l="Peso" v={r.weightEnd != null ? `${fmtW(r.weightEnd, 1)}` : '—'} c={r.weightStart != null && r.weightEnd != null && r.weightStart !== r.weightEnd ? `${r.weightEnd - r.weightStart > 0 ? '+' : ''}${fmtW(r.weightEnd - r.weightStart, 1)} na semana` : undefined} />
         </div>
       </Card>
       <div className="space-y-4 md:space-y-5">

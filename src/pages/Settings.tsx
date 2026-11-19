@@ -1,13 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { fromV, fromW, toV, toW, vUnit, wUnit } from '../units';
 import { LuCalculator, LuCloud, LuCopy, LuDownload, LuLogOut, LuRefreshCw, LuRotateCcw, LuUpload } from 'react-icons/lu';
 import { useStore, validateState } from '../store';
 import { useIntent } from '../intent';
 import { useSync } from '../sync';
 import AuthForm from '../components/AuthForm';
 import type { Accent, Goals, HomeBlockId, ModuleId, Prefs, TabId } from '../types';
-import { ACCENTS, DEFAULT_HOME } from '../prefs';
+import { ACCENTS, DEFAULT_HOME, FAB_DEFAULT, FAB_OPTIONS, PALETTE } from '../prefs';
+import { playSound } from '../sound';
+import { savePhoto } from '../photos';
 import { AvatarPicker } from '../components/Avatar';
-import { biometricAvailable, notificationsAllowed, isNative, shareFile } from '../native';
+import { biometricAvailable, currentAppIcon, notificationsAllowed, isNative, setAppIcon, shareFile } from '../native';
 import { buildCsv, buildZip, CSV_LIST, textToB64, type CsvId } from '../export';
 import { hashPin, loadLock, PinPad, saveLock } from '../components/Lock';
 import { LuArrowDown, LuArrowUp, LuEye, LuEyeOff, LuTrash2 } from 'react-icons/lu';
@@ -217,20 +220,20 @@ function Row({ label, sub, children }: { label: string; sub: string; children: R
 function GoalsTab() {
   const { state, actions, toast } = useStore();
   const [g, setG] = useState<Goals>(state.goals);
-  const [weight, setWeight] = useState(state.goals.weight != null ? String(state.goals.weight).replace('.', ',') : '');
-  const changed = JSON.stringify(g) !== JSON.stringify(state.goals) || weight !== (state.goals.weight != null ? String(state.goals.weight).replace('.', ',') : '');
+  const [weight, setWeight] = useState(state.goals.weight != null ? String(toW(state.goals.weight)).replace('.', ',') : '');
+  const changed = JSON.stringify(g) !== JSON.stringify(state.goals) || weight !== (state.goals.weight != null ? String(toW(state.goals.weight)).replace('.', ',') : '');
   const save = () => {
     const w = parseFloat(weight.replace(',', '.'));
-    actions.setGoals({ ...g, weight: weight.trim() && !isNaN(w) ? Math.round(w * 10) / 10 : undefined });
+    actions.setGoals({ ...g, weight: weight.trim() && !isNaN(w) ? Math.round(fromW(w) * 100) / 100 : undefined });
     toast('Metas salvas');
   };
   return (
     <Section title="Metas diárias" sub="Usadas no Score do dia e nos gráficos.">
       <div className="divide-y divide-line -mt-2">
         <Row label="Refeições" sub="registradas por dia"><NumInput value={g.meals ?? 4} onChange={(v) => setG({ ...g, meals: Math.max(1, Math.round(v)) })} /></Row>
-        <Row label="Água" sub={`ml por dia (${nf((g.water || 0) / 1000, 1)} L)`}><NumInput value={g.water} onChange={(v) => setG({ ...g, water: Math.max(250, Math.round(v)) })} /></Row>
+        <Row label="Água" sub={vUnit() === 'oz' ? 'oz por dia' : `ml por dia (${nf((g.water || 0) / 1000, 1)} L)`}><NumInput value={toV(g.water)} onChange={(v) => setG({ ...g, water: Math.max(250, fromV(v)) })} /></Row>
         <Row label="Sono" sub="horas por noite"><NumInput value={g.sleep ?? 8} onChange={(v) => setG({ ...g, sleep: Math.min(14, Math.max(4, v)) })} /></Row>
-        <Row label="Peso desejado" sub="kg (opcional)">
+        <Row label="Peso desejado" sub={`${wUnit()} (opcional)`}>
           <Input inputMode="decimal" className="text-center" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="—" />
         </Row>
       </div>
@@ -384,7 +387,7 @@ function Choice<T extends string | number>({ value, onChange, options }: { value
     <div className="flex gap-1 p-1 rounded-full bg-cream">
       {options.map((o) => (
         <button key={String(o.v)} onClick={() => onChange(o.v)}
-          className={cx('press flex-1 h-9 rounded-full text-[13.5px] font-medium', value === o.v ? 'bg-ink text-on-ink' : 'text-ink/60')}>{o.l}</button>
+          className={cx('press flex-1 min-w-0 min-h-9 py-1 px-1.5 rounded-full text-[13.5px] leading-tight font-medium', value === o.v ? 'bg-ink text-on-ink' : 'text-ink/60')}>{o.l}</button>
       ))}
     </div>
   );
@@ -405,8 +408,248 @@ function MoveRow({ label, on, onToggle, onUp, onDown, upDisabled, downDisabled }
   );
 }
 
+const PALETTES: { id: NonNullable<Prefs['palette']>; label: string; light: [string, string, string]; dark: [string, string, string] }[] = [
+  { id: 'areia', label: 'Areia', light: ['#E9E5DF', '#FFFFFF', '#1C1B1A'], dark: ['#151413', '#201E1C', '#F3F0EB'] },
+  { id: 'grafite', label: 'Grafite', light: ['#E6E7E9', '#FFFFFF', '#17181A'], dark: ['#111214', '#1B1C1F', '#EEF0F2'] },
+  { id: 'oceano', label: 'Oceano', light: ['#E1E8ED', '#FFFFFF', '#12202B'], dark: ['#0D151B', '#16212A', '#E8F0F5'] },
+  { id: 'floresta', label: 'Floresta', light: ['#E2E8E0', '#FFFFFF', '#18211A'], dark: ['#0F1511', '#18211A', '#EAF1EB'] },
+  { id: 'lavanda', label: 'Lavanda', light: ['#E8E4EE', '#FFFFFF', '#1E1A26'], dark: ['#13111A', '#1D1A25', '#F0ECF6'] },
+];
+const AREAS: { id: 'treino' | 'nutri' | 'habitos' | 'sono' | 'agua'; label: string }[] = [
+  { id: 'treino', label: 'Treino' }, { id: 'nutri', label: 'Alimentação' }, { id: 'habitos', label: 'Hábitos' }, { id: 'sono', label: 'Sono' }, { id: 'agua', label: 'Água' },
+];
+const ICONS: { id: NonNullable<Prefs['appIcon']>; label: string; bg: string; fg: string }[] = [
+  { id: 'laranja', label: 'Laranja', bg: '#F26B3A', fg: '#FFFFFF' }, { id: 'escuro', label: 'Noite', bg: '#1C1B1A', fg: '#F26B3A' },
+  { id: 'claro', label: 'Areia', bg: '#F4F1EC', fg: '#F26B3A' }, { id: 'mono', label: 'Preto e branco', bg: '#FFFFFF', fg: '#1C1B1A' },
+];
+const FONTS: { id: NonNullable<Prefs['font']>; label: string; family: string }[] = [
+  { id: 'moderna', label: 'Moderna', family: '"Inter", system-ui, sans-serif' }, { id: 'arredondada', label: 'Arredondada', family: '"Nunito", ui-rounded, sans-serif' },
+  { id: 'condensada', label: 'Condensada', family: '"Roboto Condensed", "Arial Narrow", sans-serif' }, { id: 'classica', label: 'Clássica', family: '"Fraunces", Georgia, serif' },
+];
+const SIZES: { v: Prefs['textSize']; l: string }[] = [{ v: 0.9, l: '90%' }, { v: 1, l: '100%' }, { v: 1.1, l: '110%' }, { v: 1.2, l: '120%' }, { v: 1.3, l: '130%' }];
+
+/** Botões em linha que quebram (para opções com nomes longos). */
+function Chips<T extends string>({ value, onChange, options, label }: { value: T; onChange: (v: T) => void; options: { v: T; l: string }[]; label?: string }) {
+  return (
+    <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={label}>
+      {options.map((o) => (
+        <button key={o.v} role="radio" aria-checked={value === o.v} onClick={() => onChange(o.v)}
+          className={cx('press h-10 px-4 rounded-full text-[13.5px] font-medium', value === o.v ? 'bg-ink text-on-ink' : 'bg-cream text-ink/70')}>{o.l}</button>
+      ))}
+    </div>
+  );
+}
+const Sub = ({ children }: { children: React.ReactNode }) => <p className="text-[13px] font-semibold text-ink mt-5 mb-2 first:mt-0">{children}</p>;
+
+function LMark({ bg, fg, className }: { bg: string; fg: string; className?: string }) {
+  return (
+    <svg viewBox="0 0 108 108" className={className} aria-hidden="true">
+      <rect width="108" height="108" rx="26" fill={bg} stroke="rgba(0,0,0,.08)" strokeWidth="2" />
+      <path d="M39.27,35.25 L39.27,66.05 L48.64,66.05 L52.66,58.02 L58.02,72.75 L62.04,62.04 L68.73,62.04" fill="none" stroke={fg} strokeWidth="6.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+type ApTab = 'cores' | 'texto' | 'telas' | 'sons';
 function AppearanceTab({ go }: { go?: (t: TabId) => void }) {
+  const [sub, setSub] = useState<ApTab>('cores');
+  return (
+    <>
+      <div className="grid grid-cols-4 gap-1 p-1 rounded-full bg-cream" role="tablist" aria-label="Partes da aparência">
+        {([['cores', 'Cores'], ['texto', 'Texto'], ['telas', 'Telas'], ['sons', 'Sons e +']] as const).map(([id, l]) => (
+          <button key={id} role="tab" aria-selected={sub === id} onClick={() => setSub(id)}
+            className={cx('press h-10 rounded-full text-[13.5px] font-medium truncate px-1', sub === id ? 'bg-ink text-on-ink shadow-[var(--shadow-1)]' : 'text-ink/60')}>{l}</button>
+        ))}
+      </div>
+      {sub === 'cores' && <ColorsPart />}
+      {sub === 'texto' && <TextPart />}
+      {sub === 'telas' && <ScreensPart go={go} />}
+      {sub === 'sons' && <SoundsPart />}
+    </>
+  );
+}
+
+function ColorsPart() {
+  const { state, actions, toast } = useStore();
+  const p = state.prefs;
+  const set = (patch: Partial<Prefs>) => actions.setPrefs(patch);
+  const dark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
+  const pal = p.palette ?? 'areia';
+  const fileRef = useRef<HTMLInputElement>(null);
+  const pickPhoto = async (f?: File) => {
+    if (!f) return;
+    try { const id = await savePhoto(f); set({ bg: 'foto', bgPhoto: id }); toast('Fundo trocado'); } catch { toast('Não deu para usar essa foto'); }
+  };
+  const [icon, setIcon] = useState(() => currentAppIcon());
+  const iconOk = icon !== '';
+  const curIcon = (icon || p.appIcon || 'laranja') as NonNullable<Prefs['appIcon']>;
+  const ac = p.areaColors || {};
+  const reset = () => {
+    set({ palette: undefined, accent: 'laranja', accentHex: undefined, darkStyle: undefined, bg: undefined, bgPhoto: undefined, font: undefined, boldText: undefined,
+      density: undefined, radius: undefined, glass: true, glassLevel: undefined, motion: undefined, sound: undefined, soundOn: undefined, navLabels: undefined,
+      navStyle: undefined, fabActions: undefined, headerPill: undefined, greeting: undefined, areaColors: undefined, textSize: 1 });
+    toast('Aparência padrão restaurada');
+  };
+  return (
+    <>
+      <Section title="Tema">
+        <Choice value={p.theme} onChange={(v) => set({ theme: v })} options={[{ v: 'light', l: 'Claro' }, { v: 'dark', l: 'Escuro' }, { v: 'auto', l: 'Automático' }]} />
+        <p className="text-[12.5px] text-muted mt-2">Automático segue o modo claro/escuro do celular.</p>
+        <Sub>Paleta</Sub>
+        <div className="grid grid-cols-3 min-[420px]:grid-cols-5 gap-2" role="radiogroup" aria-label="Paleta">
+          {PALETTES.map((x) => {
+            const [cv, sf, ink] = dark ? x.dark : x.light, on = pal === x.id;
+            return (
+              <button key={x.id} role="radio" aria-checked={on} onClick={() => set({ palette: x.id === 'areia' ? undefined : x.id })}
+                className={cx('press rounded-2xl p-1.5 text-center', on ? 'ring-2 ring-[var(--color-ink)]' : 'ring-1 ring-[var(--color-line)]')}>
+                <span className="block h-14 rounded-xl p-1.5 relative overflow-hidden" style={{ background: cv }}>
+                  <span className="block h-full w-[70%] rounded-lg p-1.5" style={{ background: sf }}>
+                    <span className="block h-1.5 w-[80%] rounded-full" style={{ background: ink }} />
+                    <span className="block h-1.5 w-[50%] rounded-full mt-1 opacity-40" style={{ background: ink }} />
+                  </span>
+                  <span className="absolute right-1.5 bottom-1.5 size-3.5 rounded-full" style={{ background: 'var(--color-orange)' }} />
+                </span>
+                <span className="block text-[12.5px] font-medium text-ink mt-1.5 truncate">{x.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <Sub>Modo escuro</Sub>
+        <Choice value={p.darkStyle ?? 'quente'} onChange={(v) => set({ darkStyle: v === 'quente' ? undefined : v })} options={[{ v: 'quente', l: 'Quente' }, { v: 'oled', l: 'Preto (OLED)' }]} />
+        <p className="text-[12.5px] text-muted mt-2">Preto puro economiza bateria em telas OLED.</p>
+      </Section>
+
+      <Section title="Cor de destaque">
+        <div className="grid grid-cols-2 min-[400px]:grid-cols-3 gap-2">
+          {ACCENTS.map((a) => (
+            <button key={a.id} onClick={() => set({ accent: a.id, accentHex: undefined })}
+              className={cx('press h-12 min-w-0 rounded-2xl flex items-center gap-2 px-2.5 text-[13.5px]', p.accent === a.id && !p.accentHex ? 'bg-ink text-on-ink' : 'bg-cream text-ink/75')}>
+              <span className="size-4 rounded-full shrink-0" style={{ background: a.color }} /><span className="truncate">{a.label}</span>
+            </button>
+          ))}
+          <label className={cx('press relative h-12 min-w-0 rounded-2xl flex items-center gap-2 px-2.5 text-[13.5px] cursor-pointer', p.accentHex ? 'bg-ink text-on-ink' : 'bg-cream text-ink/75')}>
+            <span className="size-4 rounded-full shrink-0" style={{ background: p.accentHex || 'conic-gradient(#F26B3A, #E0A526, #2E9E5B, #3B7BE0, #7A5AE0, #D9468F, #F26B3A)' }} />
+            <span className="truncate">{p.accentHex ? p.accentHex.toUpperCase() : 'Cor livre'}</span>
+            <input type="color" aria-label="Escolher qualquer cor" className="absolute inset-0 opacity-0 cursor-pointer" value={p.accentHex || '#F26B3A'}
+              onChange={(e) => set({ accentHex: e.target.value })} />
+          </label>
+        </div>
+      </Section>
+
+      <Section title="Cores das áreas" sub="Usadas no Score, nos calendários e nos atalhos.">
+        <div className="space-y-3">
+          {AREAS.map((a) => (
+            <div key={a.id}>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <span className="text-[14px] text-ink flex items-center gap-2"><span className="size-3 rounded-full" style={{ background: `var(--area-${a.id})` }} />{a.label}</span>
+                {ac[a.id] && <button onClick={() => { const n = { ...ac }; delete n[a.id]; set({ areaColors: n }); }} className="text-[12.5px] text-muted underline underline-offset-4">padrão</button>}
+              </div>
+              <div className="grid grid-cols-8 gap-1 max-w-[360px]" role="radiogroup" aria-label={`Cor de ${a.label}`}>
+                {PALETTE.map((c) => (
+                  <button key={c} role="radio" aria-checked={ac[a.id] === c} aria-label={c} onClick={() => set({ areaColors: { ...ac, [a.id]: c } })}
+                    className={cx('press aspect-square rounded-full grid place-items-center', ac[a.id] === c && 'ring-2 ring-[var(--color-ink)]')}>
+                    <span className="w-[78%] aspect-square rounded-full" style={{ background: c }} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      <Section title="Fundo">
+        <div className="grid grid-cols-3 min-[420px]:grid-cols-5 gap-2" role="radiogroup" aria-label="Fundo">
+          {([['arcos', 'Arcos'], ['liso', 'Liso'], ['degrade', 'Degradê'], ['textura', 'Textura'], ['foto', 'Foto']] as const).map(([id, l]) => {
+            const on = (p.bg ?? 'arcos') === id;
+            return (
+              <button key={id} role="radio" aria-checked={on}
+                onClick={() => { if (id === 'foto' && !p.bgPhoto) fileRef.current?.click(); else set({ bg: id === 'arcos' ? undefined : id }); }}
+                className={cx('press rounded-2xl p-1.5', on ? 'ring-2 ring-[var(--color-ink)]' : 'ring-1 ring-[var(--color-line)]')}>
+                <span className={cx('block h-12 rounded-xl overflow-hidden relative bg-canvas', `bgprev-${id}`)} />
+                <span className="block text-[12.5px] font-medium text-ink mt-1.5">{l}</span>
+              </button>
+            );
+          })}
+        </div>
+        {p.bg === 'foto' && <Button variant="soft" className="mt-3" onClick={() => fileRef.current?.click()}>Trocar foto do fundo</Button>}
+        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => { void pickPhoto(e.target.files?.[0]); e.target.value = ''; }} />
+      </Section>
+
+      <Section title="Vidro e cantos">
+        <Toggle checked={p.glass !== false} onChange={(v) => set({ glass: v })} label="Blocos translúcidos" sub="Estilo liquid glass. Desligue se o celular ficar lento." />
+        {p.glass !== false && (
+          <label className="block mt-3">
+            <span className="flex justify-between text-[12.5px] text-muted"><span>Mais sólido</span><span>Mais transparente</span></span>
+            <input type="range" min={0} max={1} step={0.1} value={p.glassLevel ?? 0.5} onChange={(e) => set({ glassLevel: Number(e.target.value) })}
+              aria-label="Intensidade do vidro" className="w-full mt-1 accent-[var(--color-orange)]" />
+          </label>
+        )}
+        <Sub>Cantos</Sub>
+        <Choice value={p.radius ?? 'arredondado'} onChange={(v) => set({ radius: v === 'arredondado' ? undefined : v })} options={[{ v: 'arredondado', l: 'Redondos' }, { v: 'medio', l: 'Médios' }, { v: 'reto', l: 'Retos' }]} />
+      </Section>
+
+      <Section title="Ícone do app" sub={iconOk ? 'O ícone na tela inicial pode levar alguns segundos para mudar.' : isNative() ? 'Atualize o app para a versão mais nova para trocar o ícone.' : 'Disponível no app Android.'}>
+        <div className="grid grid-cols-4 gap-2" role="radiogroup" aria-label="Ícone do app">
+          {ICONS.map((x) => (
+            <button key={x.id} role="radio" aria-checked={curIcon === x.id} disabled={!iconOk}
+              onClick={() => { if (setAppIcon(x.id)) { setIcon(x.id); set({ appIcon: x.id }); toast(`Ícone: ${x.label}`); } else toast('Não deu para trocar o ícone'); }}
+              className={cx('press rounded-2xl p-1.5 text-center disabled:opacity-50', curIcon === x.id ? 'ring-2 ring-[var(--color-ink)]' : 'ring-1 ring-[var(--color-line)]')}>
+              <LMark bg={x.bg} fg={x.fg} className="w-full max-w-[64px] mx-auto block" />
+              <span className="block text-[11.5px] font-medium text-ink mt-1 leading-tight">{x.label}</span>
+            </button>
+          ))}
+        </div>
+      </Section>
+
+      <Section title="Noite profunda">
+        <Toggle checked={p.nightWarm !== false} onChange={(v) => set({ nightWarm: v })} label="Esquentar as cores antes de dormir" sub="Nas 2 horas antes do seu horário de sono, o app fica em tons âmbar." />
+      </Section>
+      <button className="press w-full h-11 rounded-full text-[14px] text-muted flex items-center justify-center gap-2" onClick={reset}><LuRotateCcw size={15} /> Restaurar a aparência padrão</button>
+    </>
+  );
+}
+
+function TextPart() {
   const { state, actions } = useStore();
+  const p = state.prefs;
+  const set = (patch: Partial<Prefs>) => actions.setPrefs(patch);
+  const font = p.font ?? 'moderna';
+  return (
+    <>
+      <Section title="Fonte">
+        <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Fonte">
+          {FONTS.map((f) => (
+            <button key={f.id} role="radio" aria-checked={font === f.id} onClick={() => set({ font: f.id === 'moderna' ? undefined : f.id })}
+              className={cx('press rounded-2xl px-3 py-3 text-left', font === f.id ? 'bg-ink text-on-ink' : 'bg-cream text-ink')}>
+              <span className="block text-[26px] leading-none" style={{ fontFamily: f.family, fontWeight: 650 }}>Aa 82</span>
+              <span className="block text-[13px] mt-1.5 opacity-80">{f.label}</span>
+            </button>
+          ))}
+        </div>
+        <div className="mt-3"><Toggle checked={!!p.boldText} onChange={(v) => set({ boldText: v || undefined })} label="Texto em negrito" sub="Deixa os textos mais grossos e fáceis de ler." /></div>
+      </Section>
+      <Section title="Tamanho do texto">
+        <div className="grid grid-cols-5 gap-1 p-1 rounded-[20px] bg-cream" role="radiogroup" aria-label="Tamanho do texto">
+          {SIZES.map((x, i) => (
+            <button key={x.l} role="radio" aria-checked={p.textSize === x.v} onClick={() => set({ textSize: x.v })}
+              className={cx('press h-14 rounded-2xl flex flex-col items-center justify-center', p.textSize === x.v ? 'bg-ink text-on-ink' : 'text-ink/65')}>
+              <span className="font-semibold leading-none" style={{ fontSize: 13 + i * 3 }}>A</span>
+              <span className="text-[10.5px] mt-1 opacity-75">{x.l}</span>
+            </button>
+          ))}
+        </div>
+        <p className="text-[12.5px] text-muted mt-2">O app inteiro aumenta ou diminui junto.</p>
+      </Section>
+      <Section title="Densidade">
+        <Choice value={p.density ?? 'confortavel'} onChange={(v) => set({ density: v === 'confortavel' ? undefined : v })} options={[{ v: 'confortavel', l: 'Confortável' }, { v: 'compacta', l: 'Compacta' }]} />
+        <p className="text-[12.5px] text-muted mt-2">Compacta mostra mais coisas na tela, com menos espaço entre os blocos.</p>
+      </Section>
+    </>
+  );
+}
+
+function ScreensPart({ go }: { go?: (t: TabId) => void }) {
+  const { state, actions, toast } = useStore();
   const p = state.prefs;
   const set = (patch: Partial<Prefs>) => actions.setPrefs(patch);
   const blocks = p.homeBlocks;
@@ -419,50 +662,16 @@ function AppearanceTab({ go }: { go?: (t: TabId) => void }) {
     set({ navTabs: order.filter((x) => nav.includes(x)) });
   };
   const w = p.scoreWeights;
+  const FAB_MOD: Record<string, ModuleId | 'macros'> = { alimento: 'macros', refeicao: 'nutricao', agua: 'agua', peso: 'peso', sono: 'sono', habitos: 'habitos', treino: 'treino', cardio: 'treino' };
+  const fabAvail = FAB_OPTIONS.filter((o) => { const m = FAB_MOD[o.id]; return !m || (m === 'macros' ? macrosOn(state) : modOn(state, m)); });
+  const fabCur = p.fabActions?.length ? p.fabActions : FAB_DEFAULT.filter((id) => (id !== 'alimento' || macrosOn(state)) && (id !== 'habitos' || !macrosOn(state)));
+  const toggleFab = (id: string) => {
+    const on = fabCur.includes(id);
+    if (on && fabCur.filter((x) => fabAvail.some((o) => o.id === x)).length <= 1) { toast('Deixe pelo menos uma ação'); return; }
+    set({ fabActions: on ? fabCur.filter((x) => x !== id) : [...fabCur, id] });
+  };
   return (
     <>
-      <Section title="Tema">
-        <Choice value={p.theme} onChange={(v) => set({ theme: v })} options={[{ v: 'light', l: 'Claro' }, { v: 'dark', l: 'Escuro' }, { v: 'auto', l: 'Automático' }]} />
-        <p className="text-[12.5px] text-muted mt-2">Automático segue o modo claro/escuro do celular.</p>
-      </Section>
-      <Section title="Cor de destaque">
-        <div className="grid grid-cols-2 min-[400px]:grid-cols-3 gap-2">
-          {ACCENTS.map((a) => (
-            <button key={a.id} onClick={() => set({ accent: a.id })}
-              className={cx('press h-12 min-w-0 rounded-2xl flex items-center gap-2 px-2.5 text-[13.5px]', p.accent === a.id ? 'bg-ink text-on-ink' : 'bg-cream text-ink/75')}>
-              <span className="size-4 rounded-full shrink-0" style={{ background: a.color }} /><span className="truncate">{a.label}</span>
-            </button>
-          ))}
-        </div>
-      </Section>
-      <Section title="Noite profunda">
-        <Toggle checked={p.nightWarm !== false} onChange={(v) => set({ nightWarm: v })} label="Esquentar as cores antes de dormir" sub="Nas 2 horas antes do seu horário de sono, o app fica em tons âmbar." />
-      </Section>
-      <Section title="Efeito vidro">
-        <Toggle checked={p.glass !== false} onChange={(v) => set({ glass: v })} label="Blocos translúcidos" sub="Estilo liquid glass. Desligue se o celular ficar lento." />
-      </Section>
-      <Section title="Tamanho do texto">
-        <Choice value={p.textSize} onChange={(v) => set({ textSize: v })} options={[{ v: 1, l: 'Normal' }, { v: 1.1, l: 'Grande' }, { v: 1.2, l: 'Maior' }]} />
-      </Section>
-      <Section title="Gestos">
-        <Toggle checked={p.swipeTabs !== false} onChange={(v) => set({ swipeTabs: v })} label="Arrastar para trocar de aba" sub="Deslize o dedo para os lados para ir à aba vizinha da barra." />
-      </Section>
-      <Section title="Sensações">
-        <div className="space-y-2">
-          <Toggle checked={p.haptics} onChange={(v) => set({ haptics: v })} label="Vibração leve" sub="Ao marcar hábitos, concluir séries e bater metas." />
-          <Toggle checked={p.celebrate} onChange={(v) => set({ celebrate: v })} label="Comemorar dia 100%" sub="Uma animação quando o score do dia chega a 100%." />
-        </div>
-      </Section>
-      <Section title="Blocos do Início" sub="Mostre, esconda e reordene.">
-        <ul className="divide-y divide-line -my-2">
-          {blocks.map((b, i) => (
-            <MoveRow key={b.id} label={BLOCK_LABEL[b.id]} on={b.on}
-              onToggle={() => set({ homeBlocks: blocks.map((x) => (x.id === b.id ? { ...x, on: !x.on } : x)) })}
-              onUp={() => moveBlock(i, -1)} onDown={() => moveBlock(i, 1)} upDisabled={i === 0} downDisabled={i === blocks.length - 1} />
-          ))}
-        </ul>
-        <button className="text-[13px] text-muted underline underline-offset-4 mt-3" onClick={() => set({ homeBlocks: DEFAULT_HOME.map((b) => ({ ...b })) })}>Voltar ao padrão</button>
-      </Section>
       <Section title="Barra de abas" sub="Escolha as abas da barra inferior (o Início fica sempre).">
         <ul className="divide-y divide-line -my-2">
           {navList.map((n, i) => {
@@ -483,16 +692,95 @@ function AppearanceTab({ go }: { go?: (t: TabId) => void }) {
             ))}
           </div>
         )}
+        <Sub>Estilo</Sub>
+        <Choice value={p.navStyle ?? 'flutuante'} onChange={(v) => set({ navStyle: v === 'flutuante' ? undefined : v })} options={[{ v: 'flutuante', l: 'Flutuante' }, { v: 'fixa', l: 'Fixa no rodapé' }]} />
+        <div className="mt-3"><Toggle checked={p.navLabels !== false} onChange={(v) => set({ navLabels: v ? undefined : false })} label="Nomes embaixo dos ícones" /></div>
+      </Section>
+
+      <Section title="Botão ＋" sub="O que aparece ao tocar no botão de novo registro.">
+        <div className="flex flex-wrap gap-2">
+          {fabAvail.map((o) => {
+            const on = fabCur.includes(o.id);
+            return (
+              <button key={o.id} role="checkbox" aria-checked={on} onClick={() => toggleFab(o.id)}
+                className={cx('press h-10 px-4 rounded-full text-[13.5px] font-medium', on ? 'bg-ink text-on-ink' : 'bg-cream text-ink/60')}>{on ? '✓ ' : ''}{o.label}</button>
+            );
+          })}
+        </div>
+        {p.fabActions && <button className="text-[13px] text-muted underline underline-offset-4 mt-3" onClick={() => set({ fabActions: undefined })}>Voltar ao padrão</button>}
+      </Section>
+
+      <Section title="Topo do app">
+        <Sub>Selo ao lado do logo</Sub>
+        <Chips label="Selo do topo" value={p.headerPill ?? 'score'} onChange={(v) => set({ headerPill: v === 'score' ? undefined : v })}
+          options={[{ v: 'score', l: 'Score do dia' }, { v: 'agua', l: 'Água' }, { v: 'kcal', l: 'Calorias' }, { v: 'sequencia', l: 'Sequência' }, { v: 'nada', l: 'Nada' }]} />
+        <Sub>Saudação do Início</Sub>
+        <Choice value={p.greeting ?? 'nome'} onChange={(v) => set({ greeting: v === 'nome' ? undefined : v })} options={[{ v: 'nome', l: 'Nome' }, { v: 'frase', l: 'Frase do dia' }, { v: 'nada', l: 'Nada' }]} />
+      </Section>
+
+      <Section title="Blocos do Início" sub="Mostre, esconda e reordene.">
+        <ul className="divide-y divide-line -my-2">
+          {blocks.map((b, i) => (
+            <MoveRow key={b.id} label={BLOCK_LABEL[b.id]} on={b.on}
+              onToggle={() => set({ homeBlocks: blocks.map((x) => (x.id === b.id ? { ...x, on: !x.on } : x)) })}
+              onUp={() => moveBlock(i, -1)} onDown={() => moveBlock(i, 1)} upDisabled={i === 0} downDisabled={i === blocks.length - 1} />
+          ))}
+        </ul>
+        <button className="text-[13px] text-muted underline underline-offset-4 mt-3" onClick={() => set({ homeBlocks: DEFAULT_HOME.map((b) => ({ ...b })) })}>Voltar ao padrão</button>
       </Section>
       <Section title="Peso de cada parte no Score" sub="0 = não conta · 1 = normal · 3 = conta o triplo.">
         <div className="space-y-3">
           {([['treino', 'Treino'], ['refeicoes', 'Refeições'], ['habitos', 'Hábitos']] as const).map(([k, l]) => (
             <div key={k} className="flex items-center justify-between gap-3">
               <span className="text-[15px] text-ink">{l}</span>
-              <div className="w-48"><Choice value={w[k]} onChange={(v) => set({ scoreWeights: { ...w, [k]: v } })} options={[0, 1, 2, 3].map((v) => ({ v, l: String(v) }))} /></div>
+              <div className="w-44 min-[360px]:w-48"><Choice value={w[k]} onChange={(v) => set({ scoreWeights: { ...w, [k]: v } })} options={[0, 1, 2, 3].map((v) => ({ v, l: String(v) }))} /></div>
             </div>
           ))}
         </div>
+      </Section>
+      <Section title="Gestos">
+        <Toggle checked={p.swipeTabs !== false} onChange={(v) => set({ swipeTabs: v })} label="Arrastar para trocar de aba" sub="Deslize o dedo para os lados para ir à aba vizinha da barra." />
+      </Section>
+    </>
+  );
+}
+
+function SoundsPart() {
+  const { state, actions } = useStore();
+  const p = state.prefs;
+  const set = (patch: Partial<Prefs>) => actions.setPrefs(patch);
+  const so = { set: false, rest: true, goal: true, ...(p.soundOn || {}) };
+  const u = p.units || {};
+  return (
+    <>
+      <Section title="Movimento">
+        <Choice value={p.motion ?? 'completa'} onChange={(v) => set({ motion: v === 'completa' ? undefined : v })} options={[{ v: 'completa', l: 'Completo' }, { v: 'reduzida', l: 'Reduzido' }, { v: 'nenhuma', l: 'Nenhum' }]} />
+        <p className="text-[12.5px] text-muted mt-2">Reduzido tira os enfeites animados; Nenhum desliga todas as animações.</p>
+      </Section>
+      <Section title="Sons" right={(p.sound ?? 'suave') !== 'off' ? <Button variant="soft" onClick={() => playSound('goal', p.sound ?? 'suave')}>Ouvir</Button> : undefined}>
+        <Choice value={p.sound ?? 'suave'} onChange={(v) => { set({ sound: v === 'suave' ? undefined : v }); if (v !== 'off') playSound('set', v); }}
+          options={[{ v: 'off', l: 'Mudo' }, { v: 'suave', l: 'Suave' }, { v: 'arcade', l: 'Arcade' }, { v: 'sino', l: 'Sino' }]} />
+        {(p.sound ?? 'suave') !== 'off' && (
+          <div className="space-y-2 mt-3">
+            <Toggle checked={so.set} onChange={(v) => set({ soundOn: { ...so, set: v } })} label="Série concluída" />
+            <Toggle checked={so.rest} onChange={(v) => set({ soundOn: { ...so, rest: v } })} label="Fim do descanso" />
+            <Toggle checked={so.goal} onChange={(v) => set({ soundOn: { ...so, goal: v } })} label="Recorde, selo e dia completo" />
+          </div>
+        )}
+      </Section>
+      <Section title="Sensações">
+        <div className="space-y-2">
+          <Toggle checked={p.haptics} onChange={(v) => set({ haptics: v })} label="Vibração leve" sub="Ao marcar hábitos, concluir séries e bater metas." />
+          <Toggle checked={p.celebrate} onChange={(v) => set({ celebrate: v })} label="Comemorar dia 100%" sub="Uma animação quando o score do dia chega a 100%." />
+        </div>
+      </Section>
+      <Section title="Unidades" sub="Seus registros continuam guardados do mesmo jeito; só muda como aparecem.">
+        <Sub>Peso</Sub>
+        <Choice value={u.weight ?? 'kg'} onChange={(v) => set({ units: { ...u, weight: v } })} options={[{ v: 'kg', l: 'Quilos (kg)' }, { v: 'lb', l: 'Libras (lb)' }]} />
+        <Sub>Água</Sub>
+        <Choice value={u.volume ?? 'ml'} onChange={(v) => set({ units: { ...u, volume: v } })} options={[{ v: 'ml', l: 'Litros (ml)' }, { v: 'oz', l: 'Onças (oz)' }]} />
+        <Sub>A semana começa</Sub>
+        <Choice value={u.weekStart ?? 1} onChange={(v) => set({ units: { ...u, weekStart: v } })} options={[{ v: 1, l: 'Segunda' }, { v: 0, l: 'Domingo' }]} />
       </Section>
     </>
   );

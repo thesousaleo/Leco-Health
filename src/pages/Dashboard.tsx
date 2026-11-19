@@ -1,4 +1,6 @@
 import React from 'react';
+import { quoteOfDay } from '../quotes';
+import { fmtW, numW, wUnit } from '../units';
 import {
   LuApple, LuArrowRight, LuCheck, LuChevronRight, LuDumbbell, LuListChecks, LuEyeOff, LuMoon, LuPlay, LuPlus, LuScale, LuCamera, LuSun, LuSunrise, LuSunset,
 } from 'react-icons/lu';
@@ -53,9 +55,12 @@ function MobileDashboard({ go }: { go: (t: TabId) => void }) {
           <p className="eyebrow flex items-center gap-1.5">
             <GreetIcon /> {fmtLong(today)}
           </p>
-          <h1 className="text-[30px] md:text-[38px] font-[650] tracking-[-0.04em] leading-tight text-ink mt-1.5 text-balance">
-            {greeting()}{name ? `, ${name}` : ''}
-          </h1>
+          {state.prefs.greeting === 'nada' ? <h1 className="sr-only">Início</h1> : (
+            <h1 className="text-[30px] md:text-[38px] font-[650] tracking-[-0.04em] leading-tight text-ink mt-1.5 text-balance">
+              {greeting()}{name ? `, ${name}` : ''}
+            </h1>
+          )}
+          {state.prefs.greeting === 'frase' && <p className="text-[14.5px] text-muted mt-1 text-balance italic">“{quoteOfDay()}”</p>}
         </div>
         {state.profile.avatar && (
           <button onClick={() => { setIntent('ajustes', 'ajustes:perfil'); go('ajustes'); }} aria-label="Seu perfil" className="press shrink-0 rounded-full mb-1">
@@ -164,10 +169,10 @@ function TodayCard({ go }: { go: (t: TabId) => void }) {
   const sleepToday = state.sleep.find((x) => x.date === today);
   const goalSleep = state.goals.sleep || 8;
   const ringParts: RingPart[] = ([
-    { key: 'treino', label: 'Treino', value: score.workout, color: 'var(--color-orange)', detail: workout.sub },
-    { key: 'refeicoes', label: np.label, value: score.nutrition, color: 'var(--color-good)', detail: np.detail },
-    { key: 'habitos', label: 'Hábitos', value: habits.length ? habitsDone / habits.length : 0, color: 'var(--color-mind)', detail: habits.length ? `${habitsDone} de ${habits.length} feitos` : 'nenhum programado' },
-    { key: 'sono', label: 'Sono', value: sleepToday ? Math.min(1, sleepToday.hours / goalSleep) : 0, color: 'var(--color-sleep)', detail: sleepToday ? `${nf(sleepToday.hours, 1)} h de ${goalSleep} h` : 'noite não registrada' },
+    { key: 'treino', label: 'Treino', value: score.workout, color: 'var(--area-treino)', detail: workout.sub },
+    { key: 'refeicoes', label: np.label, value: score.nutrition, color: 'var(--area-nutri)', detail: np.detail },
+    { key: 'habitos', label: 'Hábitos', value: habits.length ? habitsDone / habits.length : 0, color: 'var(--area-habitos)', detail: habits.length ? `${habitsDone} de ${habits.length} feitos` : 'nenhum programado' },
+    { key: 'sono', label: 'Sono', value: sleepToday ? Math.min(1, sleepToday.hours / goalSleep) : 0, color: 'var(--area-sono)', detail: sleepToday ? `${nf(sleepToday.hours, 1)} h de ${goalSleep} h` : 'noite não registrada' },
   ] as RingPart[]).filter((r) => modOn(state, r.key === 'refeicoes' ? 'nutricao' : r.key as ModuleId));
   const ringsRef = React.useRef<HTMLButtonElement>(null);
   const [detail, setDetail] = React.useState<DOMRect | null>(null);
@@ -385,12 +390,12 @@ function BodyCard({ go }: { go: (t: TabId) => void }) {
         {mP && <button onClick={() => (hide ? setPeek(true) : go('registros'))} aria-label={hide ? 'Mostrar peso' : undefined} className="press rounded-2xl bg-cream p-4 text-left min-w-0">
           <p className="eyebrow flex items-center gap-1.5"><LuScale size={12} /> Peso{state.prefs.discreet && <LuEyeOff size={11} className="ml-auto opacity-60" />}</p>
           <p className="num text-[26px] text-ink mt-1.5 leading-none">
-            {hide ? <span className="tracking-[0.1em] opacity-50">•••</span> : w0 != null ? nf(w0, 1) : '—'}<span className="unit">kg</span>
+            {hide ? <span className="tracking-[0.1em] opacity-50">•••</span> : w0 != null ? numW(w0, 1) : '—'}<span className="unit">{wUnit()}</span>
           </p>
           <div className="flex items-end justify-between gap-2 mt-2">
             {hide ? <p className="text-[12px] text-muted truncate">toque para ver</p> : <>
               <p className={cx('text-[12px] font-medium truncate', diff == null ? 'text-muted' : good ? 'text-good' : 'text-warn')}>
-                {diff != null ? `${Math.abs(diff) < 0.05 ? '●' : diff > 0 ? '▲' : '▼'} ${diff > 0 ? '+' : ''}${nf(diff, 1)} kg` : body[0] ? relDay(body[0].date) : 'Registrar'}
+                {diff != null ? `${Math.abs(diff) < 0.05 ? '●' : diff > 0 ? '▲' : '▼'} ${diff > 0 ? '+' : ''}${fmtW(diff, 1)}` : body[0] ? relDay(body[0].date) : 'Registrar'}
               </p>
               <Sparkline values={wVals} width={56} height={22} color="var(--color-ink)" />
             </>}

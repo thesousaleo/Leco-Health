@@ -1,5 +1,7 @@
 /* Comemorações: recorde pessoal (com cartão para compartilhar) e medalha nova. */
 import React, { useEffect, useMemo, useState } from 'react';
+import { playSound } from '../sound';
+import { fmtW } from '../units';
 import { LuShare2, LuTrophy, LuX } from 'react-icons/lu';
 import { useStore } from '../store';
 import { haptic } from '../native';
@@ -9,8 +11,8 @@ import { ShareCardModal, type CardData } from './ShareCard';
 import { Button } from './ui';
 
 export interface PrEvent { name: string; weight: number; reps: number; e1rm: number; prev?: string }
-export const announcePR = (d: PrEvent) => window.dispatchEvent(new CustomEvent('leco:pr', { detail: d }));
-export const announceBadges = (b: Badge[]) => window.dispatchEvent(new CustomEvent('leco:badges', { detail: b }));
+export const announcePR = (d: PrEvent) => { setTimeout(() => playSound('goal'), 250); window.dispatchEvent(new CustomEvent('leco:pr', { detail: d })); };
+export const announceBadges = (b: Badge[]) => { playSound('goal'); window.dispatchEvent(new CustomEvent('leco:badges', { detail: b })); };
 
 function Burst({ color }: { color: string }) {
   const parts = useMemo(() => Array.from({ length: 26 }, (_, i) => ({ a: (i / 26) * Math.PI * 2 + Math.random() * 0.3, d: 90 + Math.random() * 90, s: 5 + Math.random() * 7, delay: Math.random() * 0.12 })), []);
@@ -62,7 +64,7 @@ export function Celebrations() {
               <div className="min-w-0">
                 <p className="text-[12px] font-bold uppercase tracking-[0.1em] opacity-70">Novo recorde pessoal</p>
                 <p className="text-[18px] font-bold leading-tight truncate">{pr.name}</p>
-                <p className="text-[15px] font-semibold tabular-nums">{nf(pr.weight, pr.weight % 1 ? 1 : 0)} kg × {pr.reps} <span className="opacity-60 font-medium">· 1RM ≈ {nf(pr.e1rm, 0)} kg</span></p>
+                <p className="text-[15px] font-semibold tabular-nums">{fmtW(pr.weight, pr.weight % 1 ? 1 : 0)} × {pr.reps} <span className="opacity-60 font-medium">· 1RM ≈ {fmtW(pr.e1rm, 0)}</span></p>
               </div>
             </div>
             <button onClick={sharePR} className="press mt-4 w-full h-11 rounded-full bg-[#1C1B1A] text-white text-[14.5px] font-semibold flex items-center justify-center gap-2"><LuShare2 size={16} /> Compartilhar</button>

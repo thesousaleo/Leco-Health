@@ -1,14 +1,19 @@
 import React, { Activity, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { playSound } from './sound';
 import { useRipple, staggerIn } from './motion';
 import { LuActivity, LuApple, LuCamera, LuCircleX, LuCircleCheck, LuDroplet, LuDumbbell, LuHouse, LuListChecks, LuMoon, LuNotebookPen, LuPlus, LuScale, LuChevronLeft, LuChevronRight, LuSearch, LuSettings, LuTrophy, LuUsers, LuCloudUpload, LuSparkles } from 'react-icons/lu';
 import { setIntent } from './intent';
 import { DuoProvider } from './duo';
+import { usePhoto } from './photos';
 import { SyncProvider, useSync } from './sync';
 import AuthForm from './components/AuthForm';
 import Friends from './pages/Friends';
 import { StoreProvider, useStore } from './store';
 import type { ModuleId, TabId } from './types';
-import { dayScore, dueHabits, habitCount, isHabitDone, modOn, todayKey } from './utils';
+import { dayScore, dueHabits, habitCount, isHabitDone, modOn, overallStreak, todayKey } from './utils';
+import { dayMacros } from './food';
+import { fmtCup, fmtVolShort, setUnits } from './units';
+import { FAB_DEFAULT } from './prefs';
 import { macrosOn } from './food';
 import { RestTimerProvider } from './components/RestTimer';
 import { Button, cx, Modal, ProgressBar } from './components/ui';
@@ -76,7 +81,7 @@ function useAppearance() {
       root.classList.toggle('dark', dark);
       root.dataset.accent = accent;
       root.classList.toggle('no-glass', glass === false);
-      root.style.setProperty('--ui-zoom', String(textSize || 1));
+
       const bg = getComputedStyle(root).getPropertyValue('--color-canvas').trim() || (dark ? '#0F0F11' : '#E9E5DF');
       document.querySelector('meta[name=theme-color]')?.setAttribute('content', bg);
       setSystemBars(dark, bg);
@@ -85,6 +90,56 @@ function useAppearance() {
     mq?.addEventListener?.('change', apply);
     return () => mq?.removeEventListener?.('change', apply);
   }, [theme, accent, textSize, glass]);
+
+  // tamanho do texto: em celulares estreitos, limita para a tela útil não ficar menor que 280 px
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    const apply = () => {
+      const want = textSize || 1;
+      const z = want > 1 ? Math.min(want, Math.max(1, window.innerWidth / 280)) : want;
+      root.style.setProperty('--ui-zoom', String(Math.round(z * 1000) / 1000));
+      if (want > 1) root.dataset.zoom = String(want); else delete root.dataset.zoom;
+    };
+    apply();
+    window.addEventListener('resize', apply);
+    return () => window.removeEventListener('resize', apply);
+  }, [textSize]);
+
+  // personalização: atributos no <html> que o CSS usa
+  const p = state.prefs;
+  useLayoutEffect(() => {
+    const root = document.documentElement, ds = root.dataset;
+    const set = (k: string, v: string | undefined) => { if (v) ds[k] = v; else delete ds[k]; };
+    set('palette', p.palette && p.palette !== 'areia' ? p.palette : undefined);
+    set('dark', p.darkStyle === 'oled' ? 'oled' : undefined);
+    set('bg', p.bg && p.bg !== 'arcos' ? p.bg : undefined);
+    set('font', p.font && p.font !== 'moderna' ? p.font : undefined);
+    set('bold', p.boldText ? '1' : undefined);
+    set('density', p.density === 'compacta' ? 'compacta' : undefined);
+    set('radius', p.radius && p.radius !== 'arredondado' ? p.radius : undefined);
+    set('motion', p.motion && p.motion !== 'completa' ? p.motion : undefined);
+    set('navlabels', p.navLabels === false ? '0' : undefined);
+    set('sound', p.sound ?? 'suave');
+    { const so = { set: false, rest: true, goal: true, ...(p.soundOn || {}) }; ds.soundOn = (Object.keys(so) as (keyof typeof so)[]).filter((k) => so[k]).join(','); }
+    // vidro: 0 = sólido … 1 = bem translúcido
+    if (p.glassLevel != null && p.glass !== false) {
+      ds.glass = 'custom';
+      root.style.setProperty('--glass-p', `${Math.round(100 - p.glassLevel * 30)}%`);
+      root.style.setProperty('--glass-nav', `${Math.round(100 - p.glassLevel * 38)}%`);
+    } else { delete ds.glass; }
+    // cor livre
+    if (p.accentHex && /^#[0-9a-f]{6}$/i.test(p.accentHex)) {
+      root.style.setProperty('--color-orange', p.accentHex);
+      const n = parseInt(p.accentHex.slice(1), 16), lin = (c: number) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+      const L = 0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+      set('accentLight', L > 0.42 ? '1' : undefined);
+    } else { root.style.removeProperty('--color-orange'); delete ds.accentLight; }
+    // cores das áreas
+    const ac = p.areaColors || {};
+    (['treino', 'nutri', 'habitos', 'sono', 'agua'] as const).forEach((k) => { if (ac[k]) root.style.setProperty(`--area-${k}`, ac[k]!); else root.style.removeProperty(`--area-${k}`); });
+    const bg = getComputedStyle(root).getPropertyValue('--color-canvas').trim();
+    if (bg) { document.querySelector('meta[name=theme-color]')?.setAttribute('content', bg); setSystemBars(root.classList.contains('dark'), bg); }
+  }, [p.palette, p.darkStyle, p.bg, p.font, p.boldText, p.density, p.radius, p.motion, p.navLabels, p.sound, JSON.stringify(p.soundOn), p.glassLevel, p.glass, p.accentHex, JSON.stringify(p.areaColors), theme]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /** Reagenda lembretes quando hábitos/preferências mudam (só no app Android). */
@@ -158,7 +213,7 @@ function Logo() {
   return (
     <div className="flex items-center gap-2.5">
       <span className="relative shrink-0"><LogoMark className="size-9" /><SyncDot /></span>
-      <p className="font-semibold text-ink tracking-[-0.02em] text-[16px] min-[360px]:text-[17px] whitespace-nowrap">Leco Health</p>
+      <p className="logo-word font-semibold text-ink tracking-[-0.02em] text-[16px] min-[360px]:text-[17px] whitespace-nowrap">Leco Health</p>
     </div>
   );
 }
@@ -185,11 +240,19 @@ function SyncDot() {
 
 function Shell() {
   const { state, toastMsg, actions, toast } = useStore();
+  setUnits(state.prefs.units); // antes de renderizar as páginas
   const [tab, setTab] = useState<TabId>(readHash);       // página exibida
   const [navTab, setNavTab] = useState<TabId>(tab);       // aba destacada: muda no instante do toque
   const tabRef = useRef(tab); tabRef.current = tab;
   const dirRef = useRef<'r' | 'l'>('r');
   const score = dayScore(state).total;
+  // dia completo (Score 100): som de meta, uma vez por dia
+  const scoreRef = useRef(score);
+  useEffect(() => {
+    const prev = scoreRef.current; scoreRef.current = score;
+    if (prev < 100 && score >= 100) { const k = 'leco-health:goal-sound'; try { if (localStorage.getItem(k) !== todayKey()) { localStorage.setItem(k, todayKey()); playSound('goal'); } } catch { /* */ } }
+  }, [score]);
+  const fixedNav = state.prefs.navStyle === 'fixa';
   const tabOn = (id: TabId) => !(id in TAB_MODULE) || modOn(state, TAB_MODULE[id]!);
   const navIds = (state.prefs.navTabs || []).filter((id) => TABS.some((t) => t.id === id) && tabOn(id)).slice(0, 5);
   const mobileTabs = [TABS[0], ...navIds.map((id) => TABS.find((t) => t.id === id)!)];
@@ -239,7 +302,7 @@ function Shell() {
     const cupOf = () => stRef.current.waterSizes?.[0];
     const shortcut = (a: string) => {
       const s = stRef.current;
-      if (a === 'agua') { const c = cupOf(); actions.addWater(c?.ml ?? 250, undefined, c?.label); toast(`+${c?.ml ?? 250} ml de água`); go('inicio'); }
+      if (a === 'agua') { const c = cupOf(); actions.addWater(c?.ml ?? 250, undefined, c?.label); toast(`+${fmtCup(c?.ml ?? 250)} de água`); go('inicio'); }
       else if (a === 'refeicao') { go('nutricao'); setIntent('nutricao', 'meal'); }
       else if (a === 'peso') { go('registros'); setIntent('registros', 'weight'); }
       else if (a === 'busca') setSearch(true);
@@ -254,7 +317,7 @@ function Shell() {
     const un = onNotificationAction((n) => {
       const s = stRef.current;
       if (n.extra.kind === 'water') {
-        if (n.action === 'add') { const c = cupOf(); actions.addWater(c?.ml ?? 250, undefined, c?.label); toast(`+${c?.ml ?? 250} ml de água`); }
+        if (n.action === 'add') { const c = cupOf(); actions.addWater(c?.ml ?? 250, undefined, c?.label); toast(`+${fmtCup(c?.ml ?? 250)} de água`); }
         else if (n.action === 'snooze') { void snoozeNotification(n, 30); toast('Lembrete adiado por 30 min'); }
         else go('inicio');
         return;
@@ -350,6 +413,7 @@ function Shell() {
     <RestTimerProvider visible={tab === 'treino' && state.sessions.some((x) => !x.completed && x.date === todayKey())}>
       {/* fundo bege com arcos finos */}
       <div aria-hidden className="paper fixed inset-0 -z-10 overflow-hidden bg-canvas">
+        {state.prefs.bg === 'foto' && state.prefs.bgPhoto && <BgPhoto id={state.prefs.bgPhoto} />}
         {/* manchas neutras (claro e sombra): é o que aparece "através" dos blocos de vidro */}
         <div className="glow absolute -top-[12vh] -right-[20vw] size-[75vh] rounded-full" style={{ background: 'radial-gradient(closest-side, var(--glow-a), transparent)' }} />
         <div className="glow absolute top-[38vh] -left-[30vw] size-[65vh] rounded-full" style={{ background: 'radial-gradient(closest-side, var(--glow-b), transparent)' }} />
@@ -385,7 +449,7 @@ function Shell() {
           <button onClick={() => setSearch(true)} aria-label="Buscar" className="press grid place-items-center size-9 min-[360px]:size-10 rounded-full text-ink bg-surface">
             <LuSearch size={18} />
           </button>
-          <span className="text-[13px] font-semibold tabular-nums text-white px-3 h-8 rounded-full bg-orange grid place-items-center">{score}%</span>
+          <HeaderPill score={score} />
           <button onClick={() => go('ajustes')} aria-label="Ajustes"
             className={cx('press grid place-items-center size-9 min-[360px]:size-10 rounded-full', navTab === 'ajustes' ? 'text-on-ink bg-ink' : 'text-ink bg-surface')}>
             <LuSettings size={18} />
@@ -409,13 +473,13 @@ function Shell() {
       {/* Bottom nav mobile */}
       {/* o nome da transição e a camada própria ficam na pílula: se ficassem no <nav>, ele virava a
           "raiz" do desfoque e o vidro deixava o conteúdo passar nítido por trás */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 px-3 pb-[max(.75rem,var(--sab))] pt-2 pointer-events-none">
-        <div className="pointer-events-auto relative mx-auto max-w-md grid rounded-full nav-glass p-1"
+      <nav className={cx('md:hidden fixed bottom-0 inset-x-0 z-40 pointer-events-none', fixedNav ? 'px-0 pb-0 pt-0' : 'px-3 pb-[max(.75rem,var(--sab))] pt-2')}>
+        <div className={cx('pointer-events-auto relative mx-auto grid nav-glass p-1', fixedNav ? 'max-w-none rounded-none rounded-t-[22px] pb-[max(.25rem,var(--sab))] !border-x-0 !border-b-0' : 'max-w-md rounded-full')}
           style={{ gridTemplateColumns: `repeat(${mobileTabs.length}, minmax(0,1fr))` }}>
           {/* pílula que desliza até a aba ativa */}
           {activeIdx >= 0 && (
-            <span aria-hidden className="absolute top-1 bottom-1 left-1 rounded-full bg-orange shadow-[0_6px_16px_-6px_var(--color-orange)] transition-transform duration-500"
-              style={{ width: `calc((100% - .5rem) / ${mobileTabs.length})`, transform: `translateX(${activeIdx * 100}%)`, transitionTimingFunction: 'var(--spring)' }} />
+            <span aria-hidden className="absolute top-1 left-1 rounded-full bg-orange shadow-[0_6px_16px_-6px_var(--color-orange)] transition-transform duration-500"
+              style={{ width: `calc((100% - .5rem) / ${mobileTabs.length})`, bottom: fixedNav ? 'max(.25rem, var(--sab))' : '.25rem', transform: `translateX(${activeIdx * 100}%)`, transitionTimingFunction: 'var(--spring)' }} />
           )}
           {mobileTabs.map((t) => {
             const Icon = t.icon;
@@ -426,7 +490,7 @@ function Shell() {
                 <span key={active ? 'on' : 'off'} className={cx('inline-flex', active && 'nav-bounce')}>
                   <Icon size={20} strokeWidth={active ? 2.2 : 1.9} {...(active ? { fill: 'currentColor', fillOpacity: 0.22 } : {})} />
                 </span>
-                <span className={cx('text-[10px] truncate max-w-full', active ? 'font-semibold' : 'font-medium')}>{t.label}</span>
+                <span className={cx('nav-label text-[10px] truncate max-w-full', active ? 'font-semibold' : 'font-medium')}>{t.label}</span>
               </button>
             );
           })}
@@ -524,15 +588,21 @@ function QuickAdd({ tab, go }: { tab: TabId; go: (t: TabId) => void }) {
   const showFab = FAB_TABS.includes(tab) && !(desk && (tab === 'inicio' || tab === 'treino')) && !(tab === 'nutricao' && macrosOn(state));
   const cup = state.waterSizes?.[0];
   const run = (fn: () => void) => { setOpen(false); setTimeout(fn, 180); };
-  const items: { label: string; sub?: string; icon: React.ReactNode; color: string; fn: () => void; mod?: ModuleId }[] = ([
-    ...(macrosOn(state) ? [{ label: 'Alimento', mod: 'nutricao' as ModuleId, sub: 'calorias e macros', icon: <LuApple size={22} />, color: 'var(--color-prot)', fn: () => { go('nutricao'); setIntent('nutricao', 'food'); } }] : []),
-    { label: 'Refeição', mod: 'nutricao', sub: 'com foto', icon: <LuCamera size={22} />, color: 'var(--color-orange)', fn: () => { go('nutricao'); setIntent('nutricao', 'meal'); } },
-    { label: 'Água', mod: 'agua', sub: cup ? `+ ${cup.label}` : '+ 250 ml', icon: <LuDroplet size={22} />, color: 'var(--color-sleep)', fn: () => { actions.addWater(cup?.ml ?? 250, undefined, cup?.label); toast(`+${cup?.ml ?? 250} ml de água`); } },
-    { label: 'Peso', mod: 'peso', icon: <LuScale size={22} />, color: 'var(--color-good)', fn: () => { go('registros'); setIntent('registros', 'weight'); } },
-    { label: 'Sono', mod: 'sono', icon: <LuMoon size={22} />, color: 'var(--color-sleep)', fn: () => { go('registros'); setIntent('registros', 'sleep'); } },
-    ...(macrosOn(state) ? [] : [{ label: 'Hábitos', mod: 'habitos' as ModuleId, icon: <LuListChecks size={22} />, color: 'var(--color-mind)', fn: () => go('habitos') }]),
-    { label: 'Nota', icon: <LuNotebookPen size={22} />, color: 'var(--color-warn)', fn: () => { go('registros'); setIntent('registros', 'note'); } },
-  ] as { label: string; sub?: string; icon: React.ReactNode; color: string; fn: () => void; mod?: ModuleId }[]).filter((it) => !it.mod || modOn(state, it.mod));
+  type It = { id: string; label: string; sub?: string; icon: React.ReactNode; color: string; fn: () => void; mod?: ModuleId };
+  const all: It[] = [
+    { id: 'alimento', label: 'Alimento', mod: 'nutricao', sub: 'calorias e macros', icon: <LuApple size={22} />, color: 'var(--color-prot)', fn: () => { go('nutricao'); setIntent('nutricao', 'food'); } },
+    { id: 'refeicao', label: 'Refeição', mod: 'nutricao', sub: 'com foto', icon: <LuCamera size={22} />, color: 'var(--color-orange)', fn: () => { go('nutricao'); setIntent('nutricao', 'meal'); } },
+    { id: 'agua', label: 'Água', mod: 'agua', sub: `+ ${cup ? cup.label : fmtCup(250)}`, icon: <LuDroplet size={22} />, color: 'var(--area-agua)', fn: () => { actions.addWater(cup?.ml ?? 250, undefined, cup?.label); toast(`+${fmtCup(cup?.ml ?? 250)} de água`); } },
+    { id: 'peso', label: 'Peso', mod: 'peso', icon: <LuScale size={22} />, color: 'var(--color-good)', fn: () => { go('registros'); setIntent('registros', 'weight'); } },
+    { id: 'sono', label: 'Sono', mod: 'sono', icon: <LuMoon size={22} />, color: 'var(--area-sono)', fn: () => { go('registros'); setIntent('registros', 'sleep'); } },
+    { id: 'habitos', label: 'Hábitos', mod: 'habitos', icon: <LuListChecks size={22} />, color: 'var(--area-habitos)', fn: () => go('habitos') },
+    { id: 'treino', label: 'Treino', mod: 'treino', sub: 'o de hoje', icon: <LuDumbbell size={22} />, color: 'var(--area-treino)', fn: () => { go('treino'); setIntent('treino', 'sessao'); } },
+    { id: 'cardio', label: 'Cardio', mod: 'treino', icon: <LuActivity size={22} />, color: 'var(--color-orange)', fn: () => { go('treino'); setIntent('treino', 'cardio'); } },
+    { id: 'nota', label: 'Nota', icon: <LuNotebookPen size={22} />, color: 'var(--color-warn)', fn: () => { go('registros'); setIntent('registros', 'note'); } },
+  ];
+  // escolhidas em Ajustes → Aparência; sem escolha: o conjunto padrão (Hábitos só aparece sem macros, como antes)
+  const chosen = state.prefs.fabActions?.length ? state.prefs.fabActions : FAB_DEFAULT.filter((id) => id !== 'alimento' || macrosOn(state)).filter((id) => id !== 'habitos' || !macrosOn(state));
+  const items = all.filter((it) => chosen.includes(it.id) && (it.id !== 'alimento' || macrosOn(state)) && (!it.mod || modOn(state, it.mod)));
   return (
     <>
       {showFab && <div className={cx('fixed z-40 right-4 bottom-[calc(6.1rem+var(--sab))] md:right-8 md:bottom-8 fab-auto', hide && 'fab-hidden')}>
@@ -544,7 +614,7 @@ function QuickAdd({ tab, go }: { tab: TabId; go: (t: TabId) => void }) {
       <Modal open={open} onClose={() => setOpen(false)} title="Novo registro">
         <div className="grid grid-cols-3 gap-2.5 pb-2">
           {items.map((it) => (
-            <button key={it.label} onClick={() => run(it.fn)} className="press rounded-[22px] bg-cream px-2 py-4 flex flex-col items-center gap-2 text-center">
+            <button key={it.id} onClick={() => run(it.fn)} className="press rounded-[22px] bg-cream px-2 py-4 flex flex-col items-center gap-2 text-center">
               <span className="grid place-items-center size-12 rounded-2xl" style={{ background: `color-mix(in srgb, ${it.color} 16%, transparent)`, color: it.color }}>{it.icon}</span>
               <span className="text-[14px] font-semibold text-ink leading-tight">{it.label}</span>
               {it.sub && <span className="text-[11.5px] text-muted -mt-1.5 truncate max-w-full">{it.sub}</span>}
@@ -601,6 +671,25 @@ function PullToRefresh() {
       {!busy && <p className="text-[11px] text-muted text-center mt-1 whitespace-nowrap">{ready ? 'Solte para sincronizar' : 'Puxe para sincronizar'}</p>}
     </div>
   );
+}
+
+/** Selo do topo: score do dia, água, calorias ou sequência (escolha em Ajustes → Aparência). */
+function HeaderPill({ score }: { score: number }) {
+  const { state } = useStore();
+  const kind = state.prefs.headerPill ?? 'score';
+  if (kind === 'nada') return null;
+  const today = todayKey();
+  let text = `${score}%`, bg: string | undefined, label = `Score de hoje: ${score}%`;
+  if (kind === 'agua') { const w = state.water[today] || 0; text = `${fmtVolShort(w)}`; bg = 'var(--area-agua)'; label = `Água hoje: ${text}`; }
+  let unit = '';
+  if (kind === 'kcal') { const k = Math.round(dayMacros(state, today).kcal); text = k.toLocaleString('pt-BR'); unit = ' kcal'; label = `Calorias hoje: ${text} kcal`; }
+  if (kind === 'sequencia') { const n = overallStreak(state); text = `🔥 ${n}`; label = `${n} dias seguidos`; }
+  return <span role="status" aria-label={label} className={cx('text-[13px] font-semibold tabular-nums text-white px-3 h-8 rounded-full grid place-items-center whitespace-nowrap', !bg && 'bg-orange')} style={bg ? { background: bg } : undefined}><span>{text}{unit && <span className="max-[359px]:hidden">{unit}</span>}</span></span>;
+}
+
+function BgPhoto({ id }: { id: string }) {
+  const { url } = usePhoto(id);
+  return url ? <div className="bg-photo" style={{ backgroundImage: `url(${url})` }} /> : null;
 }
 
 const WELCOME_KEY = 'leco-health:welcome-done';

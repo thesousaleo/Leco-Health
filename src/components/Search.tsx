@@ -1,6 +1,7 @@
 /* Busca rápida: encontra hábitos, exercícios, refeições, notas e telas, e entende comandos curtos
    ("água 300", "peso 82,4", "iniciar treino B", "nota dor no ombro", "pausar 3 dias"). */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { fmtCup, fmtW, fromW, vUnit } from '../units';
 import { createPortal } from 'react-dom';
 import {
   LuApple, LuArrowRight, LuCirclePause, LuCirclePlay, LuDroplet, LuDumbbell, LuListChecks, LuMoon, LuNotebookPen, LuScale, LuSearch,
@@ -33,16 +34,16 @@ export function parseCommand(raw: string, state: AppState, actions: Actions, go:
     const v = num(m[1]);
     const ml = Math.round(m[2]?.startsWith('l') || v < 10 ? v * 1000 : v);
     if (ml > 0 && ml <= 5000) return {
-      title: `Registrar ${ml >= 1000 ? `${nf(ml / 1000, 1)} L` : `${ml} ml`} de água`, icon: <LuDroplet size={18} />,
-      run: () => { actions.addWater(ml); return `+${ml} ml de água`; },
+      title: `Registrar ${vUnit() === 'oz' ? fmtCup(ml) : ml >= 1000 ? `${nf(ml / 1000, 1)} L` : `${ml} ml`} de água`, icon: <LuDroplet size={18} />,
+      run: () => { actions.addWater(ml); return `+${fmtCup(ml)} de água`; },
     };
   }
   // peso: "peso 82,4", "pesei 82.4kg"
-  if (modOn(state, 'peso') && (m = q.match(/^(?:peso|pesei|pesando)\s*(\d{2,3}(?:[.,]\d+)?)\s*(?:kg)?$/))) {
-    const w = Math.round(num(m[1]) * 10) / 10;
+  if (modOn(state, 'peso') && (m = q.match(/^(?:peso|pesei|pesando)\s*(\d{2,3}(?:[.,]\d+)?)\s*(?:kg|lb)?$/))) {
+    const w = Math.round(fromW(num(m[1])) * 100) / 100;
     if (w >= 25 && w <= 350) return {
-      title: `Registrar peso de hoje: ${nf(w, 1)} kg`, icon: <LuScale size={18} />,
-      run: () => { actions.upsertWeight(today, w); return `Peso registrado: ${nf(w, 1)} kg`; },
+      title: `Registrar peso de hoje: ${fmtW(w, 1)}`, icon: <LuScale size={18} />,
+      run: () => { actions.upsertWeight(today, w); return `Peso registrado: ${fmtW(w, 1)}`; },
     };
   }
   // sono: "sono 7,5", "dormi 7h30"

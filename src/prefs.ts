@@ -20,3 +20,11 @@ export const ACCENTS: { id: Accent; label: string; color: string }[] = [
 /** Cores para hábitos e fichas (boas no claro e no escuro). */
 export const PALETTE = ['#F26B3A', '#E0A526', '#2E9E5B', '#1F9E9A', '#3B7BE0', '#7A5AE0', '#D9468F', '#8A8178'];
 export const HABIT_EMOJIS = ['💧', '📚', '🏃', '🧘', '💊', '☀️', '🛏️', '🍎', '🥗', '🚭', '🍬', '📵', '🧠', '✍️', '🎸', '🦷', '🚶', '🏋️', '💪', '🧴', '🙏', '🎯', '⏰', '🌙', '🥛', '☕', '🚿', '📖', '🧹', '💰', '🎨', '🎧', '🐶', '🌱', '🧊', '🍳', '🥤', '🫁', '❤️', '⭐'];
+
+/** Ações do botão ＋ (Ajustes → Aparência). A ordem aqui é a ordem na grade. */
+export const FAB_OPTIONS: { id: string; label: string }[] = [
+  { id: 'alimento', label: 'Alimento' }, { id: 'refeicao', label: 'Refeição' }, { id: 'agua', label: 'Água' },
+  { id: 'peso', label: 'Peso' }, { id: 'sono', label: 'Sono' }, { id: 'habitos', label: 'Hábitos' },
+  { id: 'treino', label: 'Treino' }, { id: 'cardio', label: 'Cardio' }, { id: 'nota', label: 'Nota' },
+];
+export const FAB_DEFAULT = ['alimento', 'refeicao', 'agua', 'peso', 'sono', 'habitos', 'nota'];

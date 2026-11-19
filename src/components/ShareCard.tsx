@@ -1,6 +1,7 @@
 /* Cartão para compartilhar (WhatsApp, Instagram): treino concluído ou recorde,
    em formato post (4:5) ou story (9:16), com prévia antes de enviar. */
 import React, { useEffect, useState } from 'react';
+import { fmtW, toW, wUnit } from '../units';
 import { LuDownload, LuLoaderCircle, LuShare2 } from 'react-icons/lu';
 import { shareFile } from '../native';
 import { nf } from '../utils';
@@ -71,12 +72,12 @@ export function drawCard(d: CardData, format: CardFormat): HTMLCanvasElement {
   if (d.kind === 'recorde' && d.pr) {
     y += format === 'story' ? 160 : 110;
     g.fillStyle = 'rgba(255,255,255,.07)'; g.beginPath(); g.roundRect(M, y, W - 2 * M, 330, 48); g.fill();
-    g.fillStyle = gold; g.font = font(800, 150); const big = `${nf(d.pr.weight, d.pr.weight % 1 ? 1 : 0)} kg`;
+    g.fillStyle = gold; g.font = font(800, 150); const big = `${nf(toW(d.pr.weight), toW(d.pr.weight) % 1 ? 1 : 0)} ${wUnit()}`;
     g.fillText(big, M + 56, y + 180);
     const bw = g.measureText(big).width;
     g.fillStyle = '#fff'; g.font = font(600, 84); g.fillText(`× ${d.pr.reps}`, M + 56 + bw + 28, y + 180);
     g.fillStyle = 'rgba(255,255,255,.6)'; g.font = font(500, 34);
-    g.fillText(`1RM estimado: ${nf(d.pr.e1rm, 1)} kg${d.pr.prev ? `   ·   antes: ${d.pr.prev}` : ''}`, M + 56, y + 270);
+    g.fillText(`1RM estimado: ${fmtW(d.pr.e1rm, 1)}${d.pr.prev ? `   ·   antes: ${d.pr.prev}` : ''}`, M + 56, y + 270);
     y += 330;
   }
 

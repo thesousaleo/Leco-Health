@@ -1,5 +1,6 @@
 /* Treino no computador: painel com indicadores, semana e fichas, exercícios, evolução, músculos e histórico. */
 import React, { useMemo, useState } from 'react';
+import { fmtW } from '../units';
 import { LuUsers, LuCalendarDays, LuClipboardList, LuClock, LuDumbbell, LuFootprints, LuHistory, LuLayoutDashboard, LuPencil, LuPlay, LuPlus, LuStar, LuTrendingUp, LuTrophy } from 'react-icons/lu';
 import type { WorkoutSession } from '../types';
 import { useStore } from '../store';
@@ -246,10 +247,10 @@ function ExerciseTable({ exIds, selected, onPick }: { exIds: string[]; selected:
       cols={[
         { key: 'n', label: 'Exercício', render: (r) => <span className="font-medium text-ink">{r.ex.name}<span className="block text-[12px] text-muted font-normal">{r.ex.muscle}</span></span> },
         { key: 'a', label: 'Meta', render: (r) => `${r.ex.targetSets} × ${r.ex.targetReps}` },
-        { key: 'l', label: 'Última', render: (r) => r.last ? <span>{nf(r.last.best.weight, 1)} kg × {r.last.best.reps}<span className="block text-[12px] text-muted">{relDay(r.last.date)}</span></span> : <span className="text-muted">—</span> },
-        ...(partner ? [{ key: 'p', label: first(partner), render: (r: typeof rows[number]) => { const l = findLift(partnerTreino?.lifts, r.ex.id, r.ex.name); return l ? <span style={{ color: DUO_COLOR }}>{nf(l.s[0][0], 1)} kg × {l.s[0][1]}<span className="block text-[12px] text-muted">{relDay(l.d)}</span></span> : <span className="text-muted">—</span>; } }] : []),
-        { key: 'b', label: 'Melhor série', render: (r) => r.best ? `${nf(r.best.weight, 1)} kg × ${r.best.reps}` : <span className="text-muted">—</span> },
-        { key: 'r', label: '1RM est.', align: 'right', render: (r) => r.best ? <b className="text-ink font-semibold">{nf(oneRM(r.best.weight, r.best.reps), 0)} kg</b> : '—' },
+        { key: 'l', label: 'Última', render: (r) => r.last ? <span>{fmtW(r.last.best.weight, 1)} × {r.last.best.reps}<span className="block text-[12px] text-muted">{relDay(r.last.date)}</span></span> : <span className="text-muted">—</span> },
+        ...(partner ? [{ key: 'p', label: first(partner), render: (r: typeof rows[number]) => { const l = findLift(partnerTreino?.lifts, r.ex.id, r.ex.name); return l ? <span style={{ color: DUO_COLOR }}>{fmtW(l.s[0][0], 1)} × {l.s[0][1]}<span className="block text-[12px] text-muted">{relDay(l.d)}</span></span> : <span className="text-muted">—</span>; } }] : []),
+        { key: 'b', label: 'Melhor série', render: (r) => r.best ? `${fmtW(r.best.weight, 1)} × ${r.best.reps}` : <span className="text-muted">—</span> },
+        { key: 'r', label: '1RM est.', align: 'right', render: (r) => r.best ? <b className="text-ink font-semibold">{fmtW(oneRM(r.best.weight, r.best.reps), 0)}</b> : '—' },
         { key: 's', label: 'Evolução', align: 'right', w: '96px', render: (r) => r.e1.length > 1 ? <span className="inline-block"><Sparkline values={r.e1} width={80} height={26} /></span> : <span className="text-muted">—</span> },
         { key: 'c', label: 'Δ', align: 'right', render: (r) => r.change == null ? <span className="text-muted">—</span>
           : <span className="font-medium" style={{ color: r.change > 0.5 ? 'var(--color-good)' : r.change < -0.5 ? 'var(--color-bad)' : 'var(--color-muted)' }}>{r.change > 0.5 ? '▲' : r.change < -0.5 ? '▼' : '●'} {nf(Math.abs(r.change), 0)}%</span> },
@@ -270,7 +271,7 @@ function Progress({ exId }: { exId: string }) {
       const sets = s.entries.find((e) => e.exerciseId === exId)!.sets.filter((x) => x.done);
       const t = top1(sets);
       const v = metric === '1rm' ? oneRM(t.weight, t.reps) : metric === 'carga' ? Math.max(...sets.map((x) => x.weight)) : sets.reduce((a, x) => a + x.weight * x.reps, 0);
-      return { label: fmtShort(s.date), value: round1(v), sub: `${relDay(s.date)} · ${nf(t.weight, 1)} kg × ${t.reps}`, range: oneRMRange(t.weight, t.reps) };
+      return { label: fmtShort(s.date), value: round1(v), sub: `${relDay(s.date)} · ${fmtW(t.weight, 1)} × ${t.reps}`, range: oneRMRange(t.weight, t.reps) };
     });
   const stars = raw.reduce<{ best: number; idx: number[] }>((acc, p, i) => { if (i > 0 && p.value > acc.best) acc.idx.push(i); acc.best = Math.max(acc.best, p.value); return acc; }, { best: 0, idx: [] }).idx;
   return (
@@ -278,7 +279,7 @@ function Progress({ exId }: { exId: string }) {
       actions={<><Pills value={metric} onChange={setMetric} options={[{ value: '1rm', label: '1RM est.' }, { value: 'carga', label: 'Carga' }, { value: 'volume', label: 'Volume' }]} />
         <Pills value={span} onChange={setSpan} options={[{ value: '90', label: '3 m' }, { value: '180', label: '6 m' }, { value: 'tudo', label: 'Tudo' }]} /></>}>
       <div key={exId + metric + span} className="desk-fade">
-        <LineChart data={raw.map(({ range: _r, ...p }) => p)} unit=" kg" height={260} decimals={metric === 'volume' ? 0 : 1} stars={metric === 'volume' ? undefined : stars} bandColor="var(--color-gold)"
+        <LineChart data={raw.map(({ range: _r, ...p }) => p)} weight height={260} decimals={metric === 'volume' ? 0 : 1} stars={metric === 'volume' ? undefined : stars} bandColor="var(--color-gold)"
           band={metric === '1rm' ? raw.map((p) => ({ lo: round1(p.range.lo), hi: round1(p.range.hi) })) : undefined} />
       </div>
     </Panel>

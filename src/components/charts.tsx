@@ -1,4 +1,5 @@
 import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { toW, wUnit } from '../units';
 
 /** Largura real do contêiner, para o texto do gráfico não encolher no celular. */
 function useWidth(fallback = 600) {
@@ -38,7 +39,14 @@ const smooth = (pts: (readonly [number, number])[]) => {
   return path;
 };
 
-export function LineChart({ data, color = 'var(--color-orange)', unit = '', height = 190, decimals = 1, goal, trend, band, stars, bandColor, trendLabel = 'média' }: {
+export function LineChart(props: Parameters<typeof LineChartInner>[0] & { weight?: boolean }) {
+  // weight: valores em kg mostrados na unidade escolhida (kg ou lb)
+  if (!props.weight) return <LineChartInner {...props} />;
+  const c = (v: number) => toW(v);
+  return <LineChartInner {...props} unit={` ${wUnit()}`} data={props.data.map((d) => ({ ...d, value: c(d.value) }))} goal={props.goal != null ? c(props.goal) : undefined}
+    trend={props.trend?.map((v) => (v == null ? null : c(v)))} band={props.band?.map((b) => (b ? { lo: c(b.lo), hi: c(b.hi) } : null))} />;
+}
+function LineChartInner({ data, color = 'var(--color-orange)', unit = '', height = 190, decimals = 1, goal, trend, band, stars, bandColor, trendLabel = 'média' }: {
   data: Pt[]; color?: string; unit?: string; height?: number; decimals?: number; goal?: number;
   /** linha de tendência (mesmo tamanho de data) */
   trend?: (number | null)[];

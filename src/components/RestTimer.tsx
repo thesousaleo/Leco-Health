@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { playSound } from '../sound';
 import { LuMinus, LuPause, LuPlay, LuPlus, LuTimer, LuX } from 'react-icons/lu';
 import { cx, ProgressRing } from './ui';
 import { haptic, restTimerBackground, restTimerForeground } from '../native';
@@ -20,21 +21,7 @@ export const useRestTimer = () => useContext(Ctx)!;
 const PRESETS = [60, 90, 120];
 
 function beep() {
-  try {
-    const AC = (window as any).AudioContext || (window as any).webkitAudioContext;
-    const ac = new AC();
-    [0, 0.22, 0.44].forEach((t, i) => {
-      const o = ac.createOscillator();
-      const g = ac.createGain();
-      o.frequency.value = i === 2 ? 1046 : 880;
-      g.gain.setValueAtTime(0.0001, ac.currentTime + t);
-      g.gain.exponentialRampToValueAtTime(0.25, ac.currentTime + t + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + t + 0.18);
-      o.connect(g).connect(ac.destination);
-      o.start(ac.currentTime + t);
-      o.stop(ac.currentTime + t + 0.2);
-    });
-  } catch { /* sem áudio */ }
+  playSound('rest');
   try { navigator.vibrate?.([200, 100, 200]); } catch { /* */ }
 }
 

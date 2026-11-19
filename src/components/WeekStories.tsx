@@ -1,6 +1,7 @@
 /* Resumo da semana em formato "stories": cartões em tela cheia, avanço automático,
    toque à direita/esquerda para navegar, segurar para pausar, arrastar para baixo para fechar. */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { fmtW } from '../units';
 import { createPortal } from 'react-dom';
 import { LuDroplet, LuDumbbell, LuFlame, LuMoon, LuRotateCcw, LuSparkles, LuStar, LuUtensils, LuX } from 'react-icons/lu';
 import type { AppState, DateKey } from '../types';
@@ -93,7 +94,7 @@ function slides(state: AppState, r: PeriodReport, p: PeriodReport, prs: Pr[]): S
                 <div key={i} className="story-row" style={{ animationDelay: `${350 + i * 110}ms` }}>
                   <LuStar size={16} style={{ color: '#FFD978', fill: '#FFD978' }} />
                   <span className="flex-1 min-w-0 truncate">{x.name}</span>
-                  <span className="num text-[15px]">{nf(x.weight, 1)} kg × {x.reps}</span>
+                  <span className="num text-[15px]">{fmtW(x.weight, 1)} × {x.reps}</span>
                 </div>
               ))}
             </div>

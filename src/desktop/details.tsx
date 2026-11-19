@@ -1,5 +1,6 @@
 /* Conteúdo do painel de detalhes (coluna da direita no computador). */
 import React from 'react';
+import { fmtVolShort, fmtW, numW, wUnit } from '../units';
 import {
   LuApple, LuArrowRight, LuCheck, LuDroplet, LuDumbbell, LuFlame, LuListChecks, LuMoon, LuNotebookPen, LuScale, LuStar, LuTrophy, LuX,
 } from 'react-icons/lu';
@@ -30,10 +31,10 @@ export function dayParts(state: AppState, d: DateKey): RingPart[] {
   const done = sess ? sess.entries.reduce((a, e) => a + e.sets.filter((x) => x.done).length, 0) : 0;
   const total = sess ? sess.entries.reduce((a, e) => a + e.sets.length, 0) : 0;
   const parts: (RingPart & { mod: Parameters<typeof modOn>[1] })[] = [
-    { mod: 'treino', key: 'treino', label: 'Treino', value: sc.workout, color: 'var(--color-orange)', detail: sess ? `${done} de ${total} séries` : sc.paused ? 'pausa' : sc.isRest ? 'descanso' : (state.cardio || []).some((c) => c.date === d) ? 'cardio' : 'não feito' },
-    { mod: 'nutricao', key: 'refeicoes', label: np.label, value: sc.nutrition, color: 'var(--color-good)', detail: np.label === 'Refeições' ? `${meals} de ${goalM}` : np.detail },
-    { mod: 'habitos', key: 'habitos', label: 'Hábitos', value: sc.habits, color: 'var(--color-mind)', detail: due.length ? `${hd} de ${due.length}` : sc.paused ? 'pausa' : 'nenhum no dia' },
-    { mod: 'sono', key: 'sono', label: 'Sono', value: sl ? Math.min(1, sl.hours / gS) : 0, color: 'var(--color-sleep)', detail: sl ? `${nf(sl.hours, 1)} h de ${gS} h` : 'não registrado' },
+    { mod: 'treino', key: 'treino', label: 'Treino', value: sc.workout, color: 'var(--area-treino)', detail: sess ? `${done} de ${total} séries` : sc.paused ? 'pausa' : sc.isRest ? 'descanso' : (state.cardio || []).some((c) => c.date === d) ? 'cardio' : 'não feito' },
+    { mod: 'nutricao', key: 'refeicoes', label: np.label, value: sc.nutrition, color: 'var(--area-nutri)', detail: np.label === 'Refeições' ? `${meals} de ${goalM}` : np.detail },
+    { mod: 'habitos', key: 'habitos', label: 'Hábitos', value: sc.habits, color: 'var(--area-habitos)', detail: due.length ? `${hd} de ${due.length}` : sc.paused ? 'pausa' : 'nenhum no dia' },
+    { mod: 'sono', key: 'sono', label: 'Sono', value: sl ? Math.min(1, sl.hours / gS) : 0, color: 'var(--area-sono)', detail: sl ? `${nf(sl.hours, 1)} h de ${gS} h` : 'não registrado' },
   ];
   return parts.filter((p) => modOn(state, p.mod));
 }
@@ -141,8 +142,8 @@ export function DayDetail({ date, title }: { date: DateKey; title?: string }) {
       )}
       <Section title="Corpo" icon={<LuMoon size={14} />}>
         {modOn(state, 'sono') && <Row l="Sono" r={sl ? `${nf(sl.hours, 1)} h${sl.quality ? ` · ${sl.quality}/5` : ''}` : '—'} sub={sl?.bedtime && sl.wake ? `${sl.bedtime} → ${sl.wake}` : undefined} />}
-        {modOn(state, 'agua') && <Row l={<span className="flex items-center gap-1.5"><LuDroplet size={12} style={{ color: 'var(--color-sleep)' }} /> Água</span>} r={`${nf(water / 1000, 1)} L de ${nf(state.goals.water / 1000, 1)} L`} />}
-        {modOn(state, 'peso') && <Row l={<span className="flex items-center gap-1.5"><LuScale size={12} /> Peso</span>} r={body ? (state.prefs.discreet ? '•••' : `${nf(body.weight!, 1)} kg`) : '—'} />}
+        {modOn(state, 'agua') && <Row l={<span className="flex items-center gap-1.5"><LuDroplet size={12} style={{ color: 'var(--color-sleep)' }} /> Água</span>} r={`${fmtVolShort(water)} de ${fmtVolShort(state.goals.water)}`} />}
+        {modOn(state, 'peso') && <Row l={<span className="flex items-center gap-1.5"><LuScale size={12} /> Peso</span>} r={body ? (state.prefs.discreet ? '•••' : `${fmtW(body.weight!, 1)}`) : '—'} />}
       </Section>
       {notes.length > 0 && (
         <Section title="Diário" icon={<LuNotebookPen size={14} />}>
@@ -237,7 +238,7 @@ export function ExerciseDetail({ id }: { id: string }) {
   });
   const prog = hist.slice(-12).map((h) => {
     const top = h.sets.reduce((b, x) => (oneRM(x.weight, x.reps) > oneRM(b.weight, b.reps) ? x : b));
-    return { label: fmtShort(h.s.date), value: Math.round(oneRM(top.weight, top.reps) * 10) / 10, sub: `${nf(top.weight, 1)} kg × ${top.reps}` };
+    return { label: fmtShort(h.s.date), value: Math.round(oneRM(top.weight, top.reps) * 10) / 10, sub: `${fmtW(top.weight, 1)} × ${top.reps}` };
   });
   return (
     <div>
@@ -245,19 +246,19 @@ export function ExerciseDetail({ id }: { id: string }) {
         <p className="eyebrow">{muscle}</p>
         <p className="text-[19px] font-semibold text-ink tracking-[-0.015em] mt-0.5">{name}</p>
         <div className="grid grid-cols-2 gap-2 mt-4">
-          <div className="rounded-2xl bg-cream px-3 py-2.5"><p className="text-[11.5px] text-muted">1RM estimado</p><p className="num text-[22px] text-ink leading-none mt-1">{nf(oneRM(best1.weight, best1.reps), 0)}<span className="unit">kg</span></p><p className="text-[11.5px] text-muted mt-1">{relDay(best1.date)}</p></div>
-          <div className="rounded-2xl bg-cream px-3 py-2.5"><p className="text-[11.5px] text-muted">Maior carga</p><p className="num text-[22px] text-ink leading-none mt-1">{nf(heaviest.weight, 1)}<span className="unit">kg × {heaviest.reps}</span></p><p className="text-[11.5px] text-muted mt-1">{relDay(heaviest.date)}</p></div>
+          <div className="rounded-2xl bg-cream px-3 py-2.5"><p className="text-[11.5px] text-muted">1RM estimado</p><p className="num text-[22px] text-ink leading-none mt-1">{numW(oneRM(best1.weight, best1.reps), 0)}<span className="unit">{wUnit()}</span></p><p className="text-[11.5px] text-muted mt-1">{relDay(best1.date)}</p></div>
+          <div className="rounded-2xl bg-cream px-3 py-2.5"><p className="text-[11.5px] text-muted">Maior carga</p><p className="num text-[22px] text-ink leading-none mt-1">{numW(heaviest.weight, 1)}<span className="unit">{wUnit()} × {heaviest.reps}</span></p><p className="text-[11.5px] text-muted mt-1">{relDay(heaviest.date)}</p></div>
         </div>
       </div>
       <Section title="1RM estimado por treino" icon={<LuTrophy size={14} />}>
-        <LineChart data={prog} unit=" kg" height={150} decimals={0} />
+        <LineChart data={prog} weight height={150} decimals={0} />
       </Section>
       <Section title="Recordes por repetição" icon={<LuStar size={14} />}>
         <div className="grid grid-cols-3 gap-1.5">
           {repPR.map(({ r, m }) => (
             <div key={r} className="rounded-xl bg-cream px-2.5 py-2">
               <p className="text-[11px] text-muted">{r} {r === 1 ? 'rep' : 'reps'}</p>
-              <p className="text-[14px] font-semibold text-ink tabular-nums">{m ? `${nf(m.weight, 1)} kg` : '—'}</p>
+              <p className="text-[14px] font-semibold text-ink tabular-nums">{m ? `${fmtW(m.weight, 1)}` : '—'}</p>
             </div>
           ))}
         </div>

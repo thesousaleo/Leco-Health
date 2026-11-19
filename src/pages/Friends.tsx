@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { fmtW } from '../units';
 import { LuCheck, LuCopy, LuCrown, LuDumbbell, LuEye, LuFlag, LuFlame, LuPlus, LuRefreshCw, LuTrophy, LuUserPlus, LuUsers, LuX } from 'react-icons/lu';
 import { useStore } from '../store';
 import { useSync } from '../sync';
@@ -306,7 +307,7 @@ function FriendCard({ f, sent, onReact, onRemove, onSharesSaved }: {
             )}
             {s.peso?.weight != null && (
               <span className="inline-flex items-center h-8 px-3 rounded-full bg-cream text-[12.5px] text-ink tabular-nums">
-                {nf(s.peso.weight, 1)} kg{s.peso.delta30 != null ? ` (${s.peso.delta30 > 0 ? '+' : ''}${nf(s.peso.delta30, 1)} em 30d)` : ''}
+                {fmtW(s.peso.weight, 1)}{s.peso.delta30 != null ? ` (${s.peso.delta30 > 0 ? '+' : ''}${nf(s.peso.delta30, 1)} em 30d)` : ''}
               </span>
             )}
           </div>

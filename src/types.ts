@@ -239,7 +239,7 @@ export type Accent = 'laranja' | 'verde' | 'azul' | 'roxo' | 'rosa' | 'grafite';
 export interface Prefs {
   theme: 'auto' | 'light' | 'dark';
   accent: Accent;
-  textSize: 1 | 1.1 | 1.2;
+  textSize: 0.9 | 1 | 1.1 | 1.2 | 1.3;
   haptics: boolean;
   celebrate: boolean;
   glass?: boolean; // efeito vidro (liquid glass) nos blocos
@@ -255,6 +255,28 @@ export interface Prefs {
   streakShield?: boolean; // escudo semanal da sequência (padrão: ligado)
   swipeTabs?: boolean; // arrastar para os lados troca de aba (padrão: ligado)
   demo?: boolean; // está vendo os dados de exemplo
+  // ── personalização ──
+  palette?: 'areia' | 'grafite' | 'oceano' | 'floresta' | 'lavanda';
+  accentHex?: string; // cor de destaque livre (substitui a escolhida da lista)
+  darkStyle?: 'quente' | 'oled';
+  bg?: 'arcos' | 'liso' | 'degrade' | 'textura' | 'foto';
+  bgPhoto?: string; // id da foto (só neste aparelho)
+  font?: 'moderna' | 'arredondada' | 'condensada' | 'classica';
+  boldText?: boolean;
+  density?: 'confortavel' | 'compacta';
+  radius?: 'arredondado' | 'medio' | 'reto';
+  glassLevel?: number; // 0 (sólido) a 1 (bem translúcido)
+  motion?: 'completa' | 'reduzida' | 'nenhuma';
+  sound?: 'off' | 'suave' | 'arcade' | 'sino';
+  soundOn?: { set?: boolean; rest?: boolean; goal?: boolean };
+  navLabels?: boolean;
+  navStyle?: 'flutuante' | 'fixa';
+  fabActions?: string[];
+  headerPill?: 'score' | 'agua' | 'kcal' | 'sequencia' | 'nada';
+  greeting?: 'nome' | 'frase' | 'nada';
+  areaColors?: Partial<Record<'treino' | 'nutri' | 'habitos' | 'sono' | 'agua', string>>;
+  appIcon?: 'laranja' | 'escuro' | 'claro' | 'mono';
+  units?: { weight?: 'kg' | 'lb'; volume?: 'ml' | 'oz'; weekStart?: 0 | 1 };
 }
 
 /* ── Estado raiz ───────────────────────────────────────────── */

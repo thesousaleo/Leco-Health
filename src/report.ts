@@ -1,5 +1,6 @@
 /* Relatórios: resumo de um período (semana ou N dias) e geração do PDF. */
 import type { AppState, DateKey } from './types';
+import { fmtW } from './units';
 import {
   addDays, dayScore, dueHabits, fmtDayMonth, fmtLong, habitStreak, isHabitDone, lastNDays, mealsOn, nf, overallStreak, round1,
   sessionVolume, todayKey, weekStart,
@@ -186,14 +187,14 @@ export function reportPdf(state: AppState, nDays: number, name: string, audience
         const top = done.reduce((a, z) => (oneRM(z.weight, z.reps) > oneRM(a.weight, a.reps) ? z : a));
         const v = oneRM(top.weight, top.reps);
         const cur = ex.get(e.exerciseId);
-        if (!cur) ex.set(e.exerciseId, { name: e.name, first: v, last: v, best: `${nf(top.weight, 1)} kg × ${top.reps}`, n: 1 });
-        else { cur.last = v; cur.best = `${nf(top.weight, 1)} kg × ${top.reps}`; cur.n++; }
+        if (!cur) ex.set(e.exerciseId, { name: e.name, first: v, last: v, best: `${fmtW(top.weight, 1)} × ${top.reps}`, n: 1 });
+        else { cur.last = v; cur.best = `${fmtW(top.weight, 1)} × ${top.reps}`; cur.n++; }
       }));
       const list = [...ex.values()].sort((a, b) => b.last - a.last);
       if (list.length) {
         section('Evolução por exercício (1RM estimado)');
         table([{ w: 0.4 }, { w: 0.2, r: true }, { w: 0.14, r: true }, { w: 0.14, r: true }, { w: 0.12, r: true }], ['Exercício', 'Melhor série', 'Início', 'Fim', 'Variação'],
-          list.map((e) => [e.name, e.best, `${nf(e.first, 0)} kg`, `${nf(e.last, 0)} kg`, e.n > 1 ? `${e.last >= e.first ? '+' : ''}${nf(((e.last - e.first) / e.first) * 100, 0)}%` : '—']));
+          list.map((e) => [e.name, e.best, fmtW(e.first, 0), fmtW(e.last, 0), e.n > 1 ? `${e.last >= e.first ? '+' : ''}${nf(((e.last - e.first) / e.first) * 100, 0)}%` : '—']));
       }
     }
     const cc = (state.cardio || []).filter((c) => inP(c.date)).sort((a, b) => (a.date < b.date ? -1 : 1));
@@ -307,9 +308,9 @@ export function reportPdf(state: AppState, nDays: number, name: string, audience
   if (show('peso')) {
   section('Peso');
   kv([
-    ['Início do período', r.weightStart != null ? `${nf(r.weightStart, 1)} kg` : '—'],
-    ['Fim do período', r.weightEnd != null ? `${nf(r.weightEnd, 1)} kg` : '—'],
-    ['Variação', r.weightStart != null && r.weightEnd != null ? `${r.weightEnd - r.weightStart > 0 ? '+' : ''}${nf(r.weightEnd - r.weightStart, 1)} kg` : '—'],
+    ['Início do período', r.weightStart != null ? `${fmtW(r.weightStart, 1)}` : '—'],
+    ['Fim do período', r.weightEnd != null ? `${fmtW(r.weightEnd, 1)}` : '—'],
+    ['Variação', r.weightStart != null && r.weightEnd != null ? `${r.weightEnd - r.weightStart > 0 ? '+' : ''}${fmtW(r.weightEnd - r.weightStart, 1)}` : '—'],
   ]);
   }
   if (show('pesoDet')) {
@@ -317,7 +318,7 @@ export function reportPdf(state: AppState, nDays: number, name: string, audience
     if (bs.length) {
       section('Pesagens e medidas');
       table([{ w: 0.2 }, { w: 0.2, r: true }, { w: 0.2, r: true }, { w: 0.2, r: true }, { w: 0.2, r: true }], ['Data', 'Peso', '% gordura', 'Cintura', 'Quadril'],
-        bs.map((b) => [fmtDayMonth(b.date), b.weight != null ? `${nf(b.weight, 1)} kg` : '—', b.bodyFat != null ? `${nf(b.bodyFat, 1)}%` : '—', b.waist != null ? `${nf(b.waist, 1)} cm` : '—', b.hip != null ? `${nf(b.hip, 1)} cm` : '—']));
+        bs.map((b) => [fmtDayMonth(b.date), b.weight != null ? `${fmtW(b.weight, 1)}` : '—', b.bodyFat != null ? `${nf(b.bodyFat, 1)}%` : '—', b.waist != null ? `${nf(b.waist, 1)} cm` : '—', b.hip != null ? `${nf(b.hip, 1)} cm` : '—']));
     }
   }
   // diário: o médico vê sintomas e exames; o nutricionista, as notas de dieta

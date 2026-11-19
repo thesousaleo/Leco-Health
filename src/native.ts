@@ -138,7 +138,7 @@ export function takeShortcutAction(): string | null {
 }
 
 /* ── descanso na tela de bloqueio e widget (ponte nativa própria) ── */
-const bridge = () => (window as any).LecoNative as undefined | { restTimer(endAt: number, title: string, text: string): void; restTimerCancel(): void; setWidget(json: string): void };
+const bridge = () => (window as any).LecoNative as undefined | { restTimer(endAt: number, title: string, text: string): void; restTimerCancel(): void; setWidget(json: string): void; getIcon?(): string; setIcon?(n: string): boolean };
 const REST_END = 4201;
 /** Com o app em segundo plano: contagem do descanso na notificação e aviso quando acabar. */
 export function restTimerBackground(endAt: number, next?: string) {
@@ -153,6 +153,14 @@ export function restTimerForeground() {
 /** Atualiza o widget da tela inicial (só no app Android). */
 export function updateWidget(data: Record<string, string | number>) {
   try { bridge()?.setWidget(JSON.stringify(data)); } catch { /* */ }
+}
+
+/** Ícone do app na tela inicial (só no APK novo). "" = não suportado. */
+export function currentAppIcon(): string {
+  try { return bridge()?.getIcon?.() || ''; } catch { return ''; }
+}
+export function setAppIcon(name: string): boolean {
+  try { return !!bridge()?.setIcon?.(name); } catch { return false; }
 }
 
 /* ── arquivos ──────────────────────────────────────────────── */

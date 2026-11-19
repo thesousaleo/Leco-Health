@@ -1,6 +1,7 @@
 /* Configuração inicial em tela cheia: deixa o app pronto para a pessoa (nome, objetivo,
    áreas, corpo e metas calculadas, treino, hábitos e aparência) ou abre os dados de exemplo. */
 import React, { useEffect, useMemo, useState } from 'react';
+import { fromW, toW, wUnit } from '../units';
 import {
   LuApple, LuArrowLeft, LuArrowRight, LuCheck, LuDroplets, LuDumbbell, LuFlame, LuHeartPulse, LuListChecks, LuMoon,
   LuScale, LuSparkles, LuSun, LuSunMoon, LuTrendingDown, LuTrendingUp, LuUsers,
@@ -145,8 +146,8 @@ export function SetupFlow({ open, defaultName, onDone, onLogin }: { open: boolea
           </div>
           <Num label="Idade" value={d.age} unit="anos" onChange={(v) => set({ age: v })} />
           <Num label="Altura" value={d.height} unit="cm" onChange={(v) => set({ height: v })} />
-          <Num label="Peso atual" value={d.weight} unit="kg" step={0.1} onChange={(v) => set({ weight: v })} />
-          {on('peso') && <Num label="Peso desejado" value={d.weightGoal ?? NaN} unit="kg" step={0.1} onChange={(v) => set({ weightGoal: v > 0 ? v : undefined })} />}
+          <Num label="Peso atual" value={toW(d.weight)} unit={wUnit()} step={0.1} onChange={(v) => set({ weight: fromW(v) })} />
+          {on('peso') && <Num label="Peso desejado" value={d.weightGoal ? toW(d.weightGoal) : NaN} unit={wUnit()} step={0.1} onChange={(v) => set({ weightGoal: v > 0 ? fromW(v) : undefined })} />}
           <p className="text-[13px] text-muted pt-2 px-1">Quanto você se mexe na semana?</p>
           <div className="space-y-1.5">
             {ACTIVITY.map((a) => <Choice key={a.v} active={d.activity === a.v} onClick={() => set({ activity: a.v })} title={a.label} sub={a.sub} />)}

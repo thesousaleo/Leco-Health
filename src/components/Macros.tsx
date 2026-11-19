@@ -1,5 +1,6 @@
 /* Telas de macros: resumo do dia, alimentos da refeição, buscador de alimentos e metas. */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { fromW, toW, wUnit } from '../units';
 import {
   LuArrowLeft, LuBookmark, LuCalculator, LuChevronRight, LuCloud, LuPencil, LuPlus, LuScanBarcode, LuSearch, LuSettings2, LuTrash2, LuX, LuZap,
 } from 'react-icons/lu';
@@ -498,7 +499,7 @@ export function MacroGoalsEditor({ onDone }: { onDone?: () => void }) {
           <div className="grid grid-cols-3 gap-2.5">
             <Field label="Idade"><NumInput value={p.age} onChange={(v) => setP({ ...p, age: Math.round(v) })} inputMode="numeric" /></Field>
             <Field label="Altura (cm)"><NumInput value={p.height} onChange={(v) => setP({ ...p, height: v })} inputMode="decimal" /></Field>
-            <Field label="Peso (kg)"><NumInput value={p.weight} onChange={(v) => setP({ ...p, weight: v })} inputMode="decimal" /></Field>
+            <Field label={`Peso (${wUnit()})`}><NumInput value={toW(p.weight)} onChange={(v) => setP({ ...p, weight: fromW(v) })} inputMode="decimal" /></Field>
           </div>
           <div>
             <p className="text-[13px] text-muted mb-2">Rotina de atividade</p>

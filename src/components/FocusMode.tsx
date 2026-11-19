@@ -1,6 +1,8 @@
 /* Modo foco: o treino em tela cheia, um exercício por vez, com números grandes,
    botão enorme para concluir a série e o descanso em contagem circular. */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { playSound } from '../sound';
+import { fmtW, fromW, toW, wStep, wUnit } from '../units';
 import { createPortal } from 'react-dom';
 import { LuCheck, LuChevronLeft, LuChevronRight, LuMinus, LuPlus, LuSkipForward, LuTrophy, LuX } from 'react-icons/lu';
 import { useStore } from '../store';
@@ -75,7 +77,8 @@ export function FocusMode({ session, onClose, onFinish }: { session: WorkoutSess
     const before = Math.max(histBest, ...entry.sets.filter((x) => x.done).map((x) => oneRM(x.weight, x.reps)));
     actions.updateSet(session.id, entry.exerciseId, cur.id, { done: true });
     void haptic('success');
-    if (histBest > 0 && e1 > before + 0.05) announcePR({ name: entry.name, weight: cur.weight, reps: cur.reps, e1rm: e1, prev: last ? `${nf(last.best.weight, 1)} kg × ${last.best.reps}` : undefined });
+    playSound('set');
+    if (histBest > 0 && e1 > before + 0.05) announcePR({ name: entry.name, weight: cur.weight, reps: cur.reps, e1rm: e1, prev: last ? `${fmtW(last.best.weight, 1)} × ${last.best.reps}` : undefined });
     const lastOfEx = entry.sets.filter((x) => !x.done).length === 1;
     if (!(lastOfEx && session.entries.slice(idx + 1).every((e) => e.sets.every((x) => x.done)) && idx === session.entries.length - 1)) timer.start(exDef?.rest, nextAfter(session, entry.exerciseId, cur.id));
     if (lastOfEx) {
@@ -85,7 +88,6 @@ export function FocusMode({ session, onClose, onFinish }: { session: WorkoutSess
   };
 
   const restOn = timer.active && !allDone;
-  const step = cur && cur.weight >= 20 ? 2.5 : 1;
 
   return createPortal(
     <div className="fixed inset-0 z-[70] bg-[#121110] text-white flex flex-col focus-in" role="dialog" aria-modal aria-label="Modo foco"
@@ -124,7 +126,7 @@ export function FocusMode({ session, onClose, onFinish }: { session: WorkoutSess
           </div>
           <p className="text-center text-[13px] text-white/55 mt-1.5">
             {exDef ? `${exDef.targetSets} × ${exDef.targetReps}` : `${entry.sets.length} séries`}{exDef?.rest ? ` · descanso ${exDef.rest}s` : ''}
-            {last ? ` · última ${fmtDayMonth(last.date)}: ${nf(last.best.weight, 1)} kg × ${last.best.reps}` : ' · primeira vez'}
+            {last ? ` · última ${fmtDayMonth(last.date)}: ${fmtW(last.best.weight, 1)} × ${last.best.reps}` : ' · primeira vez'}
           </p>
           {session.date === todayKey() && <div className="flex justify-center mt-2 [&_*]:!text-white/80"><PartnerLiftLine exerciseId={entry.exerciseId} name={entry.name} /></div>}
 
@@ -150,7 +152,7 @@ export function FocusMode({ session, onClose, onFinish }: { session: WorkoutSess
           ) : cur && (
             <>
               <div className="grid grid-cols-2 gap-3 mt-7">
-                <Stepper label="Peso (kg)" value={cur.weight} step={step} onChange={(v) => upd({ weight: Math.max(0, Math.round(v * 10) / 10) })} />
+                <Stepper label={`Peso (${wUnit()})`} value={toW(cur.weight)} step={wStep(cur.weight)} onChange={(v) => upd({ weight: Math.max(0, fromW(v)) })} />
                 <Stepper label="Repetições" value={cur.reps} step={1} onChange={(v) => upd({ reps: Math.max(0, Math.round(v)) })} />
               </div>
               <div className="mt-4">

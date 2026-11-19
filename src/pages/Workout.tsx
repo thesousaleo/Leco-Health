@@ -1,4 +1,6 @@
 import { useIntent } from '../intent';
+import { playSound } from '../sound';
+import { fmtW, fromW, leadOf, toW, wUnit, weekHeads } from '../units';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   LuBike, LuCalendarDays, LuCheck, LuChevronDown, LuChevronLeft, LuChevronRight, LuChevronUp, LuClipboardList, LuClock, LuDumbbell,
@@ -119,7 +121,7 @@ function TodayView({ goFichas }: { goFichas: () => void }) {
                     <p className="text-[12.5px] text-muted">{e.muscle} · {e.targetSets} × {e.targetReps}{e.rest ? ` · ${e.rest}s` : ''}</p>
                     <PartnerLiftLine exerciseId={e.id} name={e.name} className="mt-1" compact />
                   </div>
-                  {last && <span className="text-[12.5px] text-muted tabular-nums text-right">última<br /><b className="text-ink font-semibold">{nf(last.best.weight, 1)} kg × {last.best.reps}</b></span>}
+                  {last && <span className="text-[12.5px] text-muted tabular-nums text-right">última<br /><b className="text-ink font-semibold">{fmtW(last.best.weight, 1)} × {last.best.reps}</b></span>}
                 </li>
               );
             })}
@@ -251,9 +253,10 @@ function ExerciseCard({ session, entry, locked, nextSetId, focus }: { session: W
   { let run = histBest; entry.sets.forEach((x) => { if (!x.done) return; const e = oneRM(x.weight, x.reps); if (histBest > 0 && e > run + 0.05) { prIds.add(x.id); run = e; } }); }
   const completeSet = (s: SetLog) => {
     setFx(s.id);
+    playSound('set');
     const e = oneRM(s.weight, s.reps);
     const before = Math.max(histBest, ...entry.sets.filter((x) => x.done && x.id !== s.id).map((x) => oneRM(x.weight, x.reps)));
-    if (histBest > 0 && e > before + 0.05) announcePR({ name: entry.name, weight: s.weight, reps: s.reps, e1rm: e, prev: last ? `${nf(last.best.weight, 1)} kg × ${last.best.reps}` : undefined });
+    if (histBest > 0 && e > before + 0.05) announcePR({ name: entry.name, weight: s.weight, reps: s.reps, e1rm: e, prev: last ? `${fmtW(last.best.weight, 1)} × ${last.best.reps}` : undefined });
   };
   const allDone = entry.sets.length > 0 && done.length === entry.sets.length;
   const rest = exDef?.rest;
@@ -268,7 +271,7 @@ function ExerciseCard({ session, entry, locked, nextSetId, focus }: { session: W
         <span className="grid place-items-center size-8 rounded-full bg-good text-white shrink-0"><LuCheck size={16} strokeWidth={3} /></span>
         <span className="flex-1 min-w-0">
           <span className="block text-[15px] font-medium text-ink truncate line-through decoration-ink/25">{entry.name}</span>
-          <span className="block text-[12.5px] text-muted tabular-nums">{entry.sets.length} séries · melhor {nf(bestNow, 1)} kg{isPR ? ' · recorde!' : ''}</span>
+          <span className="block text-[12.5px] text-muted tabular-nums">{entry.sets.length} séries · melhor {fmtW(bestNow, 1)}{isPR ? ' · recorde!' : ''}</span>
         </span>
         <LuChevronDown size={16} className="text-muted" />
       </button>
@@ -284,14 +287,14 @@ function ExerciseCard({ session, entry, locked, nextSetId, focus }: { session: W
             <Tag accent="neutral">{entry.muscle}</Tag>
             {rest && <Tag accent="neutral"><LuTimer size={11} /> {rest}s</Tag>}
             {isPR && <Tag accent="treino"><LuTrophy size={11} /> Recorde</Tag>}
-            {best1rm > 0 && <span className="text-[11.5px] text-muted tabular-nums">1RM ≈ {nf(best1rm, 0)} kg</span>}
+            {best1rm > 0 && <span className="text-[11.5px] text-muted tabular-nums">1RM ≈ {fmtW(best1rm, 0)}</span>}
           </div>
         </div>
         <div className="text-right shrink-0">
           {last ? (
             <>
               <p className="text-[11.5px] text-muted">última · {fmtDayMonth(last.date)}</p>
-              <p className="text-[14px] font-semibold text-ink tabular-nums">{nf(last.best.weight, 1)} kg × {last.best.reps}</p>
+              <p className="text-[14px] font-semibold text-ink tabular-nums">{fmtW(last.best.weight, 1)} × {last.best.reps}</p>
               {!isPR && done.length === 0 && <p className="text-[11.5px] text-orange flex items-center gap-1 justify-end"><LuTrendingUp size={11} /> tente {nf(last.best.weight + 2.5, 1)}</p>}
             </>
           ) : <p className="text-[11.5px] text-muted">primeira vez</p>}
@@ -300,7 +303,7 @@ function ExerciseCard({ session, entry, locked, nextSetId, focus }: { session: W
 
       {session.date === todayKey() && <PartnerLiftLine exerciseId={entry.exerciseId} name={entry.name} className="mb-3 -mt-1" />}
       <div className="grid grid-cols-[26px_1fr_1fr_1fr_44px] gap-1.5 items-center text-[11px] text-muted px-0.5 mb-1.5">
-        <span className="text-center">#</span><span className="text-center">kg</span><span className="text-center">reps</span><span className="text-center">RPE</span><span />
+        <span className="text-center">#</span><span className="text-center">{wUnit()}</span><span className="text-center">reps</span><span className="text-center">RPE</span><span />
       </div>
       <div className="space-y-1.5">
         {entry.sets.map((s, i) => (
@@ -310,7 +313,7 @@ function ExerciseCard({ session, entry, locked, nextSetId, focus }: { session: W
             {prIds.has(s.id)
               ? <span className="text-center text-[15px] font-bold" style={{ color: 'var(--color-gold)' }} title="Recorde">★</span>
               : <span className={cx('text-center text-[14px] font-semibold', s.done ? 'text-orange line-through' : s.id === nextSetId ? 'text-orange' : 'text-muted')}>{i + 1}</span>}
-            <NumInput disabled={locked} value={s.weight} onChange={(v) => actions.updateSet(session.id, entry.exerciseId, s.id, { weight: v })} aria-label={`Peso série ${i + 1}`} />
+            <NumInput disabled={locked} value={toW(s.weight)} onChange={(v) => actions.updateSet(session.id, entry.exerciseId, s.id, { weight: fromW(v) })} aria-label={`Peso série ${i + 1}`} />
             <NumInput disabled={locked} value={s.reps} onChange={(v) => actions.updateSet(session.id, entry.exerciseId, s.id, { reps: Math.round(v) })} aria-label={`Repetições série ${i + 1}`} />
             <select disabled={locked} value={s.rpe} aria-label={`RPE série ${i + 1}`}
               onChange={(e) => actions.updateSet(session.id, entry.exerciseId, s.id, { rpe: +e.target.value })}
@@ -421,7 +424,7 @@ function WorkoutSummary({ session }: { session: WorkoutSession }) {
       kind: 'treino', title, name: state.profile.name, partner: together, streak: overallStreak(state),
       date: new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).format(fromKey(session.date)),
       stats: [['Duração', `${st.mins} min`], ['Volume', `${nf(st.volume / 1000, 1)} t`], ['Séries', `${st.sets}`], ['Recordes', `${st.prs}`]],
-      rows: st.tops.map((t) => ({ name: t.name, value: `${nf(t.best!.weight, 1)} kg × ${t.best!.reps}`, pr: t.pr, bar: t.best!.weight / maxW })),
+      rows: st.tops.map((t) => ({ name: t.name, value: `${fmtW(t.best!.weight, 1)} × ${t.best!.reps}`, pr: t.pr, bar: t.best!.weight / maxW })),
     });
   };
   return (
@@ -443,7 +446,7 @@ function WorkoutSummary({ session }: { session: WorkoutSession }) {
             {st.tops.slice(0, 4).map((t) => (
               <li key={t.name} className="flex items-center justify-between gap-3 text-[13.5px]">
                 <span className="truncate text-white/80">{t.name}</span>
-                <span className={cx('tabular-nums shrink-0', t.pr ? 'text-orange font-semibold' : 'text-white/55')}>{nf(t.best!.weight, 1)} kg × {t.best!.reps}{t.pr ? ' ★' : ''}</span>
+                <span className={cx('tabular-nums shrink-0', t.pr ? 'text-orange font-semibold' : 'text-white/55')}>{fmtW(t.best!.weight, 1)} × {t.best!.reps}{t.pr ? ' ★' : ''}</span>
               </li>
             ))}
           </ul>
@@ -775,7 +778,7 @@ function History({ onEdit }: { onEdit: (id: string) => void }) {
           <Select value={exId} onChange={(e) => setExId(e.target.value)} className="mb-3">
             {exercises.map(([id, n]) => <option key={id} value={id}>{n}</option>)}
           </Select>
-          <LineChart data={progression} unit=" kg" stars={prStars} bandColor="var(--color-gold)"
+          <LineChart data={progression} weight stars={prStars} bandColor="var(--color-gold)"
             band={metric === '1rm' ? progRaw.map((p) => ({ lo: round1(p.range.lo), hi: round1(p.range.hi) })) : undefined} />
           <p className="text-[12px] text-muted mt-1">
             <span style={{ color: 'var(--color-gold)' }}>★</span> recorde
@@ -793,8 +796,8 @@ function History({ onEdit }: { onEdit: (id: string) => void }) {
                   <span className="block text-[12px] text-muted">{relDay(p.best!.date)}</span>
                 </span>
                 <span className="text-right shrink-0">
-                  <span className="block text-[14.5px] font-semibold text-ink tabular-nums">{nf(p.best!.w, 1)} kg × {p.best!.reps}</span>
-                  <span className="block text-[12px] text-muted tabular-nums">1RM ≈ {nf(p.best1!.v, 0)} kg</span>
+                  <span className="block text-[14.5px] font-semibold text-ink tabular-nums">{fmtW(p.best!.w, 1)} × {p.best!.reps}</span>
+                  <span className="block text-[12px] text-muted tabular-nums">1RM ≈ {fmtW(p.best1!.v, 0)}</span>
                 </span>
               </li>
             ))}
@@ -833,7 +836,7 @@ function MonthCalendar() {
   const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const first = toKey(month);
   const daysIn = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-  const lead = (month.getDay() + 6) % 7;
+  const lead = leadOf(month);
   const lift = new Set(state.sessions.filter((s) => s.completed).map((s) => s.date));
   const cardio = new Set((state.cardio || []).map((c) => c.date));
   const count = [...Array(daysIn)].filter((_, i) => { const d = addDays(first, i); return lift.has(d) || cardio.has(d); }).length;
@@ -851,7 +854,7 @@ function MonthCalendar() {
         <IconButton label="Próximo mês" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}><LuChevronRight size={18} /></IconButton>
       </div>
       <div className="grid grid-cols-7 gap-1.5 text-center">
-        {['S', 'T', 'Q', 'Q', 'S', 'S', 'D'].map((d, i) => <span key={i} className="text-[11px] text-muted">{d}</span>)}
+        {weekHeads().map((d, i) => <span key={i} className="text-[11px] text-muted">{d}</span>)}
         {[...Array(lead)].map((_, i) => <span key={'l' + i} />)}
         {[...Array(daysIn)].map((_, i) => {
           const d = addDays(first, i);

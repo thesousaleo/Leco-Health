@@ -1,6 +1,7 @@
 /* Treino em dupla — funções puras: o plano (fichas + dias), sua impressão e o
    remapeamento do histórico para os exercícios do plano compartilhado. */
 import type { AppState, DateKey, Split, WeekSchedule, WorkoutSession } from './types';
+import { toW, wUnit } from './units';
 
 export interface SharedPlan { v: 1; splits: Split[]; schedule: WeekSchedule }
 
@@ -107,10 +108,10 @@ export function findLift(lifts: PartnerLift[] | undefined, id: string, name: str
 }
 
 export const fmtSets = (s: [number, number][], max = 4) => {
-  const f = (w: number) => String(w).replace('.', ',');
+  const f = (w: number) => String(toW(w)).replace('.', ',');
   // séries iguais seguidas viram "3× 80 kg × 8"
   const groups: { w: number; r: number; n: number }[] = [];
   s.forEach(([w, r]) => { const g = groups[groups.length - 1]; if (g && g.w === w && g.r === r) g.n++; else groups.push({ w, r, n: 1 }); });
-  const parts = groups.slice(0, max).map((g) => `${g.n > 1 ? `${g.n}× ` : ''}${f(g.w)} kg × ${g.r}`);
+  const parts = groups.slice(0, max).map((g) => `${g.n > 1 ? `${g.n}× ` : ''}${f(g.w)} ${wUnit()} × ${g.r}`);
   return parts.join(' · ') + (groups.length > max ? ' …' : '');
 };
