@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type {
-  AppState, BodyLog, MealLog, WaterSize, Prefs, HomeBlockId, CardioLog, CustomFood, DateKey, Exercise, FoodEntry, FoodItem, Goals, Habit, ID, NoteEntry, PausePeriod, SavedMeal, SetLog, SleepLog, Split, WorkoutSession,
+  AppState, BodyLog, DuoLink, MealLog, WaterSize, Prefs, HomeBlockId, CardioLog, CustomFood, DateKey, Exercise, FoodEntry, FoodItem, Goals, Habit, ID, NoteEntry, PausePeriod, SavedMeal, SetLog, SleepLog, Split, WorkoutSession,
 } from './types';
 import { buildEmptyState, buildMockState } from './mock';
 import { DEFAULT_HOME, defaultPrefs } from './prefs';
@@ -8,6 +8,7 @@ import { haptic } from './native';
 import { MEAL_DEFAULT_TIME, migrateLegacyFoods } from './food';
 export { DEFAULT_HOME, defaultPrefs };
 import { addDays, lastPerformance, todayKey, uid } from './utils';
+import { remapHistory, type SharedPlan } from './duoPlan';
 
 /* ─────────────────────────────────────────────────────────────
    Camada de persistência (adapter). Hoje: localStorage.
@@ -89,6 +90,24 @@ function makeActions(mutate: (fn: (d: AppState) => void) => void, get: () => App
     setPrefs: (patch: Partial<Prefs>) => mutate((d) => { d.prefs = { ...d.prefs, ...patch }; }),
     setGoals: (g: Goals) => mutate((d) => { d.goals = g; }),
     setSchedule: (day: number, splitId: ID | null) => mutate((d) => { d.schedule[day] = splitId; }),
+
+    // treino em dupla
+    setDuo: (duo: DuoLink | undefined) => mutate((d) => { if (duo) d.duo = duo; else delete d.duo; }),
+    /** Troca fichas e dias pelos do plano (guarda as atuais se pedido) e liga o histórico aos exercícios novos. */
+    applySharedPlan: (plan: SharedPlan, duo: DuoLink, keepBackup?: boolean) => mutate((d) => {
+      if (keepBackup && !d.planBackup && d.splits.length) d.planBackup = { splits: d.splits, schedule: d.schedule, at: new Date().toISOString() };
+      d.splits = structuredClone(plan.splits);
+      d.schedule = structuredClone(plan.schedule);
+      d.sessions = remapHistory(d.sessions, d.splits);
+      d.duo = duo;
+    }),
+    restorePlanBackup: () => mutate((d) => {
+      if (!d.planBackup) return;
+      d.splits = d.planBackup.splits; d.schedule = d.planBackup.schedule;
+      d.sessions = remapHistory(d.sessions, d.splits);
+      delete d.planBackup;
+    }),
+    dropPlanBackup: () => mutate((d) => { delete d.planBackup; }),
 
     // fichas
     addSplit: (letter: string, name: string) => {

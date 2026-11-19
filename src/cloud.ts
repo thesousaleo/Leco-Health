@@ -58,6 +58,10 @@ const msgPt = (raw: string): string => {
   if (m.includes('code_not_found')) return 'Código não encontrado. Confira com seu amigo.';
   if (m.includes('own_code')) return 'Esse é o seu próprio código 🙂';
   if (m.includes('rate limit')) return 'Muitas tentativas. Aguarde um minuto.';
+  if (m.includes('already_in_plan')) return 'Você já está treinando em dupla. Saia da dupla atual primeiro.';
+  if (m.includes('not_friends')) return 'Vocês precisam ser amigos no app para treinar em dupla.';
+  if (m.includes('no_invite')) return 'Esse convite não existe mais.';
+  if (m.includes('not_in_plan')) return 'Você não está mais nesse treino em dupla.';
   if (m.includes('failed to fetch') || m.includes('network')) return 'Sem conexão com a internet.';
   return raw;
 };
@@ -224,6 +228,29 @@ export async function leaveChallenge(s: Session, id: number) {
 }
 export async function deleteChallenge(s: Session, id: number) {
   await req(`/rest/v1/challenges?id=eq.${id}`, { method: 'DELETE', token: s.access_token });
+}
+
+/* ── treino em dupla ───────────────────────────────────────── */
+export interface SharedPlanRow {
+  id: number; plan: unknown; version: number; updated_by: string | null; updated_at: string; created_by: string;
+  my_status: 'invited' | 'joined'; members: { id: string; status: 'invited' | 'joined'; name: string }[];
+}
+export async function listSharedPlans(s: Session) {
+  return req<SharedPlanRow[]>('/rest/v1/rpc/get_my_shared_plans', { method: 'POST', token: s.access_token, body: '{}' });
+}
+export async function createSharedPlan(s: Session, friend: string, plan: unknown) {
+  return req<number>('/rest/v1/rpc/create_shared_plan', { method: 'POST', token: s.access_token, body: JSON.stringify({ friend, plan }) });
+}
+export async function respondSharedPlan(s: Session, pid: number, accept: boolean) {
+  await req('/rest/v1/rpc/respond_shared_plan', { method: 'POST', token: s.access_token, body: JSON.stringify({ pid, accept }) });
+}
+export async function leaveSharedPlan(s: Session, pid: number) {
+  await req('/rest/v1/rpc/leave_shared_plan', { method: 'POST', token: s.access_token, body: JSON.stringify({ pid }) });
+}
+export async function updateSharedPlan(s: Session, pid: number, plan: unknown, base: number) {
+  return req<{ ok: boolean; version: number; plan?: unknown; updated_by?: string; updated_by_name?: string }>('/rest/v1/rpc/update_shared_plan', {
+    method: 'POST', token: s.access_token, body: JSON.stringify({ pid, new_plan: plan, base }),
+  });
 }
 
 export async function deleteAccount(s: Session) {

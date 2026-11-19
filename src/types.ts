@@ -254,12 +254,26 @@ export interface Prefs {
 }
 
 /* ── Estado raiz ───────────────────────────────────────────── */
+/** Treino em dupla: fichas e dias da semana compartilhados com um amigo. */
+export interface DuoLink {
+  planId: number;
+  version: number; // versão do plano no servidor que estas fichas refletem
+  hash: string; // impressão das fichas + dias dessa versão (detecta mudanças locais)
+  partnerId?: string;
+  partnerName?: string;
+  pending?: boolean; // convite ainda não aceito pelo amigo
+  createdByMe?: boolean;
+}
+export interface PlanBackup { splits: Split[]; schedule: WeekSchedule; at: string }
+
 export interface AppState {
   meta: { version: number; createdAt: string; updatedAt: string };
   profile: { name: string; shareBody?: boolean };
   goals: Goals;
   splits: Split[];
   schedule: WeekSchedule;
+  duo?: DuoLink;
+  planBackup?: PlanBackup; // fichas de antes do treino em dupla
   sessions: WorkoutSession[];
   cardio: CardioLog[];
   foods: FoodEntry[]; // legado (contagem antiga de macros) — migrado para as refeições

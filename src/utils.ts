@@ -1,6 +1,7 @@
 import { macroAdherence, macrosOn } from './food';
 import type { AppState, DateKey, FoodEntry, Habit, HabitAuto, ID, MealType, ModuleId, PausePeriod, WorkoutSession } from './types';
 import { oneRM } from './exercises';
+import { liftsFor, todayFor } from './duoPlan';
 
 /* ── ids ───────────────────────────────────────────────────── */
 export const uid = (): ID =>
@@ -308,10 +309,11 @@ export const dayScore = (state: AppState, day: DateKey = todayKey()) => {
 
 /* ── resumo público para amigos (cada categoria pode ser escondida por amigo) ── */
 export const SHARE_CATEGORIES = [
-  { id: 'score', label: 'Score do dia' }, { id: 'treino', label: 'Treinos' }, { id: 'habitos', label: 'Hábitos' },
+  { id: 'score', label: 'Score do dia' }, { id: 'treino', label: 'Treinos e cargas' }, { id: 'habitos', label: 'Hábitos' },
   { id: 'refeicoes', label: 'Refeições' }, { id: 'agua', label: 'Água' }, { id: 'sono', label: 'Sono' }, { id: 'peso', label: 'Peso' },
 ] as const;
 export type ShareCat = (typeof SHARE_CATEGORIES)[number]['id'];
+
 
 export const buildProgress = (state: AppState, name: string) => {
   const today = todayKey();
@@ -338,6 +340,9 @@ export const buildProgress = (state: AppState, name: string) => {
       week: week.filter(trainedOn).length,
       last: last ? { date: last.date, name: lastSplit ? `Treino ${lastSplit.letter} · ${lastSplit.name}` : 'Treino', volume: Math.round(sessionVolume(last)) } : undefined,
       days: days30.map((d) => ({ d, v: trainedOn(d) ? 1 : 0 })),
+      today: todayFor(state, today),
+      lifts: liftsFor(state, today),
+      duo: state.duo && !state.duo.pending ? state.duo.planId : undefined,
     },
     habitos: {
       today: `${hsToday.filter((h) => isHabitDone(state, h.id, today)).length}/${hsToday.length}`,

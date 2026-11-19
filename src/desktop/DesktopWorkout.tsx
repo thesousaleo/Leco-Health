@@ -1,6 +1,6 @@
 /* Treino no computador: painel com indicadores, semana e fichas, exercícios, evolução, músculos e histórico. */
 import React, { useMemo, useState } from 'react';
-import { LuCalendarDays, LuClipboardList, LuClock, LuDumbbell, LuFootprints, LuHistory, LuLayoutDashboard, LuPencil, LuPlay, LuPlus, LuStar, LuTrendingUp, LuTrophy } from 'react-icons/lu';
+import { LuUsers, LuCalendarDays, LuClipboardList, LuClock, LuDumbbell, LuFootprints, LuHistory, LuLayoutDashboard, LuPencil, LuPlay, LuPlus, LuStar, LuTrendingUp, LuTrophy } from 'react-icons/lu';
 import type { WorkoutSession } from '../types';
 import { useStore } from '../store';
 import { addDays, fmtShort, lastPerformance, nf, relDay, round1, sessionVolume, todayKey, weekday, WEEKDAYS } from '../utils';
@@ -9,6 +9,10 @@ import { LineChart, Sparkline } from '../components/charts';
 import { Button, cx } from '../components/ui';
 import { DataTable, DeskLayout, Delta, InspectProvider, Kpi, Panel, Pills, useInspect } from './kit';
 import { InspectorBody } from './details';
+import { DUO_COLOR, DuoInvites, PartnerTodayStrip } from '../components/Duo';
+import { useDuo, usePartnerLive } from '../duo';
+import { useSync } from '../sync';
+import { findLift } from '../duoPlan';
 
 export type WView = 'painel' | 'sessao' | 'cardio' | 'fichas' | 'historico';
 export const W_VIEWS: { value: WView; label: React.ReactNode }[] = [
@@ -116,6 +120,9 @@ function Board({ setView, onEdit, MuscleMap, Calendar }: Props) {
         <Kpi label="Duração média" icon={<LuClock size={12} />} value={avgDur || '—'} unit={avgDur ? 'min' : undefined} foot="últimos 10 treinos" />
       </div>
 
+      <DuoInvites />
+      <DuoStatus onFichas={() => setView('fichas')} />
+
       <div className="grid grid-cols-12 gap-5 items-start">
         {/* semana + fichas */}
         <div className="col-span-12 @4xl:col-span-4 space-y-5">
@@ -197,9 +204,29 @@ function Board({ setView, onEdit, MuscleMap, Calendar }: Props) {
   );
 }
 
+/* ── treino em dupla ──────────────────────────────────────────── */
+const first = (n: string) => n.split(' ')[0];
+function DuoStatus({ onFichas }: { onFichas: () => void }) {
+  const { duo, available } = useDuo();
+  const { friends, refreshFriends } = useSync();
+  usePartnerLive(!!duo, 40_000);
+  React.useEffect(() => { if (available && !duo) void refreshFriends(); }, [available]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!available || (!duo && !friends.some((f) => f.status === 'accepted'))) return null;
+  if (duo && !duo.pending) return <PartnerTodayStrip className="glass !rounded-[22px] px-4 py-3" />;
+  return (
+    <div className="glass rounded-[22px] px-4 py-3 flex items-center gap-3 text-[13.5px]">
+      <span className="grid place-items-center size-8 rounded-full shrink-0" style={{ background: 'color-mix(in srgb, var(--color-mind) 14%, transparent)', color: DUO_COLOR }}><LuUsers size={16} /></span>
+      <span className="flex-1 min-w-0 text-ink">{duo?.pending ? `Esperando ${first(duo.partnerName || 'seu amigo')} aceitar o treino em dupla.` : 'Treina com um amigo? Divida as fichas e os dias e veja as cargas dele em cada exercício.'}</span>
+      <Button size="sm" variant="soft" onClick={onFichas}>{duo?.pending ? 'Ver' : 'Treinar em dupla'}</Button>
+    </div>
+  );
+}
+
 /* ── tabela de exercícios ─────────────────────────────────────── */
 function ExerciseTable({ exIds, selected, onPick }: { exIds: string[]; selected: string | null; onPick: (id: string) => void }) {
   const { state } = useStore();
+  const { duo, partnerTreino } = useDuo();
+  const partner = duo && !duo.pending ? duo.partnerName || 'Amigo' : null;
   const today = todayKey();
   const all = state.splits.flatMap((s) => s.exercises);
   const rows = exIds.map((id) => {
@@ -220,6 +247,7 @@ function ExerciseTable({ exIds, selected, onPick }: { exIds: string[]; selected:
         { key: 'n', label: 'Exercício', render: (r) => <span className="font-medium text-ink">{r.ex.name}<span className="block text-[12px] text-muted font-normal">{r.ex.muscle}</span></span> },
         { key: 'a', label: 'Meta', render: (r) => `${r.ex.targetSets} × ${r.ex.targetReps}` },
         { key: 'l', label: 'Última', render: (r) => r.last ? <span>{nf(r.last.best.weight, 1)} kg × {r.last.best.reps}<span className="block text-[12px] text-muted">{relDay(r.last.date)}</span></span> : <span className="text-muted">—</span> },
+        ...(partner ? [{ key: 'p', label: first(partner), render: (r: typeof rows[number]) => { const l = findLift(partnerTreino?.lifts, r.ex.id, r.ex.name); return l ? <span style={{ color: DUO_COLOR }}>{nf(l.s[0][0], 1)} kg × {l.s[0][1]}<span className="block text-[12px] text-muted">{relDay(l.d)}</span></span> : <span className="text-muted">—</span>; } }] : []),
         { key: 'b', label: 'Melhor série', render: (r) => r.best ? `${nf(r.best.weight, 1)} kg × ${r.best.reps}` : <span className="text-muted">—</span> },
         { key: 'r', label: '1RM est.', align: 'right', render: (r) => r.best ? <b className="text-ink font-semibold">{nf(oneRM(r.best.weight, r.best.reps), 0)} kg</b> : '—' },
         { key: 's', label: 'Evolução', align: 'right', w: '96px', render: (r) => r.e1.length > 1 ? <span className="inline-block"><Sparkline values={r.e1} width={80} height={26} /></span> : <span className="text-muted">—</span> },

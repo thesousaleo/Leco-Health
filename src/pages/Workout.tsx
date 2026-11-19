@@ -19,6 +19,8 @@ import { BodyMap, muscleStats, recoveryZone, REGION_LABEL, volumeZone, type Regi
 import { haptic, shareFile } from '../native';
 import { useIsDesktop } from '../desktop/kit';
 import DesktopWorkout from '../desktop/DesktopWorkout';
+import { DuoCard, DuoInvites, PartnerLiftLine, PartnerTodayStrip } from '../components/Duo';
+import { usePartnerLive } from '../duo';
 
 type View = 'painel' | 'sessao' | 'cardio' | 'fichas' | 'historico';
 
@@ -81,11 +83,15 @@ function TodayView({ goFichas }: { goFichas: () => void }) {
   const split = state.splits.find((s) => s.id === splitId);
   const session = split && state.sessions.find((s) => s.date === today && s.splitId === split.id);
 
+  usePartnerLive(true);
+
   if (!state.splits.length)
-    return <Card className="p-5"><Empty icon={<LuDumbbell />} title="Nenhuma ficha criada" text="Crie sua divisão de treino (A, B, C…) na aba Fichas." action={<Button variant="primary" onClick={goFichas}>Criar ficha</Button>} /></Card>;
+    return <><DuoInvites compact /><Card className="p-5"><Empty icon={<LuDumbbell />} title="Nenhuma ficha criada" text="Crie sua divisão de treino (A, B, C…) na aba Fichas." action={<Button variant="primary" onClick={goFichas}>Criar ficha</Button>} /></Card></>;
 
   return (
     <>
+      <DuoInvites compact />
+      <PartnerTodayStrip className="mb-4" />
       <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4 md:mx-0 md:px-0 pb-1 mb-4">
         {state.splits.map((s) => (
           <Chip key={s.id} active={s.id === splitId} onClick={() => setSplitId(s.id)}>
@@ -106,6 +112,7 @@ function TodayView({ goFichas }: { goFichas: () => void }) {
                   <div className="flex-1 min-w-0">
                     <p className="text-[15px] text-ink truncate">{e.name}</p>
                     <p className="text-[12.5px] text-muted">{e.muscle} · {e.targetSets} × {e.targetReps}{e.rest ? ` · ${e.rest}s` : ''}</p>
+                    <PartnerLiftLine exerciseId={e.id} name={e.name} className="mt-1" compact />
                   </div>
                   {last && <span className="text-[12.5px] text-muted tabular-nums text-right">última<br /><b className="text-ink font-semibold">{nf(last.best.weight, 1)} kg × {last.best.reps}</b></span>}
                 </li>
@@ -283,6 +290,7 @@ function ExerciseCard({ session, entry, locked, nextSetId, focus }: { session: W
         </div>
       </div>
 
+      {session.date === todayKey() && <PartnerLiftLine exerciseId={entry.exerciseId} name={entry.name} className="mb-3 -mt-1" />}
       <div className="grid grid-cols-[26px_1fr_1fr_1fr_44px] gap-1.5 items-center text-[11px] text-muted px-0.5 mb-1.5">
         <span className="text-center">#</span><span className="text-center">kg</span><span className="text-center">reps</span><span className="text-center">RPE</span><span />
       </div>
@@ -570,9 +578,10 @@ function SplitsManager() {
   const [name, setName] = useState('');
   return (
     <div className="space-y-4">
+      <DuoCard />
       <Card className="p-5 md:p-6">
         <p className="text-[16px] font-semibold text-ink">Agenda da semana</p>
-        <p className="text-[13px] text-muted mb-4">Qual ficha você treina em cada dia.</p>
+        <p className="text-[13px] text-muted mb-4">{state.duo && !state.duo.pending ? `Qual ficha vocês treinam em cada dia (vale para você e ${(state.duo.partnerName || 'seu amigo').split(' ')[0]}).` : 'Qual ficha você treina em cada dia.'}</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
           {[1, 2, 3, 4, 5, 6, 0].map((d) => (
             <Field key={d} label={WEEKDAYS[d]}>

@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { LuCheck, LuCopy, LuCrown, LuDumbbell, LuEye, LuFlag, LuFlame, LuPlus, LuRefreshCw, LuTrophy, LuUserPlus, LuUsers, LuX } from 'react-icons/lu';
 import { useStore } from '../store';
 import { useSync } from '../sync';
+import { useDuo } from '../duo';
+import { setIntent } from '../intent';
 import * as cloud from '../cloud';
 import type { Challenge, Friend, Reaction } from '../cloud';
 import { addDays, buildProgress, fmtShort, metMetric, nf, relDay, SHARE_CATEGORIES, todayKey } from '../utils';
@@ -296,6 +298,7 @@ function FriendCard({ f, sent, onReact, onRemove, onSharesSaved }: {
             </div>
           )}
           <div className="mt-3 flex flex-wrap gap-2">
+            <DuoChip f={f} />
             {s.treino?.last && (
               <span className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-cream text-[12.5px] text-ink">
                 <LuDumbbell size={13} className="text-orange" /> {s.treino.last.name} · {relDay(s.treino.last.date).toLowerCase()}
@@ -325,6 +328,24 @@ function FriendCard({ f, sent, onReact, onRemove, onSharesSaved }: {
       </div>
       <SharesModal open={sharesOpen} f={f} onClose={() => setSharesOpen(false)} onSaved={onSharesSaved} />
     </Card>
+  );
+}
+
+/** Treino em dupla com este amigo: selo ou atalho para convidar. */
+function DuoChip({ f }: { f: Friend }) {
+  const { duo, available } = useDuo();
+  if (!available || f.status !== 'accepted') return null;
+  const go = () => { setIntent('treino', 'fichas'); location.hash = 'treino'; };
+  if (duo?.partnerId === f.userId) return (
+    <button onClick={go} className="press inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-[12.5px] font-medium text-white" style={{ background: 'var(--color-mind)' }}>
+      <LuUsers size={13} /> {duo.pending ? 'Convite de treino enviado' : 'Treinam em dupla'}
+    </button>
+  );
+  if (duo && !duo.pending) return null;
+  return (
+    <button onClick={go} className="press inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-cream text-[12.5px] text-ink">
+      <LuUsers size={13} style={{ color: 'var(--color-mind)' }} /> Treinar em dupla
+    </button>
   );
 }
 

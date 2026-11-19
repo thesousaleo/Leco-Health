@@ -2,6 +2,7 @@ import React, { Activity, startTransition, useCallback, useEffect, useLayoutEffe
 import { useRipple, staggerIn } from './motion';
 import { LuActivity, LuApple, LuCamera, LuCircleX, LuCircleCheck, LuDroplet, LuDumbbell, LuHouse, LuListChecks, LuMoon, LuNotebookPen, LuPlus, LuScale, LuChevronLeft, LuChevronRight, LuSearch, LuSettings, LuTrophy, LuUsers, LuCloudUpload, LuSparkles } from 'react-icons/lu';
 import { setIntent } from './intent';
+import { DuoProvider } from './duo';
 import { SyncProvider, useSync } from './sync';
 import AuthForm from './components/AuthForm';
 import Friends from './pages/Friends';
@@ -595,10 +596,12 @@ export default function App() {
   return (
     <StoreProvider>
       <SyncProvider>
-        <Effects />
-        <LockGate>
-          <Shell />
-        </LockGate>
+        <DuoProvider>
+          <Effects />
+          <LockGate>
+            <Shell />
+          </LockGate>
+        </DuoProvider>
       </SyncProvider>
     </StoreProvider>
   );
