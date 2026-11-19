@@ -129,11 +129,11 @@ export function RestTimerProvider({ children, visible }: { children: React.React
             </div>
           )}
           <button onClick={() => setOpen((o) => !o)}
-            className={cx('press h-14 rounded-full flex items-center gap-2 pl-5 pr-6 transition-colors shadow-[0_10px_30px_-10px_rgba(28,27,26,.4)]',
+            className={cx('press rounded-full flex items-center gap-2 transition-all shadow-[0_10px_30px_-10px_rgba(28,27,26,.4)]', active || flash ? 'h-14 pl-5 pr-6' : 'h-12 pl-4 pr-4.5',
               flash ? 'bg-orange text-white animate-pulse' : active ? 'bg-orange text-white' : 'bg-[#1C1B1A] text-white', urgent && 'timer-urgent')}
             aria-label="Timer de descanso">
             <LuTimer size={20} />
-            <span className="font-medium tabular-nums text-[16px]">{flash ? 'Bora!' : active ? mm : 'Descanso'}</span>
+            <span className={cx('font-medium tabular-nums', active || flash ? 'text-[16px]' : 'text-[14px]')}>{flash ? 'Bora!' : active ? mm : 'Descanso'}</span>
           </button>
         </div>
       )}

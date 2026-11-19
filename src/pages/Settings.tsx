@@ -5,7 +5,7 @@ import { useIntent } from '../intent';
 import { useSync } from '../sync';
 import AuthForm from '../components/AuthForm';
 import type { Accent, Goals, HomeBlockId, ModuleId, Prefs, TabId } from '../types';
-import { DEFAULT_HOME } from '../prefs';
+import { ACCENTS, DEFAULT_HOME } from '../prefs';
 import { biometricAvailable, notificationsAllowed, isNative, shareFile } from '../native';
 import { buildCsv, buildZip, CSV_LIST, textToB64, type CsvId } from '../export';
 import { hashPin, loadLock, PinPad, saveLock } from '../components/Lock';
@@ -363,11 +363,6 @@ function DeleteAccount() {
 }
 
 /* ── Aparência ─────────────────────────────────────────────── */
-const ACCENTS: { id: Accent; label: string; color: string }[] = [
-  { id: 'laranja', label: 'Laranja', color: '#F26B3A' }, { id: 'verde', label: 'Verde', color: '#16A34A' },
-  { id: 'azul', label: 'Azul', color: '#2563EB' }, { id: 'roxo', label: 'Roxo', color: '#7C3AED' },
-  { id: 'rosa', label: 'Rosa', color: '#DB2777' }, { id: 'grafite', label: 'Grafite', color: '#3F3F46' },
-];
 const BLOCK_LABEL: Record<HomeBlockId, string> = {
   dia: 'Seu dia', faixa: 'Seu dia em 24 h', resumo: 'Resumo da semana (domingo e segunda)', agua: 'Água', semana: 'Sua semana', habitos: 'Hábitos de hoje', refeicoes: 'Refeições de hoje', corpo: 'Corpo e sono',
 };

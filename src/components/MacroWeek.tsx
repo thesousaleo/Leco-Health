@@ -6,7 +6,7 @@ import { useStore } from '../store';
 import { dayGoals, dayItems, dayMacros, estimatedExpenditure, MACRO_COLORS, MACRO_LABEL, sumItems } from '../food';
 import { lastNDays, nf, todayKey } from '../utils';
 import { BarChart } from './charts';
-import { Button, Card, cx, IconButton, Modal } from './ui';
+import { Button, Card, cx, Empty, IconButton, Modal } from './ui';
 import { CustomFoodForm, MacroBar } from './Macros';
 
 const f0 = (n: number) => nf(Math.round(n), 0);
@@ -37,12 +37,15 @@ export function MacroWeek({ onGoals }: { onGoals: () => void }) {
   }, [state, n]); // eslint-disable-line react-hooks/exhaustive-deps
   const est = estimatedExpenditure(state);
 
+  const any = days.some((d) => dayItems(state, d).length > 0);
   return (
     <div className="space-y-4 md:space-y-5">
-      <div className="flex gap-1 bg-surface rounded-full p-1 w-fit">
+      {!any && <Card className="p-5"><Empty art="nutricao" title={`Nada registrado nos últimos ${n} dias`} text="Adicione os alimentos das refeições no Diário. Aqui aparecem as médias, a distribuição dos macros e o seu gasto real." /></Card>}
+      <div className={cx('flex gap-1 bg-surface rounded-full p-1 w-fit', !any && 'hidden')}>
         {([7, 30] as const).map((v) => <button key={v} onClick={() => setN(v)} className={cx('press h-8 px-4 rounded-full text-[13px] font-medium', n === v ? 'bg-ink text-on-ink' : 'text-ink/60')}>{v} dias</button>)}
       </div>
 
+      {any && <>
       <Card className="p-5 md:p-6">
         <p className="t-section text-ink">Calorias por dia</p>
         <p className="t-caption mb-3">Tracejado = sua meta · barras cheias = dentro de ±10%{state.goals.trainBonus ? ' · dias de treino têm meta maior' : ''}</p>
@@ -82,6 +85,7 @@ export function MacroWeek({ onGoals }: { onGoals: () => void }) {
         ) : <p className="text-[14px] text-muted mt-3">Registre alimentos nas refeições para ver as médias aqui.</p>}
       </Card>
 
+      </>}
       <Card className="p-5 md:p-6">
         <p className="t-section text-ink flex items-center gap-2"><LuFlame size={16} /> Gasto real estimado</p>
         {est.ready ? (

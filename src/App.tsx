@@ -12,7 +12,8 @@ import { dayScore, habitCount, isHabitDone, modOn, todayKey } from './utils';
 import { macrosOn } from './food';
 import { RestTimerProvider } from './components/RestTimer';
 import { Button, cx, Modal, ProgressBar } from './components/ui';
-import { Celebration, SetupWizard } from './components/Extras';
+import { Celebration } from './components/Extras';
+import { SetupFlow } from './components/Setup';
 import { LockGate } from './components/Lock';
 import { haptic, leaveApp, onBackButton, onNotificationAction, setSystemBars, snoozeNotification, syncReminders, takeShortcutAction } from './native';
 import { popBack } from './back';
@@ -300,7 +301,7 @@ function Shell() {
   const activeIdx = mobileTabs.findIndex((t) => t.id === navTab);
 
   return (
-    <RestTimerProvider visible={tab === 'treino'}>
+    <RestTimerProvider visible={tab === 'treino' && state.sessions.some((x) => !x.completed && x.date === todayKey())}>
       {/* fundo bege com arcos finos */}
       <div aria-hidden className="paper fixed inset-0 -z-10 overflow-hidden bg-canvas">
         {/* manchas neutras (claro e sombra): é o que aparece "através" dos blocos de vidro */}
@@ -557,26 +558,47 @@ function PullToRefresh() {
 
 const WELCOME_KEY = 'leco-health:welcome-done';
 
+/** Enquanto a conta traz os dados pela primeira vez neste aparelho. */
+function FirstLoad() {
+  return (
+    <div className="fixed inset-0 z-[85] bg-canvas overflow-hidden" role="status" aria-label="Trazendo seus dados">
+      <div className="max-w-md mx-auto px-5 pt-[calc(var(--sat)+1.2rem)] space-y-4">
+        <div className="flex items-center gap-3"><LogoMark className="size-9" /><div className="skeleton h-5 w-28" /></div>
+        <div className="skeleton h-4 w-40 mt-6" /><div className="skeleton h-9 w-56" />
+        <div className="glass rounded-[28px] p-5 space-y-4">
+          <div className="flex items-center gap-4"><div className="skeleton size-[110px] !rounded-full" /><div className="flex-1 space-y-2"><div className="skeleton h-4 w-1/3" /><div className="skeleton h-9 w-1/2" /><div className="skeleton h-3 w-4/5" /></div></div>
+          {[0, 1, 2].map((k) => <div key={k} className="flex items-center gap-3"><div className="skeleton size-10 !rounded-full" /><div className="flex-1 space-y-1.5"><div className="skeleton h-4 w-1/3" /><div className="skeleton h-3 w-1/4" /></div><div className="skeleton h-9 w-20 !rounded-full" /></div>)}
+        </div>
+        <div className="glass rounded-[28px] p-5 space-y-3"><div className="skeleton h-4 w-1/3" /><div className="skeleton h-12 w-full" /></div>
+        <p className="text-center text-[13.5px] text-muted pt-2">Trazendo seus dados da nuvem…</p>
+      </div>
+    </div>
+  );
+}
+
 function Onboarding() {
   const sync = useSync();
-  const [welcome, setWelcome] = useState(() => {
-    try { return !sync.session && localStorage.getItem(WELCOME_KEY) !== '1'; } catch { return false; }
-  });
-  const done = () => { try { localStorage.setItem(WELCOME_KEY, '1'); } catch { /* */ } setWelcome(false); };
+  const { state } = useStore();
+  const [login, setLogin] = useState(false);
+  const done = () => { try { localStorage.setItem(WELCOME_KEY, '1'); } catch { /* */ } setLogin(false); };
   useEffect(() => { if (sync.session) done(); }, [sync.session]);
 
-  const { state } = useStore();
-  const showSetup = !state.prefs.onboarded && !(welcome && !sync.session) && !sync.needsChoice;
+  // conta nova e aparelho ainda sem uso: segue direto para a configuração inicial
+  const pristine = !state.prefs.onboarded && !state.sessions.length && !state.meals.length && !state.habits.length && !state.body.length && !state.splits.length;
+  useEffect(() => { if (sync.needsChoice && pristine) void sync.chooseStart('upload'); }, [sync.needsChoice]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const firstLoad = !!sync.session && !sync.ready && !state.prefs.onboarded;
+  const showSetup = !state.prefs.onboarded && !sync.needsChoice && !login && !firstLoad;
 
   return (
     <>
-      <SetupWizard open={showSetup} defaultName={sync.profile?.display_name || state.profile.name || ''} />
-      <Modal open={welcome && !sync.session} onClose={done} title="Bem-vindo ao Leco Health">
-        <p className="text-[15px] text-muted mb-5">Crie sua conta para salvar seus dados na nuvem e acompanhar o progresso com amigos.</p>
+      {firstLoad && <FirstLoad />}
+      <SetupFlow open={showSetup} defaultName={sync.profile?.display_name || state.profile.name || ''} onDone={done} onLogin={() => setLogin(true)} />
+      <Modal open={login && !sync.session} onClose={() => setLogin(false)} title="Entrar na sua conta">
+        <p className="text-[15px] text-muted mb-5">Seus dados voltam do jeito que estavam, em qualquer aparelho.</p>
         <AuthForm onDone={done} />
-        <button onClick={done} className="block mx-auto mt-4 text-[14px] text-ink/60 hover:text-ink underline underline-offset-4">Continuar sem conta</button>
       </Modal>
-      <Modal open={sync.needsChoice} onClose={() => sync.chooseStart('upload')} title="Como quer começar?">
+      <Modal open={sync.needsChoice && !pristine} onClose={() => sync.chooseStart('upload')} title="Como quer começar?">
         <p className="text-[15px] text-muted mb-5">Sua conta ainda não tem dados. O que fazemos com o que está neste aparelho?</p>
         <div className="space-y-2.5">
           <Button variant="primary" size="lg" className="w-full justify-start" onClick={() => sync.chooseStart('fresh')}>
@@ -586,7 +608,7 @@ function Onboarding() {
             <LuCloudUpload size={18} /> Enviar os dados deste aparelho
           </Button>
         </div>
-        <p className="text-[12.5px] text-muted mt-4">“Começar do zero” remove os dados de exemplo. Você pode criar suas fichas, hábitos e metas depois.</p>
+        <p className="text-[12.5px] text-muted mt-4">“Começar do zero” abre a configuração inicial. Os dados deste aparelho são apagados.</p>
       </Modal>
     </>
   );

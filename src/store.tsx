@@ -5,10 +5,11 @@ import type {
 import { buildEmptyState, buildMockState } from './mock';
 import { DEFAULT_HOME, defaultPrefs } from './prefs';
 import { haptic } from './native';
-import { MEAL_DEFAULT_TIME, migrateLegacyFoods } from './food';
+import { MEAL_DEFAULT_TIME, migrateLegacyFoods, prettifyItems } from './food';
 export { DEFAULT_HOME, defaultPrefs };
 import { addDays, lastPerformance, todayKey, uid } from './utils';
 import { remapHistory, type SharedPlan } from './duoPlan';
+import { applySetup, type SetupData } from './setup';
 
 /* ─────────────────────────────────────────────────────────────
    Camada de persistência (adapter). Hoje: localStorage.
@@ -46,6 +47,7 @@ export function normalizeState(s: AppState): AppState {
   if (!Array.isArray(s.customFoods)) s.customFoods = [];
   if (!Array.isArray(s.savedMeals)) s.savedMeals = [];
   migrateLegacyFoods(s);
+  prettifyItems(s);
   if (!s.goals.meals) s.goals.meals = 4;
   if (!s.goals.sleep) s.goals.sleep = 8;
   const d = defaultPrefs();
@@ -349,6 +351,11 @@ function makeActions(mutate: (fn: (d: AppState) => void) => void, get: () => App
     // backup
     replaceAll: (s: AppState) => mutate((d) => { Object.assign(d, normalizeState(structuredClone(s))); }),
     resetDemo: () => mutate((d) => { const keep = d.prefs; Object.assign(d, buildMockState()); d.prefs = { ...keep, onboarded: true }; }),
+    /** Explorar com dados de exemplo (com aviso no Início para começar de verdade). */
+    startDemo: () => mutate((d) => { const keep = d.prefs; Object.assign(d, buildMockState()); d.prefs = { ...keep, onboarded: true, demo: true }; }),
+    /** Sai do exemplo: estado vazio e configuração inicial de novo. */
+    leaveDemo: () => mutate((d) => { const keep = d.prefs; Object.assign(d, buildEmptyState()); d.prefs = { ...keep, onboarded: false }; delete d.prefs.demo; }),
+    finishSetup: (s: SetupData) => mutate((d) => applySetup(d, s)),
     clearAll: () => mutate((d) => { Object.assign(d, buildEmptyState()); }),
   };
 }
@@ -369,7 +376,11 @@ export function StoreProvider({ children, adapter = localAdapter }: { children: 
   const [state, setState] = useState<AppState>(() => {
     const loaded = adapter.load();
     if (loaded && validateState(loaded)) return normalizeState(loaded);
-    return normalizeState(buildMockState());
+    // primeira vez neste aparelho: começa vazio e abre a configuração inicial
+    // (os dados de exemplo ficam como opção; a flag abaixo é usada pelos testes)
+    let demo = false;
+    try { demo = localStorage.getItem('leco-health:demo') === '1'; } catch { /* */ }
+    return normalizeState(demo ? buildMockState() : buildEmptyState());
   });
   const ref = useRef(state);
   ref.current = state;

@@ -92,9 +92,9 @@ export default function Nutrition() {
             <button aria-label="Próximo dia" disabled={isToday} onClick={() => setDay(addDays(day, 1))} className="press size-11 rounded-full bg-surface grid place-items-center text-ink disabled:opacity-30"><LuChevronRight size={19} /></button>
           </div>
 
-          <div className="grid lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] gap-4 md:gap-5 mb-4 md:mb-5">
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] gap-4 md:gap-5 mb-4 md:mb-5">
             {macros ? (
-              <div>
+              <div className="min-w-0">
                 <MacroSummary day={day} onGoals={() => setGoalsOpen(true)} />
                 <div className="grid grid-cols-2 gap-2 mt-3 md:hidden">
                   <Button variant="primary" size="lg" onClick={() => setPicker({ date: day })}><LuPlus size={18} /> Alimento</Button>
@@ -127,7 +127,7 @@ export default function Nutrition() {
 
           {meals.length === 0 ? (
             <Card className="p-5">
-              <Empty icon={<LuCamera />} title={isToday ? 'Nada registrado ainda hoje' : 'Nenhuma refeição neste dia'}
+              <Empty art="nutricao" title={isToday ? 'Nada registrado ainda hoje' : 'Nenhuma refeição neste dia'}
                 text={macros ? 'Adicione os alimentos (com quantidade) ou tire uma foto do prato.' : 'Tire uma foto do prato e escreva em poucas palavras o que comeu.'}
                 action={macros
                   ? <Button variant="primary" onClick={() => setPicker({ date: day })}><LuPlus size={16} /> Adicionar alimento</Button>
@@ -227,7 +227,7 @@ function Gallery({ onOpen, onEdit }: { onOpen: (ids: string[], i: number) => voi
   }, [withPhotos]);
 
   if (!withPhotos.length)
-    return <Card className="p-5"><Empty icon={<LuImages />} title="Nenhuma foto ainda" text="As fotos que você tirar das refeições aparecem aqui, organizadas por dia." /></Card>;
+    return <Card className="p-5"><Empty art="fotos" title="Nenhuma foto ainda" text="As fotos que você tirar das refeições aparecem aqui, organizadas por dia." /></Card>;
 
   return (
     <div className="space-y-5">

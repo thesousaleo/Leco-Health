@@ -32,8 +32,8 @@ export function MacroBar({ k, value, goal, compact }: { k: 'protein' | 'carbs' |
   const p = goal ? Math.min(1, value / goal) : 0;
   return (
     <div className="min-w-0">
-      <div className="flex items-baseline justify-between gap-2">
-        <span className={cx('flex items-center gap-1.5 text-ink', compact ? 'text-[12.5px]' : 'text-[13.5px]')}>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-2">
+        <span className={cx('flex items-center gap-1.5 text-ink min-w-0', compact ? 'text-[12.5px]' : 'text-[13.5px]')}>
           <span className="size-2.5 rounded-full shrink-0" style={{ background: MACRO_COLORS[k] }} />{MACRO_LABEL[k]}
         </span>
         <span className="text-[12.5px] text-muted tabular-nums whitespace-nowrap"><b className="text-ink font-semibold">{fmt0(value)}</b>{goal ? ` / ${fmt0(goal)} g` : ' g'}</span>
@@ -65,8 +65,8 @@ export function MacroSummary({ day, onGoals, onAdd }: { day: DateKey; onGoals: (
           <Button variant="primary" className="mt-4" onClick={onGoals}><LuCalculator size={16} /> Calcular minhas metas</Button>
         </div>
       ) : (
-        <div className="flex items-center gap-5 mt-3">
-          <div className="relative grid place-items-center">
+        <div className="flex items-center gap-4 min-[380px]:gap-5 mt-3">
+          <div className="relative grid place-items-center shrink-0 max-[379px]:scale-[.86] max-[379px]:-mx-2">
             <KcalRing value={t.kcal} goal={g.kcal} />
             <div className="absolute inset-0 grid place-items-center text-center">
               <div>
@@ -134,9 +134,9 @@ export function MealItems({ meal, onAdd, onEdit, onSave }: { meal: MealLog; onAd
           </ul>
         </>
       )}
-      <div className="flex gap-2 mt-2.5">
-        <button onClick={onAdd} className="press h-9 pl-3 pr-3.5 rounded-full bg-cream text-[13px] font-medium text-ink/75 flex items-center gap-1.5"><LuPlus size={14} /> Alimento</button>
-        {onSave && items.length > 0 && <button onClick={onSave} className="press h-9 pl-3 pr-3.5 rounded-full bg-cream text-[13px] font-medium text-ink/75 flex items-center gap-1.5"><LuBookmark size={13} /> Salvar como pronta</button>}
+      <div className="flex flex-wrap gap-2 mt-2.5">
+        <button onClick={onAdd} className="press h-9 pl-3 pr-3.5 rounded-full bg-cream text-[13px] font-medium text-ink/75 flex items-center gap-1.5 whitespace-nowrap"><LuPlus size={14} /> Alimento</button>
+        {onSave && items.length > 0 && <button onClick={onSave} aria-label="Salvar como pronta" title="Salvar como refeição pronta" className="press h-9 pl-3 pr-3.5 rounded-full bg-cream text-[13px] font-medium text-ink/75 flex items-center gap-1.5 whitespace-nowrap"><LuBookmark size={13} /> Salvar pronta</button>}
       </div>
     </div>
   );
@@ -319,6 +319,7 @@ export function FoodPicker({ target, onClose }: { target: PickerTarget | null; o
         <div>
           <p className="text-[17px] font-semibold text-ink leading-snug">{food?.name ?? editing?.item.name}</p>
           {food && <p className="text-[12.5px] text-muted">{food.brand ? `${food.brand} · ` : ''}{food.cat} · {fmt0(food.per100.kcal)} kcal em 100 {food.unit}</p>}
+          {food?.full && food.full !== food.name && <p className="text-[11.5px] text-muted/80 mt-0.5">Na tabela TACO: {food.full}</p>}
           <div className="flex flex-wrap items-end gap-3 mt-4">
             <Field label="Quantidade" className="w-28"><NumInput value={qty} onChange={setQty} inputMode="decimal" aria-label="Quantidade" /></Field>
             <div className="grow basis-[176px] flex flex-wrap gap-1.5 pb-1">

@@ -7,6 +7,7 @@ import { addDays, todayKey, uid, weekday } from './utils';
 export type Macros = { kcal: number; protein: number; carbs: number; fat: number; fiber: number };
 export type Portion = { label: string; g: number };
 export type Food = {
+  full?: string; // nome original da tabela (TACO)
   ref: string;
   name: string;
   cat?: string;
@@ -70,12 +71,67 @@ const isLiquid = (name: string, cat: string) => /^bebidas/i.test(cat) || /^(leit
 
 /* ── banco ───────────────────────────────────────────────────── */
 let TACO_FOODS: Food[] | null = null;
+/* ── nomes amigáveis: "Frango, peito, sem pele, grelhado" → "Peito de frango sem pele, grelhado" ── */
+const PRETTY: Record<string, string> = {
+  'pao, trigo, frances': 'Pão francês', 'pao, trigo, forma, integral': 'Pão de forma integral', 'pao, trigo, de forma, integral': 'Pão de forma integral',
+  'cafe, infusao 10%': 'Café coado', 'coco, agua de': 'Água de coco', 'cana, aguardente 1': 'Cachaça',
+  'ovo, de galinha, inteiro, cozido/10minutos': 'Ovo cozido', 'ovo, de galinha, inteiro, frito': 'Ovo frito', 'ovo, de galinha, inteiro, cru': 'Ovo cru',
+  'ovo, de galinha, clara, cozida/10minutos': 'Clara de ovo cozida', 'ovo, de galinha, gema, cozida/10minutos': 'Gema de ovo cozida',
+  'leite, de vaca, integral': 'Leite integral', 'leite, de vaca, desnatado, uht': 'Leite desnatado', 'leite, de vaca, integral, po': 'Leite em pó integral',
+  'arroz, tipo 1, cozido': 'Arroz branco, cozido', 'arroz, tipo 2, cozido': 'Arroz branco (tipo 2), cozido',
+  'macarrao, trigo, cru': 'Macarrão, cru', 'carne, bovina, patinho, sem gordura, grelhado': 'Patinho grelhado',
+  'carne, bovina, acem, moido, cozido': 'Carne moída (acém), cozida', 'carne, bovina, patinho, sem gordura, cru': 'Patinho, cru',
+  'aveia, flocos, crua': 'Aveia em flocos', 'batata, doce, cozida': 'Batata-doce, cozida', 'batata, doce, crua': 'Batata-doce, crua',
+  'iogurte, natural, desnatado': 'Iogurte natural desnatado', 'requeijao, cremoso': 'Requeijão cremoso', 'cuscuz, de milho, cozido com sal': 'Cuscuz de milho',
+};
+let PRETTY_N: Map<string, string> | null = null;
+const STATE = /^(crua?s?|cozid[oa]s?|grelhad[oa]s?|assad[oa]s?|frit[oa]s?|refogad[oa]s?|torrad[oa]s?|cozid[oa] no vapor|congelad[oa]s?|desidratad[oa]s?|em conserva|ensopad[oa]|braseado|mole)$/;
+const DROP = /^(de galinha|de vaca|inteir[oa]|trigo|bovina)$/;
+const ANIMAL = /^(frango|porco|peru|pato|cordeiro|carneiro)$/i;
+const RAW_OK = new Set(['Frutas e derivados', 'Verduras, hortaliças e derivados', 'Nozes e sementes']);
+export function prettyFood(raw: string, cat?: string): string {
+  if (!PRETTY_N) PRETTY_N = new Map(Object.entries(PRETTY).map(([k, v]) => [norm(k), v]));
+  const hit = PRETTY_N.get(norm(raw));
+  if (hit) return hit;
+  if (!raw.includes(', ')) return raw;
+  let parts = raw.replace(/\s*\((\d|%).*?\)/g, '').split(', ').map((x) => x.replace(/\/\d+ ?minutos?$/i, '').trim()).filter(Boolean);
+  let base = parts.shift()!;
+  if (base === 'Carne' && parts[0] === 'bovina') { parts.shift(); if (parts.length) { const c = parts.shift()!; base = c.charAt(0).toUpperCase() + c.slice(1); } }
+  else if (ANIMAL.test(base) && parts[0] && !STATE.test(parts[0]) && !/^(com|sem|em|de) /.test(parts[0]) && parts[0] !== 'inteiro') {
+    const cut = parts.shift()!; base = `${cut.charAt(0).toUpperCase() + cut.slice(1)} de ${base.toLowerCase()}`;
+  }
+  const idxSuco = parts.findIndex((x) => x === 'suco' || x === 'polpa');
+  if (idxSuco >= 0) { const w = parts.splice(idxSuco, 1)[0]; base = `${w.charAt(0).toUpperCase() + w.slice(1)} de ${base.toLowerCase()}`; }
+  const head: string[] = [base], extra: string[] = [];
+  let state = '';
+  for (const q of parts) {
+    if (DROP.test(q)) continue;
+    if (STATE.test(q)) { if (!(cat && RAW_OK.has(cat) && /^crua?s?$/.test(q))) state = q; continue; }
+    if (/^(com|sem|em|ao|à|tipo) /.test(q) || q.includes(' ')) extra.push(q);
+    else head.push(q.length > 2 && q === q.toUpperCase() ? q : q.charAt(0) === q.charAt(0).toUpperCase() && q.length > 3 ? q : q.toLowerCase());
+  }
+  return `${head.join(' ')}${extra.length ? ' ' + extra.join(' ') : ''}${state ? ', ' + state : ''}`;
+}
+
+let TACO_BY_REF: Map<string, Food> | null = null;
+/** Atualiza nomes de alimentos da TACO já registrados para o nome amigável. */
+export function prettifyItems(st: AppState) {
+  const fix = (items?: FoodItem[]) => items?.forEach((it) => {
+    if (!it.ref?.startsWith('taco:') || !it.name.includes(', ')) return;
+    if (!TACO_BY_REF) TACO_BY_REF = new Map(tacoFoods().map((x) => [x.ref, x]));
+    const f = TACO_BY_REF.get(it.ref);
+    if (f && f.full === it.name) it.name = f.name;
+  });
+  st.meals?.forEach((m) => fix(m.items));
+  st.savedMeals?.forEach((m) => fix(m.items));
+}
+
 export function tacoFoods(): Food[] {
   if (TACO_FOODS) return TACO_FOODS;
   TACO_FOODS = TACO.map(([id, ci, name, kcal, protein, fat, carbs, fiber, sodium]) => {
     const n = norm(name), cat = FOOD_CATS[ci];
     return {
-      ref: `taco:${id}`, name, cat, unit: isLiquid(name, cat) ? 'ml' : 'g', sodium,
+      ref: `taco:${id}`, name: prettyFood(name, cat), full: name, cat, unit: isLiquid(name, cat) ? 'ml' : 'g', sodium,
       per100: { kcal, protein, carbs, fat, fiber }, src: id >= 9000 ? 'extra' : 'taco',
       portions: PORTIONS.find(([re]) => re.test(n))?.[1] ?? [],
     } as Food;
@@ -102,7 +158,7 @@ export function searchFoods(state: AppState, q: string, limit = 40): Food[] {
   const pool = [...(state.customFoods || []).map(customToFood), ...tacoFoods()];
   const out: { f: Food; s: number }[] = [];
   for (const f of pool) {
-    const words = norm(`${f.name} ${f.brand ?? ''}`).split(' ');
+    const words = norm(`${f.name} ${f.full ?? ''} ${f.brand ?? ''}`).split(' ');
     let ok = true, s = 0;
     for (const t of toks) {
       const i = words.findIndex((w) => w.startsWith(t));

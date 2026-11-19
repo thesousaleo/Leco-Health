@@ -164,7 +164,7 @@ function Weight({ focusKey = 0 }: { focusKey?: number }) {
         <ProgressPhotos lastWeight={last?.weight} />
 
         <Card className="p-2 md:p-3">
-          {logs.length === 0 ? <Empty icon={<LuScale />} title="Sem registros de peso" /> : (
+          {logs.length === 0 ? <Empty art="peso" title="Sem registros de peso" text="Registre seu peso acima. Com algumas pesagens aparece a tendência, que ignora as variações do dia a dia." /> : (
             <ul className="divide-y divide-line">
               {[...logs].reverse().slice(0, 30).map((l, i, arr) => {
                 const before = arr[i + 1];
@@ -324,7 +324,7 @@ function Sleep() {
         <SleepInsights />
 
         <Card className="p-2 md:p-3">
-          {state.sleep.length === 0 ? <Empty icon={<LuMoon />} title="Nenhuma noite registrada" /> : (
+          {state.sleep.length === 0 ? <Empty art="sono" title="Nenhuma noite registrada" text="Registre quantas horas dormiu e como acordou. Com alguns dias aparecem a média e o seu melhor horário." /> : (
             <ul className="divide-y divide-line">
               {[...state.sleep].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 21).map((s) => (
                 <li key={s.id}>
@@ -404,10 +404,18 @@ function Bmi({ weight }: { weight: number }) {
   const { state, actions } = useStore();
   const h = state.prefs.height;
   const [val, setVal] = useState('');
+  const [edit, setEdit] = useState(false);
+  if (!h && !edit) {
+    return (
+      <button type="button" onClick={() => setEdit(true)} className="press mt-4 h-9 px-3.5 rounded-full bg-cream text-[13px] text-ink/70 inline-flex items-center gap-1.5">
+        + Altura para ver o IMC
+      </button>
+    );
+  }
   if (!h) {
     return (
       <form className="mt-4 flex gap-2 items-end" onSubmit={(e) => { e.preventDefault(); const v = parseInt(val, 10); if (v > 100 && v < 250) actions.setPrefs({ height: v }); }}>
-        <Field label="Sua altura (cm) para calcular o IMC" className="flex-1"><Input inputMode="numeric" value={val} onChange={(e) => setVal(e.target.value.replace(/\D/g, ''))} placeholder="175" /></Field>
+        <Field label="Altura (cm)" className="flex-1"><Input autoFocus inputMode="numeric" value={val} onChange={(e) => setVal(e.target.value.replace(/\D/g, ''))} placeholder="175" /></Field>
         <Button type="submit" variant="dark" disabled={!val}>OK</Button>
       </form>
     );
@@ -735,7 +743,7 @@ function Journal({ newKey = 0 }: { newKey?: number }) {
       )}
 
       {notes.length === 0 ? (
-        <Card className="p-5"><Empty icon={<LuNotebookPen />} title="Nenhuma anotação encontrada" text="Registre dores, ajustes na dieta, exames ou observações do treino." /></Card>
+        <Card className="p-5"><Empty art="diario" title="Nenhuma anotação encontrada" text="Registre dores, ajustes na dieta, exames ou observações do treino." /></Card>
       ) : (
         <div className="grid md:grid-cols-2 gap-3 md:gap-4">
           {notes.map((n) => {

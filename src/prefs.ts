@@ -1,4 +1,4 @@
-import type { HomeBlockId, Prefs } from './types';
+import type { Accent, HomeBlockId, Prefs } from './types';
 
 export const DEFAULT_HOME: Prefs['homeBlocks'] = ['dia', 'faixa', 'resumo', 'agua', 'habitos', 'refeicoes', 'semana', 'corpo'].map((id) => ({ id: id as HomeBlockId, on: true }));
 export const defaultPrefs = (): Prefs => ({
@@ -10,3 +10,9 @@ export const defaultPrefs = (): Prefs => ({
   reminders: { water: { on: false, start: '08:00', end: '20:00', every: 120 } },
 });
 
+
+export const ACCENTS: { id: Accent; label: string; color: string }[] = [
+  { id: 'laranja', label: 'Laranja', color: '#F26B3A' }, { id: 'verde', label: 'Verde', color: '#16A34A' },
+  { id: 'azul', label: 'Azul', color: '#2563EB' }, { id: 'roxo', label: 'Roxo', color: '#7C3AED' },
+  { id: 'rosa', label: 'Rosa', color: '#DB2777' }, { id: 'grafite', label: 'Grafite', color: '#3F3F46' },
+];

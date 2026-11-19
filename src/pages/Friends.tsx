@@ -206,7 +206,7 @@ export default function Friends() {
               ))}
             </div>
           ) : accepted.length === 0 ? (
-            <Card className="p-5"><Empty icon={<LuUsers />} title="Nenhum amigo ainda" text="Troque códigos com alguém. Quando ele aceitar, o progresso de vocês aparece aqui." /></Card>
+            <Card className="p-5"><Empty art="amigos" title="Nenhum amigo ainda" text="Troque códigos com alguém. Quando ele aceitar, o progresso de vocês aparece aqui." /></Card>
           ) : (
             <div className="grid md:grid-cols-2 gap-4 md:gap-5">
               {accepted.map((f) => (
@@ -463,7 +463,7 @@ function Challenges({ challenges, friends, myId, onChange }: { challenges: Chall
       <Button variant="primary" className="w-full" size="lg" disabled={!friends.length} onClick={() => setOpen(true)}><LuPlus size={17} /> Criar desafio</Button>
       {!friends.length && <p className="text-[13px] text-muted text-center -mt-2">Adicione um amigo para criar desafios.</p>}
       {active.length === 0 && past.length === 0 && (
-        <Card className="p-5"><Empty icon={<LuFlag />} title="Nenhum desafio ainda" text="Ex.: 7 dias batendo a meta de água. Quem cumprir mais dias vence." /></Card>
+        <Card className="p-5"><Empty art="amigos" title="Nenhum desafio ainda" text="Ex.: 7 dias batendo a meta de água. Quem cumprir mais dias vence." /></Card>
       )}
       {[...active, ...past].map((c) => <ChallengeCard key={c.id} c={c} myId={myId} onChange={onChange} />)}
       <NewChallenge open={open} friends={friends} onClose={() => setOpen(false)}

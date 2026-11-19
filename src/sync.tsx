@@ -17,7 +17,8 @@ interface SyncCtx {
   status: SyncStatus;
   lastSync: string | null;
   error: string | null;
-  needsChoice: boolean; // primeira vez nesta conta sem dados na nuvem
+  needsChoice: boolean;
+  ready: boolean; // primeira sincronização desta sessão concluída // primeira vez nesta conta sem dados na nuvem
   chooseStart: (mode: 'upload' | 'fresh') => Promise<void>;
   signIn: (email: string, pw: string) => Promise<void>;
   signUp: (email: string, pw: string, name: string) => Promise<{ needsConfirm: boolean }>;
@@ -171,7 +172,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   }, [fresh]);
 
   const value: SyncCtx = {
-    session, profile, status, lastSync, error, needsChoice, chooseStart, friends, refreshFriends,
+    session, profile, status, lastSync, error, needsChoice, ready, chooseStart, friends, refreshFriends,
     signIn: async (email, pw) => { const s = await cloud.signIn(email, pw); setSession(s); },
     signUp: async (email, pw, name) => {
       const r = await cloud.signUp(email, pw, name);

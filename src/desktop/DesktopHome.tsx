@@ -16,6 +16,7 @@ import { ScoreRings } from '../components/ScoreRings';
 import { HabitDot, habitState, PauseBanner } from '../components/HabitBits';
 import { DayStrip } from '../components/DayStrip';
 import { Thumb } from '../pages/Nutrition';
+import { DemoBanner } from '../components/Setup';
 import { dayGoals, dayMacros, MACRO_COLORS, macrosOn, mealMacros } from '../food';
 import { KcalRing } from '../components/Macros';
 import { Button, cx } from '../components/ui';
@@ -120,6 +121,7 @@ function Home({ go }: { go: (t: TabId) => void }) {
   return (
     <DeskLayout header={header} inspector={<InspectorBody item={item} next={next} />}>
       {/* indicadores */}
+      <DemoBanner />
       {paused && <PauseBanner compact />}
       <div className={cx('grid gap-3 grid-cols-2', mK ? '@3xl:grid-cols-4 @7xl:grid-cols-7' : '@3xl:grid-cols-3 @6xl:grid-cols-6')}>
         <Kpi label="Score de hoje" icon={<LuSparkles size={12} />} value={sc.total} unit="%" onClick={() => open({ kind: 'hoje' })} active={item.kind === 'hoje'}

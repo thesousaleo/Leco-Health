@@ -86,7 +86,7 @@ function TodayView({ goFichas }: { goFichas: () => void }) {
   usePartnerLive(true);
 
   if (!state.splits.length)
-    return <><DuoInvites compact /><Card className="p-5"><Empty icon={<LuDumbbell />} title="Nenhuma ficha criada" text="Crie sua divisão de treino (A, B, C…) na aba Fichas." action={<Button variant="primary" onClick={goFichas}>Criar ficha</Button>} /></Card></>;
+    return <><DuoInvites compact /><Card className="p-5"><Empty art="treino" title="Nenhuma ficha criada" text="Crie sua divisão de treino (A, B, C…) na aba Fichas." action={<Button variant="primary" onClick={goFichas}>Criar ficha</Button>} /></Card></>;
 
   return (
     <>
@@ -507,7 +507,7 @@ function CardioView() {
         </div>
       </Card>
       <Card className="p-2 md:p-3">
-        {list.length === 0 ? <Empty icon={<LuFootprints />} title="Nenhum cardio registrado" text="Corrida, caminhada, bike… registre o tempo e a distância." /> : (
+        {list.length === 0 ? <Empty art="cardio" title="Nenhum cardio registrado" text="Corrida, caminhada, bike… registre o tempo e a distância." /> : (
           <ul className="divide-y divide-line">
             {list.map((c) => (
               <li key={c.id}>
@@ -766,7 +766,7 @@ function History({ onEdit }: { onEdit: (id: string) => void }) {
   }, { best: 0, idx: [] }).idx;
 
   if (!sessions.length && !(state.cardio || []).length)
-    return <Card className="p-5"><Empty icon={<LuHistory />} title="Nenhum treino concluído ainda" text="Finalize um treino para ver o histórico, recordes e evolução de carga." /></Card>;
+    return <Card className="p-5"><Empty art="historico" title="Nenhum treino concluído ainda" text="Finalize um treino para ver o histórico, recordes e evolução de carga." /></Card>;
 
   return (
     <div className="space-y-4">

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Art, type ArtKind } from './Art';
 import { pushBack } from '../back';
 import { LuTrash2, LuX, LuStar } from 'react-icons/lu';
 
@@ -342,10 +343,11 @@ export function Modal({ open, onClose, title, children, footer }: {
   );
 }
 
-export function Empty({ icon, title, text, action }: { icon: React.ReactNode; title: string; text?: string; action?: React.ReactNode }) {
+export function Empty({ icon, art, title, text, action }: { icon?: React.ReactNode; art?: ArtKind; title: string; text?: string; action?: React.ReactNode }) {
   return (
-    <div className="flex flex-col items-center text-center py-9 px-4 gap-2">
-      {/* ilustração simples: halos concêntricos, pontinhos e o ícone no centro */}
+    <div className="flex flex-col items-center text-center py-8 px-4 gap-2">
+      {art ? <Art kind={art} className="w-[190px] max-w-full mb-1 empty-art" /> : (
+      /* ilustração simples: halos concêntricos, pontinhos e o ícone no centro */
       <div className="relative size-28 mb-2" aria-hidden>
         <svg viewBox="0 0 112 112" className="absolute inset-0">
           <circle cx="56" cy="56" r="54" fill="var(--color-blush)" opacity=".35" />
@@ -358,8 +360,9 @@ export function Empty({ icon, title, text, action }: { icon: React.ReactNode; ti
         </svg>
         <div className="absolute inset-0 grid place-items-center text-orange empty-ico">{icon}</div>
       </div>
-      <p className="text-[16px] font-semibold tracking-[-0.01em] text-ink">{title}</p>
-      {text && <p className="text-[13.5px] text-muted max-w-xs leading-relaxed">{text}</p>}
+      )}
+      <p className="text-[16.5px] font-semibold tracking-[-0.01em] text-ink text-balance">{title}</p>
+      {text && <p className="text-[13.5px] text-muted max-w-xs leading-relaxed text-balance">{text}</p>}
       {action && <div className="mt-3">{action}</div>}
     </div>
   );

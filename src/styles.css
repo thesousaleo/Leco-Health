@@ -445,3 +445,10 @@ button > svg, a > svg { flex-shrink: 0; }
 /* cores dos macronutrientes */
 :root { --color-prot: #C8573A; --color-carb: #D49A2A; --color-fat: #4F78A8; }
 :root.dark { --color-prot: #E37A5B; --color-carb: #E7B24E; --color-fat: #7FA3CF; }
+
+/* configuração inicial: passos deslizam para o lado */
+@keyframes setup-in-r { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+@keyframes setup-in-l { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
+.setup-in-r { animation: setup-in-r .42s cubic-bezier(.22,.8,.26,1) both; }
+.setup-in-l { animation: setup-in-l .42s cubic-bezier(.22,.8,.26,1) both; }
+@media (prefers-reduced-motion: reduce) { .setup-in-r, .setup-in-l { animation: none; } }

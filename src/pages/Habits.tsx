@@ -97,7 +97,7 @@ export default function Habits() {
 
       {habits.length === 0 ? (
         <Card className="p-5">
-          <Empty icon={<LuCheck />} title="Nenhum hábito ainda" text="Crie os hábitos que você quer acompanhar, como tomar creatina ou ler 20 páginas."
+          <Empty art="habitos" title="Nenhum hábito ainda" text="Crie os hábitos que você quer acompanhar, como tomar creatina ou ler 20 páginas."
             action={<Button variant="primary" onClick={() => setModal({})}><LuPlus size={16} /> Criar hábito</Button>} />
         </Card>
       ) : (

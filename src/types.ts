@@ -251,6 +251,7 @@ export interface Prefs {
   discreet?: boolean; // esconde o peso no Início
   streakShield?: boolean; // escudo semanal da sequência (padrão: ligado)
   swipeTabs?: boolean; // arrastar para os lados troca de aba (padrão: ligado)
+  demo?: boolean; // está vendo os dados de exemplo
 }
 
 /* ── Estado raiz ───────────────────────────────────────────── */

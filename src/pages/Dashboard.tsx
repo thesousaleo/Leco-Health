@@ -14,6 +14,7 @@ import { ScoreRings, type RingPart } from '../components/ScoreRings';
 import { ScoreDetail } from '../components/ScoreDetail';
 import { DayStrip } from '../components/DayStrip';
 import { WeekStories } from '../components/WeekStories';
+import { DemoBanner } from '../components/Setup';
 import { dayGoals, dayMacros, MACRO_COLORS, macrosOn, mealMacros, nutritionPart } from '../food';
 import { KcalRing } from '../components/Macros';
 import { useIsDesktop } from '../desktop/kit';
@@ -56,6 +57,7 @@ function MobileDashboard({ go }: { go: (t: TabId) => void }) {
         </h1>
       </header>
 
+      <DemoBanner />
       <div className="lg:columns-2 gap-5 [&>*]:break-inside-avoid [&>*]:mb-4 md:[&>*]:mb-5">
         {pauseOn(state) && <div><PauseBanner compact /></div>}
         {state.prefs.homeBlocks.filter((b) => b.on && blockOn(state, b.id)).map((b) => {
