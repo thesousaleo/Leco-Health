@@ -375,7 +375,7 @@ function DeleteAccount() {
 
 /* ── Aparência ─────────────────────────────────────────────── */
 const BLOCK_LABEL: Record<HomeBlockId, string> = {
-  dia: 'Seu dia', faixa: 'Seu dia em 24 h', resumo: 'Resumo da semana (domingo e segunda)', agua: 'Água', semana: 'Sua semana', habitos: 'Hábitos de hoje', refeicoes: 'Refeições de hoje', corpo: 'Corpo e sono',
+  dia: 'Seu dia', resumo: 'Resumo da semana (domingo e segunda)', agua: 'Água', semana: 'Sua semana', habitos: 'Hábitos de hoje', refeicoes: 'Refeições de hoje', corpo: 'Corpo e sono',
 };
 const NAV_MOD: Partial<Record<TabId, ModuleId>> = { treino: 'treino', nutricao: 'nutricao', habitos: 'habitos', amigos: 'amigos' };
 const NAV_ALL: { id: TabId; label: string }[] = [
@@ -712,8 +712,8 @@ function ScreensPart({ go }: { go?: (t: TabId) => void }) {
 
       <Section title="Topo do app">
         <Sub>Selo ao lado do logo</Sub>
-        <Chips label="Selo do topo" value={p.headerPill ?? 'score'} onChange={(v) => set({ headerPill: v === 'score' ? undefined : v })}
-          options={[{ v: 'score', l: 'Score do dia' }, { v: 'agua', l: 'Água' }, { v: 'kcal', l: 'Calorias' }, { v: 'sequencia', l: 'Sequência' }, { v: 'nada', l: 'Nada' }]} />
+        <Chips label="Selo do topo" value={p.headerPill ?? 'nada'} onChange={(v) => set({ headerPill: v === 'nada' ? undefined : v })}
+          options={[{ v: 'nada', l: 'Nada' }, { v: 'score', l: 'Score do dia' }, { v: 'agua', l: 'Água' }, { v: 'kcal', l: 'Calorias' }, { v: 'sequencia', l: 'Sequência' }]} />
         <Sub>Saudação do Início</Sub>
         <Choice value={p.greeting ?? 'nome'} onChange={(v) => set({ greeting: v === 'nome' ? undefined : v })} options={[{ v: 'nome', l: 'Nome' }, { v: 'frase', l: 'Frase do dia' }, { v: 'nada', l: 'Nada' }]} />
       </Section>

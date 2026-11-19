@@ -14,16 +14,15 @@ import {
 } from '../utils';
 import { oneRM } from '../exercises';
 import { BarChart, LineChart, Sparkline } from '../components/charts';
-import { ScoreRings } from '../components/ScoreRings';
+import { ScoreDonut } from '../components/ScoreRings';
 import { HabitDot, habitState, PauseBanner } from '../components/HabitBits';
-import { DayStrip } from '../components/DayStrip';
 import { Thumb } from '../pages/Nutrition';
 import { DemoBanner } from '../components/Setup';
 import { dayGoals, dayMacros, MACRO_COLORS, macrosOn, mealMacros } from '../food';
 import { KcalRing } from '../components/Macros';
 import { Button, cx } from '../components/ui';
 import { DataTable, DeskLayout, Delta, InspectProvider, Kpi, openQuickAdd, Panel, Pills, ScoreChip, useInspect, type Tone } from './kit';
-import { dayParts, InspectorBody } from './details';
+import { InspectorBody } from './details';
 
 const MiniBars = ({ values, max = 100, color = 'var(--color-orange)', hi }: { values: number[]; max?: number; color?: string; hi?: number }) => (
   <svg width={values.length * 9} height={30} aria-hidden>
@@ -95,7 +94,6 @@ function Home({ go }: { go: (t: TabId) => void }) {
   const streak = overallStreak(state);
   const paused = !!pauseOn(state);
 
-  const parts = dayParts(state, today);
   const left = [
     mT && split && !session?.completed && (session ? 'terminar o treino' : 'o treino'),
     mH && !paused && due.length - hDone > 0 && `${due.length - hDone} ${due.length - hDone === 1 ? 'hábito' : 'hábitos'}`,
@@ -128,7 +126,7 @@ function Home({ go }: { go: (t: TabId) => void }) {
       <div className={cx('grid gap-3 grid-cols-2', mK ? '@3xl:grid-cols-4 @7xl:grid-cols-7' : '@3xl:grid-cols-3 @6xl:grid-cols-6')}>
         <Kpi label="Score de hoje" icon={<LuSparkles size={12} />} value={sc.total} unit="%" onClick={() => open({ kind: 'hoje' })} active={item.kind === 'hoje'}
           className={mK ? 'col-span-2 @7xl:col-span-1' : undefined}
-          chart={<ScoreRings total={sc.total} totalColor="var(--color-orange)" parts={parts} size={46} />}
+          chart={<ScoreDonut total={sc.total} color={sc.total >= 80 ? 'var(--color-good)' : 'var(--color-orange)'} size={44} />}
           foot={`ontem ${yScore}%${left.length ? ' · dia em andamento' : ''}`} />
         <Kpi label="Média da semana" icon={<LuSparkles size={12} />} value={wAvg} unit="%"
           chart={<MiniBars values={week} hi={6} />}
@@ -165,7 +163,6 @@ function Home({ go }: { go: (t: TabId) => void }) {
         <div className="col-span-12 @5xl:col-span-8"><Trends /></div>
         <div className="col-span-12 @5xl:col-span-4 space-y-5">
           {mN && <MealsPanel go={go} />}
-          <DayStrip />
         </div>
       </div>
 

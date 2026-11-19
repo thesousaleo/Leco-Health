@@ -5,7 +5,7 @@ import { LuX } from 'react-icons/lu';
 import { useStore } from '../store';
 import { dayScore, fmtWeekdayShort, lastNDays, todayKey } from '../utils';
 import { pushBack } from '../back';
-import { ScoreRings, type RingPart } from './ScoreRings';
+import { ScoreDonut, type RingPart } from './ScoreRings';
 import { cx } from './ui';
 
 const TARGET = 172;
@@ -67,15 +67,14 @@ export function ScoreDetail({ from, sourceRef, total, totalColor, parts, msg, on
         left: from.left, top: from.top, width: from.width, height: from.height, transformOrigin: '0 0', transform,
         transition: reduce ? 'none' : phase === 'closing' ? 'transform .45s cubic-bezier(.4,0,.2,1)' : 'transform .6s var(--spring)',
       }}>
-        <ScoreRings total={total} totalColor={totalColor} parts={parts} size={from.width} />
+        <ScoreDonut total={total} color={totalColor} size={from.width} label={<>{total}<span className="unit">%</span></>} />
       </div>
 
       <div className="absolute inset-x-0 bottom-0 overflow-y-auto overscroll-contain px-5 pb-[calc(2rem+var(--sab))]" style={{ top: top.current + TARGET + 14 }}>
         <div className={cx('max-w-md mx-auto transition-all duration-500', open ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4')}
           style={{ transitionTimingFunction: 'var(--spring)' }}>
           <div className="text-center">
-            <p className="num text-[44px] text-ink leading-none">{total}<span className="unit">%</span></p>
-            <p className="text-[14.5px] text-ink/80 mt-2 max-w-[300px] mx-auto">{msg}</p>
+            <p className="text-[14.5px] text-ink/80 max-w-[300px] mx-auto">{msg}</p>
           </div>
           <ul className="mt-5 space-y-2.5">
             {parts.map((p, i) => (

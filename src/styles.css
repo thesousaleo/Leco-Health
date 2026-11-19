@@ -561,6 +561,3 @@ button:focus-visible, a:focus-visible, select:focus-visible, [role="switch"]:foc
 /* texto grande: o que não cabe se ajeita */
 .seg-tight [data-seg] { padding-inline: 4px; font-size: 12.5px; gap: 0; overflow: hidden; text-overflow: ellipsis; }
 .seg-tight [data-seg] svg { display: none; }
-@media (max-width: 350px) { :root[data-zoom="1.1"] header .logo-word { display: none; } }
-@media (max-width: 400px) { :root[data-zoom="1.2"] header .logo-word { display: none; } }
-@media (max-width: 440px) { :root[data-zoom="1.3"] header .logo-word { display: none; } }

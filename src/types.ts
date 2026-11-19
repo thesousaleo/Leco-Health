@@ -234,7 +234,7 @@ export interface NoteEntry {
 }
 
 /* ── Preferências ──────────────────────────────────────────── */
-export type HomeBlockId = 'dia' | 'faixa' | 'resumo' | 'agua' | 'semana' | 'habitos' | 'refeicoes' | 'corpo';
+export type HomeBlockId = 'dia' | 'resumo' | 'agua' | 'semana' | 'habitos' | 'refeicoes' | 'corpo';
 export type Accent = 'laranja' | 'verde' | 'azul' | 'roxo' | 'rosa' | 'grafite';
 export interface Prefs {
   theme: 'auto' | 'light' | 'dark';

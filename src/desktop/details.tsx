@@ -11,7 +11,7 @@ import {
   mealLabel, mealsOn, modOn, nf, relDay, sessionVolume, todayKey,
 } from '../utils';
 import { oneRM } from '../exercises';
-import { ScoreRings, type RingPart } from '../components/ScoreRings';
+import { ScoreDonut, type RingPart } from '../components/ScoreRings';
 import { HabitDot, habitState } from '../components/HabitBits';
 import { LineChart } from '../components/charts';
 import { dayGoals, dayMacros, macrosOn, mealMacros, nutritionPart } from '../food';
@@ -81,7 +81,7 @@ export function DayDetail({ date, title }: { date: DateKey; title?: string }) {
         <p className="eyebrow">{title ?? relDay(date)}</p>
         <p className="text-[19px] font-semibold text-ink tracking-[-0.015em] mt-0.5">{fmtLong(date)}</p>
         <div className="flex items-center gap-4 mt-4">
-          <ScoreRings total={sc.total} totalColor="var(--color-orange)" parts={parts} size={92} />
+          <ScoreDonut total={sc.total} color={sc.total >= 80 ? 'var(--color-good)' : 'var(--color-orange)'} size={92} label={<>{sc.total}<span className="unit">%</span></>} />
           <div className="flex-1 min-w-0 space-y-2">
             {parts.map((p) => (
               <div key={p.key}>

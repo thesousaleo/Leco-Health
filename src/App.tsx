@@ -209,11 +209,11 @@ function useBadgeWatch() {
   }, [state, toast]);
 }
 
-function Logo() {
+function Logo({ word = true }: { word?: boolean }) {
   return (
     <div className="flex items-center gap-2.5">
       <span className="relative shrink-0"><LogoMark className="size-9" /><SyncDot /></span>
-      <p className="logo-word font-semibold text-ink tracking-[-0.02em] text-[16px] min-[360px]:text-[17px] whitespace-nowrap">Leco Health</p>
+      {word && <p className="logo-word font-semibold text-ink tracking-[-0.02em] text-[16px] min-[360px]:text-[17px] whitespace-nowrap">Leco Health</p>}
     </div>
   );
 }
@@ -444,7 +444,7 @@ function Shell() {
 
       {/* Top bar mobile */}
       <header className="gpu md:hidden sticky top-0 z-40 flex items-center justify-between px-4 pt-[var(--sat)] h-[calc(4rem+var(--sat))] bg-canvas/75 backdrop-blur-xl backdrop-saturate-150">
-        <Logo />
+        <Logo word={false} />
         <div className="flex items-center gap-1.5 min-[360px]:gap-2">
           <button onClick={() => setSearch(true)} aria-label="Buscar" className="press grid place-items-center size-9 min-[360px]:size-10 rounded-full text-ink bg-surface">
             <LuSearch size={18} />
@@ -676,7 +676,7 @@ function PullToRefresh() {
 /** Selo do topo: score do dia, água, calorias ou sequência (escolha em Ajustes → Aparência). */
 function HeaderPill({ score }: { score: number }) {
   const { state } = useStore();
-  const kind = state.prefs.headerPill ?? 'score';
+  const kind = state.prefs.headerPill ?? 'nada';
   if (kind === 'nada') return null;
   const today = todayKey();
   let text = `${score}%`, bg: string | undefined, label = `Score de hoje: ${score}%`;

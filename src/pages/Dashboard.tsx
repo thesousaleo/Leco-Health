@@ -12,9 +12,8 @@ import {
   overallStreak, relDay, sessionProgress, todayKey, weekday, isHabitScheduled, habitCount, weekDoneCount, dueHabits, modOn, pauseOn,
 } from '../utils';
 import { Card, cx, ProgressBar, ProgressRing, useCountUp } from '../components/ui';
-import { ScoreRings, type RingPart } from '../components/ScoreRings';
+import { ScoreDonut, type RingPart } from '../components/ScoreRings';
 import { ScoreDetail } from '../components/ScoreDetail';
-import { DayStrip } from '../components/DayStrip';
 import { WeekStories } from '../components/WeekStories';
 import { DemoBanner } from '../components/Setup';
 import { dayGoals, dayMacros, MACRO_COLORS, macrosOn, mealMacros, nutritionPart } from '../food';
@@ -75,7 +74,6 @@ function MobileDashboard({ go }: { go: (t: TabId) => void }) {
         {state.prefs.homeBlocks.filter((b) => b.on && blockOn(state, b.id)).map((b) => {
           switch (b.id) {
             case 'dia': return <div key={b.id}><TodayCard go={go} /></div>;
-            case 'faixa': return <div key={b.id}><DayStrip /></div>;
             case 'resumo': return showSummary ? <div key={b.id}><SummaryCard go={go} /></div> : null;
             case 'agua': return <div key={b.id}><WaterCard /></div>;
             case 'semana': return <div key={b.id}><WeekCard /></div>;
@@ -196,12 +194,11 @@ function TodayCard({ go }: { go: (t: TabId) => void }) {
         <button ref={ringsRef} aria-label="Ver detalhes do dia" className="press rounded-full shrink-0"
           style={{ visibility: detail ? 'hidden' : undefined }}
           onClick={() => ringsRef.current && setDetail(ringsRef.current.getBoundingClientRect())}>
-          <ScoreRings total={score.total} totalColor={color} parts={ringParts} />
+          <ScoreDonut total={score.total} color={color} size={104} label={<>{shown}<span className="unit">%</span></>} />
         </button>
         <div className="min-w-0">
           <p className="eyebrow">Seu dia</p>
-          <p className="num text-[34px] text-ink leading-none mt-1.5">{shown}<span className="unit">%</span></p>
-          <p className="text-[14.5px] font-medium text-ink/85 leading-snug mt-1.5 tracking-[-0.01em]">{msg}</p>
+          <p className="text-[15px] font-medium text-ink/85 leading-snug mt-1.5 tracking-[-0.01em]">{msg}</p>
         </div>
       </div>
       {detail && <ScoreDetail from={detail} sourceRef={ringsRef} total={score.total} totalColor={color} parts={ringParts} msg={msg} onClose={() => setDetail(null)} />}
