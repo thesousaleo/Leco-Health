@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { LuDroplet, LuDumbbell, LuFlame, LuMoon, LuRotateCcw, LuSparkles, LuStar, LuUtensils, LuX } from 'react-icons/lu';
 import type { AppState, DateKey } from '../types';
 import { buildReport, type PeriodReport } from '../report';
+import { dayGoals, dayItems, dayMacros, macrosOn } from '../food';
 import { addDays, fmtShort, fmtWeekdayShort, nf, relDay } from '../utils';
 import { oneRM } from '../exercises';
 import { pushBack } from '../back';
@@ -59,6 +60,9 @@ function slides(state: AppState, r: PeriodReport, p: PeriodReport, prs: Pr[]): S
   );
   const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
   const sleepBy = new Map(state.sleep.map((s) => [s.date, s.hours]));
+  const kd = macrosOn(state) ? r.days.filter((d) => dayItems(state, d).length > 0) : [];
+  const kAvg = (k: 'kcal' | 'protein') => (kd.length ? kd.reduce((a, d) => a + dayMacros(state, d)[k], 0) / kd.length : 0);
+  const kIn = kd.filter((d) => { const k = dayMacros(state, d).kcal, g = dayGoals(state, d).kcal; return g > 0 && Math.abs(k - g) <= g * 0.1; }).length;
   const out: Slide[] = [
     {
       id: 'capa', bg: 'linear-gradient(160deg, #1D1A17 0%, #3A2418 55%, #E8622C 140%)',
@@ -141,7 +145,17 @@ function slides(state: AppState, r: PeriodReport, p: PeriodReport, prs: Pr[]): S
     },
     {
       id: 'nutri', bg: 'linear-gradient(165deg, #3F7D52 0%, #1F4A2E 100%)',
-      render: () => (<>
+      render: () => kd.length ? (<>
+        <p className="story-eyebrow"><LuUtensils size={14} /> Alimentação</p>
+        <Big v={kAvg('kcal')} className="text-[96px] mt-6 block" />
+        <p className="story-title mt-1">kcal por dia, em média</p>
+        {state.goals.kcal ? <p className="text-[15px] opacity-85 mt-3">meta {nf(state.goals.kcal, 0)} kcal · {kIn} de {kd.length} {kd.length === 1 ? 'dia' : 'dias'} dentro de ±10%</p> : null}
+        <div className="grid grid-cols-3 gap-2.5 mt-8">
+          <div className="story-tile"><Big v={kAvg('protein')} suffix="g" className="text-[30px]" /><p className="text-[12px] opacity-80 mt-1">proteína por dia</p></div>
+          <div className="story-tile"><Big v={kd.length} className="text-[30px]" /><p className="text-[12px] opacity-80 mt-1">{kd.length === 1 ? 'dia registrado' : 'dias registrados'}</p></div>
+          <div className="story-tile"><Big v={r.waterAvgL} d={1} suffix="L" className="text-[30px]" /><p className="text-[12px] opacity-80 mt-1">de água por dia</p></div>
+        </div>
+      </>) : (<>
         <p className="story-eyebrow"><LuUtensils size={14} /> Refeições e água</p>
         <Big v={r.meals} className="text-[112px] mt-6 block" />
         <p className="story-title mt-1">{r.meals === 1 ? 'refeição registrada' : 'refeições registradas'}</p>

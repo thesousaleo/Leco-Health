@@ -1,11 +1,12 @@
 /* Exportação dos dados em CSV (um arquivo por módulo, ou todos num .zip).
    CSV no padrão do Excel em português: separador ";", vírgula decimal, UTF-8 com BOM. */
 import type { AppState } from './types';
+import { sumItems } from './food';
 import { activeHabits, addDays, habitCount, isHabitDone, isHabitFailed, isHabitScheduled, isPaused, sessionVolume, todayKey } from './utils';
 
-export type CsvId = 'treinos' | 'cardio' | 'refeicoes' | 'agua' | 'habitos' | 'sono' | 'peso' | 'notas';
+export type CsvId = 'treinos' | 'cardio' | 'refeicoes' | 'alimentos' | 'agua' | 'habitos' | 'sono' | 'peso' | 'notas';
 export const CSV_LIST: { id: CsvId; label: string }[] = [
-  { id: 'treinos', label: 'Treinos (séries)' }, { id: 'cardio', label: 'Cardio' }, { id: 'refeicoes', label: 'Refeições' },
+  { id: 'treinos', label: 'Treinos (séries)' }, { id: 'cardio', label: 'Cardio' }, { id: 'refeicoes', label: 'Refeições' }, { id: 'alimentos', label: 'Alimentos e macros' },
   { id: 'agua', label: 'Água' }, { id: 'habitos', label: 'Hábitos' }, { id: 'sono', label: 'Sono' },
   { id: 'peso', label: 'Peso e medidas' }, { id: 'notas', label: 'Diário' },
 ];
@@ -34,8 +35,20 @@ export function buildCsv(state: AppState, id: CsvId): string {
       return toCsv(['data', 'tipo', 'minutos', 'distancia_km', 'nota'],
         [...(state.cardio || [])].sort((a, b) => (a.date < b.date ? -1 : 1)).map((c) => [c.date, c.kind, c.minutes, dec(c.distanceKm, 2), c.note ?? '']));
     case 'refeicoes':
-      return toCsv(['data', 'hora', 'tipo', 'descricao', 'nota', 'fotos'],
-        [...(state.meals || [])].sort((a, b) => (a.date + a.time < b.date + b.time ? -1 : 1)).map((m) => [m.date, m.time, KIND[m.kind] ?? m.kind, m.description, m.note ?? '', m.photos.length]));
+      return toCsv(['data', 'hora', 'tipo', 'descricao', 'nota', 'fotos', 'kcal', 'proteina_g', 'carboidratos_g', 'gorduras_g', 'fibras_g'],
+        [...(state.meals || [])].sort((a, b) => (a.date + a.time < b.date + b.time ? -1 : 1)).map((m) => {
+          const t = m.items?.length ? sumItems(m.items) : null;
+          return [m.date, m.time, KIND[m.kind] ?? m.kind, m.description || (m.items || []).map((i) => i.name).join(' + '), m.note ?? '', m.photos.length,
+            t ? Math.round(t.kcal) : '', t ? dec(t.protein) : '', t ? dec(t.carbs) : '', t ? dec(t.fat) : '', t ? dec(t.fiber) : ''];
+        }));
+    case 'alimentos': {
+      const rows: unknown[][] = [];
+      [...(state.meals || [])].sort((a, b) => (a.date + a.time < b.date + b.time ? -1 : 1)).forEach((m) => (m.items || []).forEach((it) => rows.push([
+        m.date, m.time, KIND[m.kind] ?? m.kind, it.name, dec(it.qty, 2), it.unit, Math.round(it.grams), Math.round(it.kcal), dec(it.protein), dec(it.carbs), dec(it.fat), dec(it.fiber),
+        it.ref?.startsWith('taco:') ? 'TACO' : it.ref?.startsWith('custom:') ? 'meu alimento' : '',
+      ])));
+      return toCsv(['data', 'hora', 'refeicao', 'alimento', 'quantidade', 'unidade', 'gramas', 'kcal', 'proteina_g', 'carboidratos_g', 'gorduras_g', 'fibras_g', 'fonte'], rows);
+    }
     case 'agua':
       return toCsv(['data', 'total_ml', 'meta_ml', 'bateu_meta'],
         Object.keys(state.water).sort().map((d) => [d, state.water[d], state.goals.water, state.water[d] >= state.goals.water ? 'sim' : 'não']));

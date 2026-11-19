@@ -4,6 +4,7 @@ import {
   addDays, dayScore, dueHabits, fmtDayMonth, fmtLong, habitStreak, isHabitDone, lastNDays, mealsOn, nf, overallStreak, round1,
   sessionVolume, todayKey, weekStart,
 } from './utils';
+import { dayGoals, dayItems, dayMacros, estimatedExpenditure, macrosOn, mealMacros, qtyLabel } from './food';
 import { Pdf } from './pdf';
 import { oneRM } from './exercises';
 
@@ -69,7 +70,7 @@ export type Audience = 'completo' | 'medico' | 'nutri' | 'treinador';
 export const AUDIENCES: { id: Audience; label: string; sub: string }[] = [
   { id: 'completo', label: 'Completo', sub: 'tudo o que você registra' },
   { id: 'medico', label: 'Médico', sub: 'peso, sono, sintomas, exames, hábitos e suplementos' },
-  { id: 'nutri', label: 'Nutricionista', sub: 'refeições por dia, horários, água, peso e suplementos' },
+  { id: 'nutri', label: 'Nutricionista', sub: 'calorias, macros, refeições por dia, água e peso' },
   { id: 'treinador', label: 'Treinador', sub: 'treinos, volume, evolução por exercício, cardio, peso e sono' },
 ];
 const FOR: Record<Audience, string> = { completo: '', medico: ' — para o médico', nutri: ' — para o nutricionista', treinador: ' — para o treinador' };
@@ -210,9 +211,34 @@ export function reportPdf(state: AppState, nDays: number, name: string, audience
     ['Água por dia (média)', `${nf(r.waterAvgL, 1)} L`],
     ['Dias com meta de água', `${r.waterDaysMet} de ${r.days.length}`],
   ]);
+  if (macrosOn(state)) {
+    const ld = r.days.filter((d) => dayItems(state, d).length > 0);
+    if (ld.length) {
+      const avg = (k: 'kcal' | 'protein' | 'carbs' | 'fat' | 'fiber') => ld.reduce((a, d) => a + dayMacros(state, d)[k], 0) / ld.length;
+      const g = state.goals, est = estimatedExpenditure(state);
+      const inK = ld.filter((d) => { const k = dayMacros(state, d).kcal, gk = dayGoals(state, d).kcal; return gk > 0 && Math.abs(k - gk) <= gk * 0.1; }).length;
+      section('Calorias e macros');
+      kv([
+        ['Dias com alimentos registrados', `${ld.length} de ${r.days.length}`],
+        [`Calorias por dia (média${g.kcal ? ` · meta ${nf(g.kcal, 0)}` : ''})`, `${nf(avg('kcal'), 0)} kcal`],
+        [`Proteína por dia (média${g.protein ? ` · meta ${g.protein} g` : ''})`, `${nf(avg('protein'), 0)} g`],
+        [`Carboidratos por dia (média${g.carbs ? ` · meta ${g.carbs} g` : ''})`, `${nf(avg('carbs'), 0)} g`],
+        [`Gorduras por dia (média${g.fat ? ` · meta ${g.fat} g` : ''})`, `${nf(avg('fat'), 0)} g`],
+        ['Fibras por dia (média)', `${nf(avg('fiber'), 0)} g`],
+        ['Dias dentro da meta de calorias (±10%)', `${inK} de ${ld.length}`],
+        ...(est.ready ? [['Gasto estimado pelos dados', `${nf(est.tdee, 0)} kcal/dia`] as [string, string]] : []),
+      ]);
+    }
+  }
   }
   if (show('nutriDet')) {
     const ms = (state.meals || []).filter((m) => inP(m.date)).sort((a, b) => (a.date + a.time < b.date + b.time ? -1 : 1));
+    const ld = macrosOn(state) ? r.days.filter((d) => dayItems(state, d).length > 0) : [];
+    if (ld.length) {
+      section('Macros por dia');
+      table([{ w: 0.2 }, { w: 0.16, r: true }, { w: 0.16, r: true }, { w: 0.16, r: true }, { w: 0.16, r: true }, { w: 0.16, r: true }], ['Data', 'kcal', 'Proteína', 'Carbo', 'Gordura', 'Fibras'],
+        ld.map((d) => { const m = dayMacros(state, d); return [fmtDayMonth(d), nf(m.kcal, 0), `${nf(m.protein, 0)} g`, `${nf(m.carbs, 0)} g`, `${nf(m.fat, 0)} g`, `${nf(m.fiber, 0)} g`]; }));
+    }
     if (ms.length) {
       section('Refeições por dia');
       const KIND: Record<string, string> = { cafe: 'Café', almoco: 'Almoço', lanche: 'Lanche', jantar: 'Jantar', treino: 'Treino', outro: 'Outro' };
@@ -225,8 +251,20 @@ export function reportPdf(state: AppState, nDays: number, name: string, audience
         }
         pdf.ensure(15);
         pdf.text(`${m.time}  ${KIND[m.kind] ?? m.kind}`, M + 8, pdf.y - 10, 9.5, MUTED);
-        pdf.text(clip(`${m.description || '—'}${m.note ? ` (${m.note})` : ''}`, W - 110, 9.5), M + 100, pdf.y - 10, 9.5, INK);
+        const desc = [m.description, m.note && `(${m.note})`].filter(Boolean).join(' ');
+        const withK = m.items?.length && macrosOn(state);
+        pdf.text(clip(withK ? `${desc}${desc ? ' · ' : ''}${nf(mealMacros(m).kcal, 0)} kcal` : desc || '—', W - 110, 9.5), M + 100, pdf.y - 10, 9.5, INK);
         pdf.y -= 14;
+        if (m.items?.length && macrosOn(state)) {
+          m.items.forEach((it) => {
+            pdf.ensure(13);
+            pdf.text(clip(`${it.name} — ${qtyLabel(it)}`, W - 200, 8.5), M + 108, pdf.y - 9, 8.5, MUTED);
+            const mt = `${nf(it.kcal, 0)} kcal · P ${nf(it.protein, 0)} C ${nf(it.carbs, 0)} G ${nf(it.fat, 0)}`;
+            pdf.text(mt, M + W - pdf.width(mt, 8.5), pdf.y - 9, 8.5, MUTED);
+            pdf.y -= 12;
+          });
+          pdf.y -= 2;
+        }
       });
       pdf.y -= 8;
     }

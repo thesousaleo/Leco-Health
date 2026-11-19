@@ -2,7 +2,7 @@
 import { useEffect } from 'react';
 import type { TabId } from './types';
 
-export type Intent = 'meal' | 'weight' | 'sleep' | 'note'
+export type Intent = 'meal' | 'food' | 'semana' | 'alimentos' | 'weight' | 'sleep' | 'note'
   | 'sessao' | 'cardio' | 'fichas' | 'historico' // Treino
   | 'diario' | 'resumo' // Registros
   | `ajustes:${string}`; // aba dos Ajustes

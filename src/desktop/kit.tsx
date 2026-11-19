@@ -98,14 +98,14 @@ export const toneColor = (t: Tone) => (t === 'good' ? 'var(--color-good)' : t ==
 export function Delta({ text, tone = 'neutral', className }: { text: string; tone?: Tone; className?: string }) {
   return <span className={cx('inline-flex items-center gap-1 text-[12px] font-medium tabular-nums whitespace-nowrap', className)} style={{ color: toneColor(tone) }}>{text}</span>;
 }
-export function Kpi({ label, icon, value, unit, delta, foot, chart, onClick, active, accent }: {
+export function Kpi({ label, icon, value, unit, delta, foot, chart, onClick, active, accent, className }: {
   label: string; icon?: React.ReactNode; value: React.ReactNode; unit?: string; delta?: React.ReactNode; foot?: React.ReactNode;
-  chart?: React.ReactNode; onClick?: () => void; active?: boolean; accent?: string;
+  chart?: React.ReactNode; onClick?: () => void; active?: boolean; accent?: string; className?: string;
 }) {
   const Tag = onClick ? 'button' : 'div';
   return (
     <Tag onClick={onClick} aria-pressed={onClick ? !!active : undefined}
-      className={cx('glass rounded-[22px] p-4 text-left min-w-0 flex flex-col desk-kpi', onClick && 'desk-hover cursor-pointer', active && 'desk-active')}>
+      className={cx('glass rounded-[22px] p-4 text-left min-w-0 flex flex-col desk-kpi', onClick && 'desk-hover cursor-pointer', active && 'desk-active', className)}>
       <span className="flex items-center gap-1.5 eyebrow" style={accent ? { color: accent } : undefined}>{icon}{label}</span>
       <span className="flex items-end justify-between gap-2 mt-2">
         <span className="num text-[30px] leading-none text-ink">{value}{unit && <span className="unit">{unit}</span>}</span>

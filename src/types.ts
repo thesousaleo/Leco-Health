@@ -81,7 +81,42 @@ export interface FoodEntry {
   fat: number;
 }
 
-/** Registro simples de refeição (sem macros). */
+/** Um alimento dentro de uma refeição (valores já calculados para a quantidade). */
+export interface FoodItem {
+  id: ID;
+  name: string;
+  ref?: string; // 'taco:12' | 'custom:<id>' | 'off:<código>' | 'rapido'
+  qty: number; // na unidade escolhida
+  unit: string; // 'g', 'ml' ou o nome da porção ("unidade", "fatia"…)
+  grams: number; // equivalente em g/ml
+  kcal: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber?: number;
+}
+
+/** Alimento criado pelo usuário (ou produto vindo do Open Food Facts). */
+export interface CustomFood {
+  id: ID;
+  name: string;
+  brand?: string;
+  barcode?: string;
+  unit: 'g' | 'ml';
+  // por 100 g/ml
+  kcal: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber?: number;
+  portions?: { label: string; g: number }[];
+  source?: 'meu' | 'off';
+}
+
+/** Refeição salva para repetir com um toque (ex.: "Café padrão"). */
+export interface SavedMeal { id: ID; name: string; kind?: MealKind; items: FoodItem[] }
+
+/** Registro de refeição: foto e descrição, e (opcional) os alimentos com macros. */
 export type MealKind = MealType | 'outro';
 export interface MealLog {
   id: ID;
@@ -91,6 +126,20 @@ export interface MealLog {
   description: string;
   photos: ID[]; // ids das fotos (IndexedDB local + Supabase Storage)
   note?: string;
+  items?: FoodItem[];
+}
+
+/** Dados para calcular as metas de calorias e macros. */
+export interface MacroPlan {
+  sex: 'm' | 'f';
+  age: number;
+  height: number; // cm
+  weight: number; // kg
+  activity: number; // fator (1,2 a 1,9)
+  goal: 'perder' | 'manter' | 'ganhar';
+  pace: 'leve' | 'moderado' | 'forte';
+  proteinGkg: number; // g de proteína por kg
+  fatPct: number; // % das calorias em gordura
 }
 
 export interface Goals {
@@ -102,6 +151,10 @@ export interface Goals {
   meals?: number; // refeições registradas por dia (meta)
   sleep?: number; // horas de sono (meta)
   weight?: number; // peso desejado (kg)
+  fiber?: number; // g de fibra por dia
+  plan?: MacroPlan; // de onde vieram as metas de macros (se calculadas)
+  trainBonus?: number; // kcal a mais (em carboidratos) nos dias de treino
+  macroManual?: boolean;
 }
 
 /* ── Hábitos ───────────────────────────────────────────────── */
@@ -137,7 +190,7 @@ export interface PausePeriod {
 }
 
 /** Partes do app que podem ser desligadas na Central de módulos. */
-export type ModuleId = 'treino' | 'nutricao' | 'habitos' | 'agua' | 'sono' | 'peso' | 'amigos';
+export type ModuleId = 'treino' | 'nutricao' | 'macros' | 'habitos' | 'agua' | 'sono' | 'peso' | 'amigos';
 
 /* ── Registros / Biometria ─────────────────────────────────── */
 export interface BodyLog {
@@ -209,8 +262,10 @@ export interface AppState {
   schedule: WeekSchedule;
   sessions: WorkoutSession[];
   cardio: CardioLog[];
-  foods: FoodEntry[]; // legado (contagem de macros) — mantido para backups antigos
+  foods: FoodEntry[]; // legado (contagem antiga de macros) — migrado para as refeições
   meals: MealLog[];
+  customFoods?: CustomFood[];
+  savedMeals?: SavedMeal[];
   mealFavorites: { id: ID; kind: MealKind; description: string }[];
   water: Record<DateKey, number>; // total do dia
   waterLog: WaterEntry[];

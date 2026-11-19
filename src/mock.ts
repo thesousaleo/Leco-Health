@@ -1,4 +1,5 @@
 import { defaultPrefs } from './prefs';
+import { makeItem, tacoFoods } from './food';
 import type { AppState, BodyLog, FoodEntry, Habit, MealLog, NoteEntry, SleepLog, Split, WorkoutSession } from './types';
 import { addDays, round1, todayKey, uid, weekday } from './utils';
 
@@ -169,6 +170,14 @@ export function buildMockState(): AppState {
     jantar: ['Tilápia com batata-doce e salada', 'Omelete com legumes', 'Frango, arroz e brócolis', 'Sopa de legumes com frango'],
   };
   const pick = (k: string) => MENU[k][Math.floor(r() * MENU[k].length)];
+  // alimentos de exemplo (Tabela TACO): [id, quantidade, unidade]
+  const DEMO_ITEMS: Record<string, [number, number, string][]> = {
+    cafe: [[53, 1, 'unidade'], [488, 2, 'unidade'], [471, 100, 'ml'], [226, 150, 'g']],
+    almoco: [[3, 150, 'g'], [561, 100, 'g'], [410, 130, 'g'], [78, 30, 'g'], [157, 60, 'g']],
+    lanche: [[448, 1, 'pote'], [7, 2, 'colher de sopa'], [182, 1, 'unidade média']],
+    treino: [[9004, 1, 'dosador'], [182, 1, 'unidade média']],
+    jantar: [[377, 120, 'g'], [88, 150, 'g'], [78, 30, 'g']],
+  };
   const meals: MealLog[] = [];
   for (let d = 6; d >= 0; d--) {
     const date = addDays(today, -d);
@@ -177,7 +186,11 @@ export function buildMockState(): AppState {
       : [['cafe', '07:15'], ['almoco', '12:20'], ['lanche', '16:00'], ['treino', '18:10'], ['jantar', '20:30']];
     for (const [kind, time] of plan) {
       if (d > 0 && kind === 'lanche' && r() > 0.7) continue;
-      meals.push({ id: uid(), date, time, kind, description: pick(kind), photos: [],
+      const items = (DEMO_ITEMS[kind] ?? []).map(([id, qty, unit]) => {
+        const f = tacoFoods().find((x) => x.ref === `taco:${id}`)!;
+        return makeItem(f, Math.round(qty * (0.85 + r() * 0.3) * (unit === 'g' || unit === 'ml' ? 1 : 10)) / (unit === 'g' || unit === 'ml' ? 1 : 10), unit);
+      });
+      meals.push({ id: uid(), date, time, kind, description: pick(kind), photos: [], items,
         note: kind === 'jantar' && r() > 0.8 ? 'Comi mais do que precisava 😅' : undefined });
     }
   }

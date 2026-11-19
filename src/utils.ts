@@ -1,3 +1,4 @@
+import { macroAdherence, macrosOn } from './food';
 import type { AppState, DateKey, FoodEntry, Habit, HabitAuto, ID, MealType, ModuleId, PausePeriod, WorkoutSession } from './types';
 import { oneRM } from './exercises';
 
@@ -285,8 +286,9 @@ export const dayScore = (state: AppState, day: DateKey = todayKey()) => {
   const paused = isPaused(state, day);
   const workout = cardioToday ? 1 : session ? sessionProgress(session) : splitId && !paused ? 0 : 1; // descanso (ou pausa) = meta cumprida
 
-  // alimentação: refeições registradas no dia vs. meta
-  const nutrition = clamp(mealsOn(state, day).length / (state.goals.meals || 4));
+  // alimentação: com macros, quão perto das metas (calorias e proteína); sem macros, refeições registradas vs. meta
+  const adh = macrosOn(state) ? macroAdherence(state, day) : null;
+  const nutrition = adh ?? clamp(mealsOn(state, day).length / (state.goals.meals || 4));
 
   // hábitos (só os programados para o dia)
   const hs = dueHabits(state, day);

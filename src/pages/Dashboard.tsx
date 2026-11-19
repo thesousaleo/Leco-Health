@@ -14,6 +14,8 @@ import { ScoreRings, type RingPart } from '../components/ScoreRings';
 import { ScoreDetail } from '../components/ScoreDetail';
 import { DayStrip } from '../components/DayStrip';
 import { WeekStories } from '../components/WeekStories';
+import { dayGoals, dayMacros, MACRO_COLORS, macrosOn, mealMacros, nutritionPart } from '../food';
+import { KcalRing } from '../components/Macros';
 import { useIsDesktop } from '../desktop/kit';
 import DesktopHome from '../desktop/DesktopHome';
 import { HabitDot, habitState, PauseBanner } from '../components/HabitBits';
@@ -134,11 +136,12 @@ function TodayCard({ go }: { go: (t: TabId) => void }) {
   }
 
   const mT = modOn(state, 'treino'), mN = modOn(state, 'nutricao'), mH = modOn(state, 'habitos');
+  const np = nutritionPart(state, today);
   const rows = [
     ...(mT ? [{ icon: <LuDumbbell size={18} />, ...workout }] : []),
     ...(mN ? [{
-      icon: <LuApple size={18} />, title: 'Refeições', sub: `${meals.length} de ${mealGoal} registradas`,
-      done: meals.length >= mealGoal, action: 'Registrar' as string | undefined, onAction: () => go('nutricao'),
+      icon: <LuApple size={18} />, title: np.label, sub: np.detail,
+      done: np.done, action: 'Registrar' as string | undefined, onAction: () => go('nutricao'),
     }] : []),
     ...(!mH ? [] : score.paused
       ? [{ icon: <LuListChecks size={18} />, title: 'Hábitos', sub: 'Em pausa', done: true, action: undefined, onAction: () => go('habitos') }]
@@ -153,7 +156,7 @@ function TodayCard({ go }: { go: (t: TabId) => void }) {
   const goalSleep = state.goals.sleep || 8;
   const ringParts: RingPart[] = ([
     { key: 'treino', label: 'Treino', value: score.workout, color: 'var(--color-orange)', detail: workout.sub },
-    { key: 'refeicoes', label: 'Refeições', value: score.nutrition, color: 'var(--color-good)', detail: `${meals.length} de ${mealGoal} registradas` },
+    { key: 'refeicoes', label: np.label, value: score.nutrition, color: 'var(--color-good)', detail: np.detail },
     { key: 'habitos', label: 'Hábitos', value: habits.length ? habitsDone / habits.length : 0, color: 'var(--color-mind)', detail: habits.length ? `${habitsDone} de ${habits.length} feitos` : 'nenhum programado' },
     { key: 'sono', label: 'Sono', value: sleepToday ? Math.min(1, sleepToday.hours / goalSleep) : 0, color: 'var(--color-sleep)', detail: sleepToday ? `${nf(sleepToday.hours, 1)} h de ${goalSleep} h` : 'noite não registrada' },
   ] as RingPart[]).filter((r) => modOn(state, r.key === 'refeicoes' ? 'nutricao' : r.key as ModuleId));
@@ -274,9 +277,29 @@ function HabitsCard({ go }: { go: (t: TabId) => void }) {
 function MealsCard({ go }: { go: (t: TabId) => void }) {
   const { state } = useStore();
   const meals = mealsOn(state, todayKey());
+  const macros = macrosOn(state);
+  const t = dayMacros(state, todayKey()), g = dayGoals(state);
   return (
     <Card className="p-5 md:p-6">
       <SectionTitle title="Refeições de hoje" action={meals.length ? 'Ver diário' : undefined} onAction={() => go('nutricao')} />
+      {macros && g.kcal > 0 && (
+        <button onClick={() => go('nutricao')} className="press w-full flex items-center gap-4 rounded-2xl bg-cream px-4 py-3 mb-4 text-left">
+          <span className="relative grid place-items-center">
+            <KcalRing value={t.kcal} goal={g.kcal} size={58} />
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-[14px] text-ink"><b className="num text-[20px]">{nf(t.kcal, 0)}</b> <span className="text-muted">/ {nf(g.kcal, 0)} kcal</span></span>
+            <span className="grid grid-cols-3 gap-2 mt-1.5">
+              {(['protein', 'carbs', 'fat'] as const).map((k) => (
+                <span key={k} className="min-w-0">
+                  <span className="block text-[11px] text-muted tabular-nums truncate">{k === 'protein' ? 'P' : k === 'carbs' ? 'C' : 'G'} {nf(t[k], 0)}<span className="max-[390px]:hidden">/{g[k]} g</span></span>
+                  <span className="block h-1.5 rounded-full bg-surface overflow-hidden mt-0.5"><span className="block h-full rounded-full" style={{ width: `${Math.min(100, (t[k] / (g[k] || 1)) * 100)}%`, background: MACRO_COLORS[k] }} /></span>
+                </span>
+              ))}
+            </span>
+          </span>
+        </button>
+      )}
       <div className="flex gap-3 overflow-x-auto no-scrollbar">
         {meals.map((m) => (
           <button key={m.id} onClick={() => go('nutricao')} className="press w-[calc((100%-1.5rem)/3)] max-w-[120px] shrink-0 text-left">
@@ -287,6 +310,7 @@ function MealsCard({ go }: { go: (t: TabId) => void }) {
             )}
             <p className="text-[13px] font-medium text-ink mt-2 truncate">{mealLabel(m.kind).replace(' da Manhã', '')}</p>
             <p className="text-[12px] text-muted tabular-nums">{m.time}</p>
+            {macros && m.items?.length ? <p className="text-[12px] text-ink/70 tabular-nums -mt-0.5">{nf(mealMacros(m).kcal, 0)} kcal</p> : null}
           </button>
         ))}
         <button onClick={() => go('nutricao')} className="press w-[calc((100%-1.5rem)/3)] max-w-[120px] shrink-0 text-left">

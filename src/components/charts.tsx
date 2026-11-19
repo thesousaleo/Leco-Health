@@ -156,8 +156,8 @@ export function LineChart({ data, color = 'var(--color-orange)', unit = '', heig
   );
 }
 
-export function BarChart({ data, color = 'var(--color-orange)', unit = '', height = 170, goal, decimals = 0 }: {
-  data: Pt[]; color?: string; unit?: string; height?: number; goal?: number; decimals?: number;
+export function BarChart({ data, color = 'var(--color-orange)', unit = '', height = 170, goal, decimals = 0, band }: {
+  data: Pt[]; color?: string; unit?: string; height?: number; goal?: number; decimals?: number; band?: boolean;
   dots?: unknown;
 }) {
   const [boxRef, W] = useWidth(); const H = height;
@@ -170,12 +170,11 @@ export function BarChart({ data, color = 'var(--color-orange)', unit = '', heigh
   return (
     <div ref={boxRef}>
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full select-none" style={{ height: 'auto', aspectRatio: `${W}/${H}` }} onPointerLeave={() => setHover(null)}>
-      {goal != null && <line x1={P.l} x2={W - P.r} y1={y(goal)} y2={y(goal)} style={{ stroke: color, strokeOpacity: 0.45 }} strokeDasharray="5 6" />}
       {data.map((d, i) => {
         const bx = P.l + i * bw + bw * 0.2;
         const w = bw * 0.6;
         const by = y(d.value);
-        const met = goal == null || d.value >= goal * 0.9;
+        const met = goal == null || (band ? Math.abs(d.value - goal) <= goal * 0.1 : d.value >= goal * 0.9);
         return (
           <g key={i} onPointerEnter={() => setHover(i)} onPointerDown={() => setHover(i)}>
             <rect x={P.l + i * bw} y={P.t} width={bw} height={H - P.t - P.b} fill="transparent" />
@@ -191,6 +190,7 @@ export function BarChart({ data, color = 'var(--color-orange)', unit = '', heigh
           </g>
         );
       })}
+      {goal != null && <line x1={P.l} x2={W - P.r} y1={y(goal)} y2={y(goal)} style={{ stroke: 'var(--color-ink)', strokeOpacity: 0.35, pointerEvents: 'none' }} strokeWidth={1.5} strokeDasharray="4 5" />}
     </svg>
     </div>
   );

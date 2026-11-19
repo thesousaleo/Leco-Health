@@ -1,10 +1,11 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type {
-  AppState, BodyLog, MealLog, WaterSize, Prefs, HomeBlockId, CardioLog, DateKey, Exercise, FoodEntry, Goals, Habit, ID, NoteEntry, PausePeriod, SetLog, SleepLog, Split, WorkoutSession,
+  AppState, BodyLog, MealLog, WaterSize, Prefs, HomeBlockId, CardioLog, CustomFood, DateKey, Exercise, FoodEntry, FoodItem, Goals, Habit, ID, NoteEntry, PausePeriod, SavedMeal, SetLog, SleepLog, Split, WorkoutSession,
 } from './types';
 import { buildEmptyState, buildMockState } from './mock';
 import { DEFAULT_HOME, defaultPrefs } from './prefs';
 import { haptic } from './native';
+import { MEAL_DEFAULT_TIME, migrateLegacyFoods } from './food';
 export { DEFAULT_HOME, defaultPrefs };
 import { addDays, lastPerformance, todayKey, uid } from './utils';
 
@@ -41,6 +42,9 @@ export const localAdapter: StorageAdapter = {
 export function normalizeState(s: AppState): AppState {
   if (!Array.isArray(s.meals)) s.meals = [];
   if (!Array.isArray(s.foods)) s.foods = [];
+  if (!Array.isArray(s.customFoods)) s.customFoods = [];
+  if (!Array.isArray(s.savedMeals)) s.savedMeals = [];
+  migrateLegacyFoods(s);
   if (!s.goals.meals) s.goals.meals = 4;
   if (!s.goals.sleep) s.goals.sleep = 8;
   const d = defaultPrefs();
@@ -182,6 +186,38 @@ function makeActions(mutate: (fn: (d: AppState) => void) => void, get: () => App
     addMeal: (m: Omit<MealLog, 'id'>) => mutate((d) => { d.meals.push({ ...m, id: uid() }); }),
     updateMeal: (id: ID, m: Partial<MealLog>) => mutate((d) => { Object.assign(d.meals.find((x) => x.id === id)!, m); }),
     deleteMeal: (id: ID) => mutate((d) => { d.meals = d.meals.filter((x) => x.id !== id); }),
+    /* macros: alimentos dentro das refeições */
+    addMealItems: (date: DateKey, kind: MealLog['kind'], items: FoodItem[], mealId?: ID) => {
+      let id = mealId;
+      mutate((d) => {
+        let m = mealId ? d.meals.find((x) => x.id === mealId) : [...d.meals].reverse().find((x) => x.date === date && x.kind === kind);
+        if (!m) {
+          const now = new Date();
+          const time = date === todayKey() ? `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}` : MEAL_DEFAULT_TIME[kind] ?? '12:00';
+          m = { id: uid(), date, time, kind, description: '', photos: [] };
+          d.meals.push(m);
+        }
+        id = m.id;
+        m.items = [...(m.items || []), ...items.map((it) => ({ ...it, id: uid() }))];
+      });
+      return id;
+    },
+    updateMealItem: (mealId: ID, item: FoodItem) => mutate((d) => {
+      const m = d.meals.find((x) => x.id === mealId); if (!m?.items) return;
+      m.items = m.items.map((x) => (x.id === item.id ? item : x));
+    }),
+    removeMealItem: (mealId: ID, itemId: ID) => mutate((d) => {
+      const m = d.meals.find((x) => x.id === mealId); if (!m?.items) return;
+      m.items = m.items.filter((x) => x.id !== itemId);
+      // refeição que só tinha alimentos (sem foto nem descrição) some quando fica vazia
+      if (!m.items.length && !m.photos.length && !m.description.trim() && !m.note) d.meals = d.meals.filter((x) => x.id !== mealId);
+    }),
+    upsertCustomFood: (f: CustomFood) => mutate((d) => {
+      d.customFoods = [...(d.customFoods || []).filter((x) => x.id !== f.id), f];
+    }),
+    deleteCustomFood: (id: ID) => mutate((d) => { d.customFoods = (d.customFoods || []).filter((x) => x.id !== id); }),
+    addSavedMeal: (m: Omit<SavedMeal, 'id'>) => mutate((d) => { d.savedMeals = [...(d.savedMeals || []), { ...m, id: uid() }]; }),
+    deleteSavedMeal: (id: ID) => mutate((d) => { d.savedMeals = (d.savedMeals || []).filter((x) => x.id !== id); }),
     addMealFavorite: (f: { kind: MealLog['kind']; description: string }) =>
       mutate((d) => {
         if (d.mealFavorites.some((x) => x.description.toLowerCase() === f.description.toLowerCase())) return;

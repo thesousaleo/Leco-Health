@@ -441,3 +441,7 @@ button > svg, a > svg { flex-shrink: 0; }
 .desk-table tbody tr.is-sel td { background: color-mix(in srgb, var(--color-orange) 9%, transparent); }
 .desk-table tbody tr:focus-visible { outline: 2px solid var(--color-orange); outline-offset: -2px; }
 @media (prefers-reduced-motion: reduce) { .desk-drawer, .desk-fade { animation: none; } }
+
+/* cores dos macronutrientes */
+:root { --color-prot: #C8573A; --color-carb: #D49A2A; --color-fat: #4F78A8; }
+:root.dark { --color-prot: #E37A5B; --color-carb: #E7B24E; --color-fat: #7FA3CF; }

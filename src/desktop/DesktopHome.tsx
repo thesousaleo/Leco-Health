@@ -16,6 +16,8 @@ import { ScoreRings } from '../components/ScoreRings';
 import { HabitDot, habitState, PauseBanner } from '../components/HabitBits';
 import { DayStrip } from '../components/DayStrip';
 import { Thumb } from '../pages/Nutrition';
+import { dayGoals, dayMacros, MACRO_COLORS, macrosOn, mealMacros } from '../food';
+import { KcalRing } from '../components/Macros';
 import { Button, cx } from '../components/ui';
 import { DataTable, DeskLayout, Delta, InspectProvider, Kpi, openQuickAdd, Panel, Pills, ScoreChip, useInspect, type Tone } from './kit';
 import { dayParts, InspectorBody } from './details';
@@ -45,6 +47,7 @@ function Home({ go }: { go: (t: TabId) => void }) {
   const sc = dayScore(state, today);
   const name = state.profile.name?.split(' ')[0];
   const mT = modOn(state, 'treino'), mN = modOn(state, 'nutricao'), mH = modOn(state, 'habitos'), mA = modOn(state, 'agua'), mS = modOn(state, 'sono'), mP = modOn(state, 'peso');
+  const mK = macrosOn(state), km = dayMacros(state, today), kg = dayGoals(state, today);
 
   // treino de hoje
   const splitId = state.schedule[weekday(today)];
@@ -118,8 +121,9 @@ function Home({ go }: { go: (t: TabId) => void }) {
     <DeskLayout header={header} inspector={<InspectorBody item={item} next={next} />}>
       {/* indicadores */}
       {paused && <PauseBanner compact />}
-      <div className="grid gap-3 grid-cols-2 @3xl:grid-cols-3 @6xl:grid-cols-6">
+      <div className={cx('grid gap-3 grid-cols-2', mK ? '@3xl:grid-cols-4 @7xl:grid-cols-7' : '@3xl:grid-cols-3 @6xl:grid-cols-6')}>
         <Kpi label="Score de hoje" icon={<LuSparkles size={12} />} value={sc.total} unit="%" onClick={() => open({ kind: 'hoje' })} active={item.kind === 'hoje'}
+          className={mK ? 'col-span-2 @7xl:col-span-1' : undefined}
           chart={<ScoreRings total={sc.total} totalColor="var(--color-orange)" parts={parts} size={46} />}
           foot={`ontem ${yScore}%${left.length ? ' · dia em andamento' : ''}`} />
         <Kpi label="Média da semana" icon={<LuSparkles size={12} />} value={wAvg} unit="%"
@@ -133,6 +137,10 @@ function Home({ go }: { go: (t: TabId) => void }) {
         {mP && <Kpi label="Peso" icon={<LuScale size={12} />} value={wLast ? (discreet ? '•••' : nf(wLast.weight, 1)) : '—'} unit="kg"
           chart={!discreet && wt.points.length > 1 ? <Sparkline values={wt.points.slice(-20).map((p) => p.trend)} width={72} height={30} color="var(--color-ink)" /> : undefined}
           delta={wDelta != null && !discreet && <Delta text={delta(wDelta, ' kg', 1)} tone={wTone} />} foot={wDelta != null && !discreet ? 'em 7 dias' : wLast ? relDay(wLast.date) : 'sem registros'} />}
+        {mK && <Kpi label="Calorias" icon={<LuFlame size={12} />} accent="var(--color-prot)" value={nf(km.kcal, 0)} unit="kcal" onClick={() => go('nutricao')}
+          chart={<KcalRing value={km.kcal} goal={kg.kcal} size={42} />}
+          delta={<span className="flex gap-1 flex-1 max-w-[120px]">{(['protein', 'carbs', 'fat'] as const).map((k) => <span key={k} className="flex-1 h-1.5 rounded-full bg-cream overflow-hidden"><span className="block h-full rounded-full" style={{ width: `${Math.min(100, (km[k] / (kg[k] || 1)) * 100)}%`, background: MACRO_COLORS[k] }} /></span>)}</span>}
+          foot={`de ${nf(kg.kcal, 0)} · P ${nf(km.protein, 0)} g`} />}
         {mA && <Kpi label="Água" icon={<LuDroplet size={12} />} accent="var(--color-sleep)" value={nf(water / 1000, 1)} unit="L"
           chart={<button onClick={() => { actions.addWater(cup?.ml ?? 250, undefined, cup?.label); toast(`+${cup?.ml ?? 250} ml de água`); }}
             className="press h-8 px-3 rounded-full text-[12.5px] font-semibold text-white flex items-center gap-1" style={{ background: 'var(--color-sleep)' }}><LuPlus size={13} /> {cup?.ml ?? 250} ml</button>}
@@ -297,18 +305,30 @@ function MealsPanel({ go }: { go: (t: TabId) => void }) {
   const { state } = useStore();
   const meals = mealsOn(state, todayKey());
   const goal = state.goals.meals || 4;
-  const add = () => { go('nutricao'); setIntent('nutricao', 'meal'); };
+  const mK = macrosOn(state), km = dayMacros(state, todayKey()), kg = dayGoals(state);
+  const add = () => { go('nutricao'); setIntent('nutricao', mK ? 'food' : 'meal'); };
   return (
-    <Panel icon={<LuApple size={15} />} title="Refeições de hoje" sub={`${meals.length} de ${goal}`} actions={<Button size="sm" variant="soft" onClick={() => go('nutricao')}>Diário</Button>}>
+    <Panel icon={<LuApple size={15} />} title={mK ? 'Alimentação' : 'Refeições de hoje'} sub={mK && kg.kcal ? `hoje · ${nf(km.kcal, 0)} de ${nf(kg.kcal, 0)} kcal` : `${meals.length} de ${goal}`}
+      actions={<>{mK && <Button size="sm" variant="primary" onClick={add}><LuPlus size={14} /> Alimento</Button>}<Button size="sm" variant="soft" onClick={() => go('nutricao')}>Diário</Button></>}>
+      {mK && kg.kcal > 0 && (
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          {(['protein', 'carbs', 'fat'] as const).map((k) => (
+            <div key={k} className="min-w-0">
+              <p className="text-[12px] text-muted tabular-nums truncate"><span className="text-ink font-medium">{({ protein: 'Prot.', carbs: 'Carbo', fat: 'Gord.' } as const)[k]}</span> {nf(km[k], 0)}/{kg[k]} g</p>
+              <span className="block h-1.5 rounded-full bg-cream overflow-hidden mt-1"><span className="block h-full rounded-full" style={{ width: `${Math.min(100, (km[k] / (kg[k] || 1)) * 100)}%`, background: MACRO_COLORS[k] }} /></span>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="grid grid-cols-4 @5xl:grid-cols-3 gap-2">
         {meals.slice(0, 7).map((m) => (
           <button key={m.id} onClick={() => go('nutricao')} className="desk-hover rounded-2xl text-left">
             <span className="block aspect-square rounded-2xl overflow-hidden bg-cream grid place-items-center text-ink/25">{m.photos[0] ? <Thumb id={m.photos[0]} className="size-full" /> : <LuApple size={18} />}</span>
             <span className="block text-[12px] text-ink mt-1 truncate">{mealLabel(m.kind)}</span>
-            <span className="block text-[11px] text-muted">{m.time}</span>
+            <span className="block text-[11px] text-muted truncate">{m.time}{mK && m.items?.length ? ` · ${nf(mealMacros(m).kcal, 0)} kcal` : ''}</span>
           </button>
         ))}
-        <button onClick={add} className="press aspect-square rounded-2xl border border-dashed border-ink/20 grid place-items-center text-ink/45 desk-hover" aria-label="Registrar refeição"><LuCamera size={18} /></button>
+        <button onClick={() => { go('nutricao'); setIntent('nutricao', 'meal'); }} className="press aspect-square rounded-2xl border border-dashed border-ink/20 grid place-items-center text-ink/45 desk-hover" aria-label="Registrar refeição"><LuCamera size={18} /></button>
       </div>
     </Panel>
   );
@@ -333,7 +353,8 @@ function RecentDays() {
       const c = (state.cardio || []).filter((x) => x.date === d);
       return s ? <span>Treino {sp?.letter ?? ''} <span className="text-muted">· {nf(sessionVolume(s) / 1000, 1)} t</span></span> : c.length ? <span>{c[0].kind} <span className="text-muted">· {c[0].minutes} min</span></span> : dayScore(state, d).isRest ? <span className="text-muted">descanso</span> : <span className="text-[color:var(--color-bad)]">não feito</span>;
     } },
-    modOn(state, 'nutricao') && { key: 'r', label: 'Refeições', align: 'right' as const, render: (d: R) => `${mealsOn(state, d).length}/${state.goals.meals || 4}` },
+    macrosOn(state) ? { key: 'k', label: 'Calorias', align: 'right' as const, render: (d: R) => { const k = dayMacros(state, d).kcal, g = dayGoals(state, d).kcal; return k ? <span className={cx(d !== today && g && Math.abs(k - g) > g * 0.1 && 'text-[color:var(--color-warn)]')}>{nf(k, 0)}</span> : <span className="text-muted">—</span>; } }
+      : modOn(state, 'nutricao') && { key: 'r', label: 'Refeições', align: 'right' as const, render: (d: R) => `${mealsOn(state, d).length}/${state.goals.meals || 4}` },
     modOn(state, 'habitos') && { key: 'h', label: 'Hábitos', align: 'right' as const, render: (d: R) => { const due = dueHabits(state, d); return due.length ? `${due.filter((h) => isHabitDone(state, h.id, d)).length}/${due.length}` : <span className="text-muted">—</span>; } },
     modOn(state, 'sono') && { key: 'z', label: 'Sono', align: 'right' as const, render: (d: R) => { const s = sleepBy.get(d); return s ? <span style={{ color: s.hours >= (state.goals.sleep || 8) ? undefined : 'var(--color-warn)' }}>{nf(s.hours, 1)} h</span> : <span className="text-muted">—</span>; } },
     modOn(state, 'agua') && { key: 'a', label: 'Água', align: 'right' as const, render: (d: R) => { const w = state.water[d] || 0; return w ? <span style={{ color: w >= state.goals.water ? 'var(--color-good)' : undefined }}>{nf(w / 1000, 1)} L</span> : <span className="text-muted">—</span>; } },

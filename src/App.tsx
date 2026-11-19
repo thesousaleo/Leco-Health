@@ -8,6 +8,7 @@ import Friends from './pages/Friends';
 import { StoreProvider, useStore } from './store';
 import type { ModuleId, TabId } from './types';
 import { dayScore, habitCount, isHabitDone, modOn, todayKey } from './utils';
+import { macrosOn } from './food';
 import { RestTimerProvider } from './components/RestTimer';
 import { Button, cx, Modal, ProgressBar } from './components/ui';
 import { Celebration, SetupWizard } from './components/Extras';
@@ -471,15 +472,16 @@ function QuickAdd({ tab, go }: { tab: TabId; go: (t: TabId) => void }) {
   }, []);
   useEffect(() => setHide(false), [tab]);
   // no computador, o Início e o Treino têm o botão "Registrar" no topo
-  const showFab = FAB_TABS.includes(tab) && !(desk && (tab === 'inicio' || tab === 'treino'));
+  const showFab = FAB_TABS.includes(tab) && !(desk && (tab === 'inicio' || tab === 'treino')) && !(tab === 'nutricao' && macrosOn(state));
   const cup = state.waterSizes?.[0];
   const run = (fn: () => void) => { setOpen(false); setTimeout(fn, 180); };
   const items: { label: string; sub?: string; icon: React.ReactNode; color: string; fn: () => void; mod?: ModuleId }[] = ([
+    ...(macrosOn(state) ? [{ label: 'Alimento', mod: 'nutricao' as ModuleId, sub: 'calorias e macros', icon: <LuApple size={22} />, color: 'var(--color-prot)', fn: () => { go('nutricao'); setIntent('nutricao', 'food'); } }] : []),
     { label: 'Refeição', mod: 'nutricao', sub: 'com foto', icon: <LuCamera size={22} />, color: 'var(--color-orange)', fn: () => { go('nutricao'); setIntent('nutricao', 'meal'); } },
     { label: 'Água', mod: 'agua', sub: cup ? `+ ${cup.label}` : '+ 250 ml', icon: <LuDroplet size={22} />, color: 'var(--color-sleep)', fn: () => { actions.addWater(cup?.ml ?? 250, undefined, cup?.label); toast(`+${cup?.ml ?? 250} ml de água`); } },
     { label: 'Peso', mod: 'peso', icon: <LuScale size={22} />, color: 'var(--color-good)', fn: () => { go('registros'); setIntent('registros', 'weight'); } },
     { label: 'Sono', mod: 'sono', icon: <LuMoon size={22} />, color: 'var(--color-sleep)', fn: () => { go('registros'); setIntent('registros', 'sleep'); } },
-    { label: 'Hábitos', mod: 'habitos', icon: <LuListChecks size={22} />, color: 'var(--color-mind)', fn: () => go('habitos') },
+    ...(macrosOn(state) ? [] : [{ label: 'Hábitos', mod: 'habitos' as ModuleId, icon: <LuListChecks size={22} />, color: 'var(--color-mind)', fn: () => go('habitos') }]),
     { label: 'Nota', icon: <LuNotebookPen size={22} />, color: 'var(--color-warn)', fn: () => { go('registros'); setIntent('registros', 'note'); } },
   ] as { label: string; sub?: string; icon: React.ReactNode; color: string; fn: () => void; mod?: ModuleId }[]).filter((it) => !it.mod || modOn(state, it.mod));
   return (

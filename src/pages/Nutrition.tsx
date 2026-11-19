@@ -2,11 +2,14 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { pushBack } from '../back';
 import { useIntent } from '../intent';
 import {
-  LuCamera, LuCheck, LuRepeat, LuChevronLeft, LuChevronRight, LuImage, LuImageOff, LuImages, LuLoaderCircle, LuMinus, LuNotebookPen, LuPencil, LuPlus, LuX,
+  LuApple, LuCamera, LuChartColumn, LuCheck, LuRepeat, LuChevronLeft, LuChevronRight, LuImage, LuImageOff, LuImages, LuLoaderCircle, LuMinus, LuNotebookPen, LuPencil, LuPlus, LuX,
 } from 'react-icons/lu';
 import { useStore } from '../store';
 import type { MealKind, MealLog } from '../types';
-import { addDays, fmtLong, kindForHour, MEAL_KINDS, mealLabel, mealsOn, nf, relDay, todayKey, fmtDayMonth } from '../utils';
+import { addDays, fmtLong, kindForHour, MEAL_KINDS, mealLabel, mealsOn, nf, relDay, todayKey, fmtDayMonth, uid } from '../utils';
+import { macrosOn } from '../food';
+import { FoodPicker, MacroGoalsModal, MacroSummary, MealItems, SaveMealModal, type PickerTarget } from '../components/Macros';
+import { FoodLibrary, MacroWeek } from '../components/MacroWeek';
 import { deletePhoto, savePhoto, usePhoto } from '../photos';
 import { WaterCard } from '../components/Water';
 import {
@@ -33,10 +36,19 @@ const nowHHMM = () => new Date().toTimeString().slice(0, 5);
 export default function Nutrition() {
   const { state, actions, toast } = useStore();
   const [day, setDay] = useState(todayKey());
-  const [view, setView] = useState<'diario' | 'galeria'>('diario');
+  const [view, setView] = useState<'diario' | 'semana' | 'alimentos' | 'galeria'>('diario');
   const [modal, setModal] = useState<{ meal?: MealLog } | null>(null);
   const [viewer, setViewer] = useState<{ ids: string[]; i: number } | null>(null);
-  useIntent('nutricao', (i) => { if (i === 'meal') { setDay(todayKey()); setView('diario'); setModal({}); } });
+  const [picker, setPicker] = useState<PickerTarget | null>(null);
+  const [goalsOpen, setGoalsOpen] = useState(false);
+  const [saveMeal, setSaveMeal] = useState<MealLog | null>(null);
+  const macros = macrosOn(state);
+  const ic = macros ? 'max-[420px]:hidden' : undefined; // quatro abas: sem ícones em telas estreitas
+  useIntent('nutricao', (i) => {
+    if (i === 'meal') { setDay(todayKey()); setView('diario'); setModal({}); }
+    if (i === 'food') { setDay(todayKey()); setView('diario'); setPicker({ date: todayKey() }); }
+    if ((i === 'semana' || i === 'alimentos') && macrosOn(state)) setView(i);
+  });
   const meals = mealsOn(state, day);
   const goal = state.goals.meals || 4;
   const water = state.water[day] || 0;
@@ -45,17 +57,28 @@ export default function Nutrition() {
 
   return (
     <div>
-      <PageHeader title="Alimentação" sub="Registre o que comeu, com foto se quiser"
-        right={<div className="hidden md:block"><Button variant="primary" size="lg" onClick={() => setModal({})}><LuPlus size={18} /> Registrar refeição</Button></div>} />
+      <PageHeader title="Alimentação" sub={macros ? 'Calorias, macros e fotos das refeições' : 'Registre o que comeu, com foto se quiser'}
+        right={<div className="hidden md:flex gap-2">
+          {macros && <Button variant="primary" size="lg" onClick={() => setPicker({ date: day })}><LuPlus size={18} /> Adicionar alimento</Button>}
+          <Button variant={macros ? 'soft' : 'primary'} size="lg" onClick={() => setModal({})}><LuCamera size={18} /> Registrar refeição</Button>
+        </div>} />
 
       <div className="mb-5">
         <Segmented value={view} onChange={setView} options={[
-          { value: 'diario', label: <><LuNotebookPen size={15} /> Diário</> },
-          { value: 'galeria', label: <><LuImages size={15} /> Galeria</> },
+          { value: 'diario', label: <><LuNotebookPen size={15} className={ic} /> Diário</> },
+          ...(macros ? [
+            { value: 'semana' as const, label: <><LuChartColumn size={15} className={ic} /> Semana</> },
+            { value: 'alimentos' as const, label: <><LuApple size={15} className={ic} /> Alimentos</> },
+          ] : []),
+          { value: 'galeria', label: <><LuImages size={15} className={ic} /> Galeria</> },
         ]} />
       </div>
 
-      {view === 'galeria' ? (
+      {view === 'semana' && macros ? (
+        <MacroWeek onGoals={() => setGoalsOpen(true)} />
+      ) : view === 'alimentos' && macros ? (
+        <FoodLibrary />
+      ) : view === 'galeria' ? (
         <Gallery onOpen={(ids, i) => setViewer({ ids, i })} onEdit={(m) => setModal({ meal: m })} />
       ) : (
         <>
@@ -70,6 +93,15 @@ export default function Nutrition() {
           </div>
 
           <div className="grid lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] gap-4 md:gap-5 mb-4 md:mb-5">
+            {macros ? (
+              <div>
+                <MacroSummary day={day} onGoals={() => setGoalsOpen(true)} />
+                <div className="grid grid-cols-2 gap-2 mt-3 md:hidden">
+                  <Button variant="primary" size="lg" onClick={() => setPicker({ date: day })}><LuPlus size={18} /> Alimento</Button>
+                  <Button variant="soft" size="lg" onClick={() => setModal({})}><LuCamera size={18} /> Foto</Button>
+                </div>
+              </div>
+            ) : (
             <Card className="p-5 md:p-7">
               <p className="eyebrow">Refeições {isToday ? 'de hoje' : 'do dia'}</p>
               <p className="mt-4 flex items-baseline gap-2.5">
@@ -88,6 +120,7 @@ export default function Nutrition() {
                 <LuCamera size={18} /> Registrar refeição
               </Button>
             </Card>
+            )}
 
             <WaterCard day={day} />
           </div>
@@ -95,15 +128,18 @@ export default function Nutrition() {
           {meals.length === 0 ? (
             <Card className="p-5">
               <Empty icon={<LuCamera />} title={isToday ? 'Nada registrado ainda hoje' : 'Nenhuma refeição neste dia'}
-                text="Tire uma foto do prato e escreva em poucas palavras o que comeu."
-                action={<Button variant="primary" onClick={() => setModal({})}><LuPlus size={16} /> Registrar refeição</Button>} />
+                text={macros ? 'Adicione os alimentos (com quantidade) ou tire uma foto do prato.' : 'Tire uma foto do prato e escreva em poucas palavras o que comeu.'}
+                action={macros
+                  ? <Button variant="primary" onClick={() => setPicker({ date: day })}><LuPlus size={16} /> Adicionar alimento</Button>
+                  : <Button variant="primary" onClick={() => setModal({})}><LuPlus size={16} /> Registrar refeição</Button>} />
             </Card>
           ) : (
             <ol className="relative space-y-4 md:space-y-5">
               <span aria-hidden className="absolute left-[25px] top-3 bottom-3 w-0.5 rounded-full bg-ink/10" />
               {meals.map((m) => (
                 <MealCard key={m.id} meal={m} onEdit={() => setModal({ meal: m })} onOpenPhoto={(i) => setViewer({ ids: m.photos, i })}
-                  onRepeat={() => { actions.addMeal({ date: todayKey(), time: nowHHMM(), kind: m.kind, description: m.description, photos: [] }); setDay(todayKey()); toast('Refeição repetida hoje'); }} />
+                  onRepeat={() => { actions.addMeal({ date: todayKey(), time: nowHHMM(), kind: m.kind, description: m.description, photos: [], items: (m.items || []).map((x) => ({ ...x, id: uid() })) }); setDay(todayKey()); toast('Refeição repetida hoje'); }}
+                  extra={macros ? <MealItems meal={m} onAdd={() => setPicker({ date: m.date, mealId: m.id })} onEdit={(it) => setPicker({ date: m.date, edit: { mealId: m.id, item: it } })} onSave={() => setSaveMeal(m)} /> : undefined} />
               ))}
             </ol>
           )}
@@ -123,12 +159,17 @@ export default function Nutrition() {
         } : undefined} />
 
       {viewer && <PhotoViewer ids={viewer.ids} index={viewer.i} onClose={() => setViewer(null)} />}
+      {macros && <>
+        <FoodPicker target={picker} onClose={() => setPicker(null)} />
+        <MacroGoalsModal open={goalsOpen} onClose={() => setGoalsOpen(false)} />
+        <SaveMealModal meal={saveMeal} onClose={() => setSaveMeal(null)} />
+      </>}
     </div>
   );
 }
 
 /* ── card da refeição ─────────────────────────────────────── */
-function MealCard({ meal, onEdit, onOpenPhoto, onRepeat }: { meal: MealLog; onEdit: () => void; onOpenPhoto: (i: number) => void; onRepeat: () => void }) {
+function MealCard({ meal, onEdit, onOpenPhoto, onRepeat, extra }: { meal: MealLog; onEdit: () => void; onOpenPhoto: (i: number) => void; onRepeat: () => void; extra?: React.ReactNode }) {
   const first = meal.photos[0];
   return (
     <li className="relative grid grid-cols-[52px_minmax(0,1fr)] gap-2.5">
@@ -155,8 +196,9 @@ function MealCard({ meal, onEdit, onOpenPhoto, onRepeat }: { meal: MealLog; onEd
               <IconButton label="Editar" className="size-8" onClick={onEdit}><LuPencil size={14} /></IconButton>
             </span>
           </div>
-          <p className="text-[15.5px] text-ink mt-2 leading-snug line-clamp-3">{meal.description || <span className="text-muted">Sem descrição</span>}</p>
+          {(meal.description || !extra) && <p className="text-[15.5px] text-ink mt-2 leading-snug line-clamp-3">{meal.description || <span className="text-muted">Sem descrição</span>}</p>}
           {meal.note && <p className="text-[13px] text-muted mt-1.5 line-clamp-2">{meal.note}</p>}
+          {extra}
         </div>
       </Card>
     </li>

@@ -10,7 +10,8 @@ import type { AppState, ModuleId, TabId } from '../types';
 import { useStore } from '../store';
 import { setIntent, type Intent } from '../intent';
 import { pushBack } from '../back';
-import { addDays, fmtShort, isHabitDone, modOn, nf, pauseOn, relDay, todayKey } from '../utils';
+import { addDays, fmtShort, isHabitDone, mealLabel, modOn, nf, pauseOn, relDay, todayKey } from '../utils';
+import { kindForNow, makeItem, macrosOn, mealMacros, searchFoods } from '../food';
 import { cx } from './ui';
 
 export const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
@@ -87,6 +88,22 @@ export function parseCommand(raw: string, state: AppState, actions: Actions, go:
   if (/^(retomar|voltar da pausa)$/.test(q) && pauseOn(state)) {
     return { title: 'Retomar (sair do Modo Pausa)', icon: <LuCirclePlay size={18} />, run: () => { actions.resumeHabits(); return 'Bem-vindo de volta!'; } };
   }
+  // alimento: "150 g frango grelhado", "comi 200g de arroz", "300 ml leite"
+  if (macrosOn(state) && (m = q.match(/^(?:comi\s+|bebi\s+)?(\d+(?:[.,]\d+)?)\s*(g|gr|gramas?|ml)\s+(?:de\s+)?(.{2,})$/))) {
+    const qty = num(m[1]);
+    const food = searchFoods(state, m[3], 1)[0];
+    if (food && qty > 0 && qty <= 3000) {
+      const it = makeItem(food, qty, food.unit);
+      const kind = kindForNow();
+      return {
+        title: `Adicionar ${nf(qty, 0)} ${food.unit} de ${food.name}`, sub: `${Math.round(it.kcal)} kcal · P ${Math.round(it.protein)} · C ${Math.round(it.carbs)} · G ${Math.round(it.fat)} · ${mealLabel(kind)}`,
+        icon: <LuApple size={18} />, run: () => { actions.addMealItems(today, kind, [it]); return `${food.name.split(',')[0]} adicionado · ${Math.round(it.kcal)} kcal`; },
+      };
+    }
+  }
+  if (macrosOn(state) && /^(alimento|adicionar alimento|macros|calorias)$/.test(q)) {
+    return { title: 'Adicionar alimento', sub: 'Busca na tabela TACO e nos seus alimentos', icon: <LuApple size={18} />, run: () => { go('nutricao'); setIntent('nutricao', 'food'); } };
+  }
   // refeição
   if (modOn(state, 'nutricao') && /^(refeicao|comi|almoco|jantar|lanche|cafe da manha|foto da refeicao)$/.test(q)) {
     return { title: 'Registrar refeição', sub: 'Abre o registro com foto', icon: <LuApple size={18} />, run: () => { go('nutricao'); setIntent('nutricao', 'meal'); } };
@@ -103,6 +120,10 @@ const DESTS: Dest[] = [
   { label: 'Fichas de treino', words: 'fichas treinos exercicios divisao split', tab: 'treino', intent: 'fichas', mod: 'treino', icon: <LuDumbbell size={16} /> },
   { label: 'Histórico de treinos', words: 'historico evolucao recordes 1rm mapa muscular', tab: 'treino', intent: 'historico', mod: 'treino', icon: <LuDumbbell size={16} /> },
   { label: 'Nutrição', words: 'nutricao refeicoes comida diario alimentar fotos', tab: 'nutricao', mod: 'nutricao', icon: <LuApple size={16} /> },
+  { label: 'Adicionar alimento', words: 'alimento comida calorias macros proteina taco codigo barras', tab: 'nutricao', intent: 'food', mod: 'macros', icon: <LuApple size={16} /> },
+  { label: 'Calorias e macros da semana', words: 'calorias macros proteina carboidratos gorduras media semana gasto', tab: 'nutricao', intent: 'semana', mod: 'macros', icon: <LuApple size={16} /> },
+  { label: 'Meus alimentos', words: 'meus alimentos refeicoes prontas criar alimento', tab: 'nutricao', intent: 'alimentos', mod: 'macros', icon: <LuApple size={16} /> },
+  { label: 'Ajustes · Metas de macros', words: 'metas calorias macros proteina calculadora tmb gasto', tab: 'ajustes', intent: 'ajustes:metas', mod: 'macros', icon: <LuSettings size={16} /> },
   { label: 'Hábitos', words: 'habitos sequencia rotina pausa', tab: 'habitos', mod: 'habitos', icon: <LuListChecks size={16} /> },
   { label: 'Peso', words: 'peso balanca medidas fotos progresso imc', tab: 'registros', intent: 'weight', mod: 'peso', icon: <LuScale size={16} /> },
   { label: 'Sono', words: 'sono noite dormir', tab: 'registros', intent: 'sleep', mod: 'sono', icon: <LuMoon size={16} /> },
@@ -166,7 +187,7 @@ export function SearchSheet({ open, onClose, go }: { open: boolean; onClose: () 
         });
       });
     }
-    DESTS.filter((d) => !d.mod || modOn(state, d.mod)).forEach((d) => {
+    DESTS.filter((d) => !d.mod || (d.mod === 'macros' ? macrosOn(state) : modOn(state, d.mod))).forEach((d) => {
       const sc = Math.max(rank(d.label, nq), rank(d.words, nq) - 0.5); if (sc <= 0) return;
       out.push({ key: 'd' + d.label, group: 'Ir para', title: d.label, icon: d.icon, run: nav(d), score: sc });
     });
@@ -180,8 +201,9 @@ export function SearchSheet({ open, onClose, go }: { open: boolean; onClose: () 
       }));
     }
     if (modOn(state, 'nutricao') && nq.length >= 2) {
-      [...state.meals].sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1)).filter((m) => norm(m.description + ' ' + (m.note ?? '')).includes(nq)).slice(0, 4)
-        .forEach((m) => out.push({ key: 'm' + m.id, group: 'Refeições', title: m.description || 'Refeição', sub: `${relDay(m.date)} · ${m.time}`, icon: <LuApple size={16} />, run: () => go('nutricao'), score: 1 }));
+      const names = (m: AppState['meals'][number]) => (m.items || []).map((i) => i.name.split(',')[0]).join(', ');
+      [...state.meals].sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1)).filter((m) => norm(m.description + ' ' + (m.note ?? '') + ' ' + names(m)).includes(nq)).slice(0, 4)
+        .forEach((m) => out.push({ key: 'm' + m.id, group: 'Refeições', title: m.description || names(m) || 'Refeição', sub: `${relDay(m.date)} · ${m.time}${m.items?.length && macrosOn(state) ? ` · ${Math.round(mealMacros(m).kcal)} kcal` : ''}`, icon: <LuApple size={16} />, run: () => go('nutricao'), score: 1 }));
     }
     if (nq.length >= 2) {
       [...state.notes].sort((a, b) => (a.date < b.date ? 1 : -1)).filter((n) => norm(n.title + ' ' + n.text + ' ' + n.tags.join(' ')).includes(nq)).slice(0, 4)

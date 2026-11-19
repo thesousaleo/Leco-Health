@@ -13,6 +13,8 @@ import { oneRM } from '../exercises';
 import { ScoreRings, type RingPart } from '../components/ScoreRings';
 import { HabitDot, habitState } from '../components/HabitBits';
 import { LineChart } from '../components/charts';
+import { dayGoals, dayMacros, macrosOn, mealMacros, nutritionPart } from '../food';
+import { MacroLine } from '../components/Macros';
 import { Thumb } from '../pages/Nutrition';
 import { Button, cx } from '../components/ui';
 import { ScoreChip, toneColor, type InspectItem, useInspect } from './kit';
@@ -22,13 +24,14 @@ export function dayParts(state: AppState, d: DateKey): RingPart[] {
   const sc = dayScore(state, d);
   const sess = state.sessions.find((s) => s.date === d);
   const meals = mealsOn(state, d).length, goalM = state.goals.meals || 4;
+  const np = nutritionPart(state, d);
   const due = dueHabits(state, d), hd = due.filter((h) => isHabitDone(state, h.id, d)).length;
   const sl = state.sleep.find((x) => x.date === d), gS = state.goals.sleep || 8;
   const done = sess ? sess.entries.reduce((a, e) => a + e.sets.filter((x) => x.done).length, 0) : 0;
   const total = sess ? sess.entries.reduce((a, e) => a + e.sets.length, 0) : 0;
   const parts: (RingPart & { mod: Parameters<typeof modOn>[1] })[] = [
     { mod: 'treino', key: 'treino', label: 'Treino', value: sc.workout, color: 'var(--color-orange)', detail: sess ? `${done} de ${total} séries` : sc.paused ? 'pausa' : sc.isRest ? 'descanso' : (state.cardio || []).some((c) => c.date === d) ? 'cardio' : 'não feito' },
-    { mod: 'nutricao', key: 'refeicoes', label: 'Refeições', value: sc.nutrition, color: 'var(--color-good)', detail: `${meals} de ${goalM}` },
+    { mod: 'nutricao', key: 'refeicoes', label: np.label, value: sc.nutrition, color: 'var(--color-good)', detail: np.label === 'Refeições' ? `${meals} de ${goalM}` : np.detail },
     { mod: 'habitos', key: 'habitos', label: 'Hábitos', value: sc.habits, color: 'var(--color-mind)', detail: due.length ? `${hd} de ${due.length}` : sc.paused ? 'pausa' : 'nenhum no dia' },
     { mod: 'sono', key: 'sono', label: 'Sono', value: sl ? Math.min(1, sl.hours / gS) : 0, color: 'var(--color-sleep)', detail: sl ? `${nf(sl.hours, 1)} h de ${gS} h` : 'não registrado' },
   ];
@@ -65,6 +68,7 @@ export function DayDetail({ date, title }: { date: DateKey; title?: string }) {
   const sp = sess && state.splits.find((x) => x.id === sess.splitId);
   const cardio = (state.cardio || []).filter((c) => c.date === date);
   const meals = mealsOn(state, date);
+  const macros = macrosOn(state), dm = dayMacros(state, date);
   const due = dueHabits(state, date);
   const sl = state.sleep.find((x) => x.date === date);
   const water = state.water[date] || 0;
@@ -95,7 +99,13 @@ export function DayDetail({ date, title }: { date: DateKey; title?: string }) {
         </Section>
       )}
       {modOn(state, 'nutricao') && (
-        <Section title={`Refeições · ${meals.length}`} icon={<LuApple size={14} />}>
+        <Section title={`Refeições · ${meals.length}`} icon={<LuApple size={14} />} right={macros && dm.kcal > 0 ? <span className="text-[12px] text-muted tabular-nums">{nf(dm.kcal, 0)} kcal</span> : undefined}>
+          {macros && dm.kcal > 0 && (
+            <div className="mb-3">
+              <MacroLine m={dm} />
+              <p className="text-[12px] text-muted mt-1">meta {nf(dayGoals(state, date).kcal, 0)} kcal · {nf(dayGoals(state, date).protein, 0)} g de proteína</p>
+            </div>
+          )}
           {meals.length ? (
             <div className="space-y-2">
               {meals.map((m) => (
@@ -104,8 +114,8 @@ export function DayDetail({ date, title }: { date: DateKey; title?: string }) {
                     {m.photos[0] ? <Thumb id={m.photos[0]} className="size-full" /> : <LuApple size={15} />}
                   </span>
                   <span className="flex-1 min-w-0 text-[13.5px]">
-                    <span className="block text-ink truncate">{m.description || mealLabel(m.kind)}</span>
-                    <span className="block text-[12px] text-muted">{m.time} · {mealLabel(m.kind)}</span>
+                    <span className="block text-ink truncate">{m.description || (m.items?.length ? m.items.map((i) => i.name.split(',')[0]).join(', ') : mealLabel(m.kind))}</span>
+                    <span className="block text-[12px] text-muted">{m.time} · {mealLabel(m.kind)}{macros && m.items?.length ? ` · ${nf(mealMacros(m).kcal, 0)} kcal` : ''}</span>
                   </span>
                 </div>
               ))}

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { LuCloud, LuCopy, LuDownload, LuLogOut, LuRefreshCw, LuRotateCcw, LuUpload } from 'react-icons/lu';
+import { LuCalculator, LuCloud, LuCopy, LuDownload, LuLogOut, LuRefreshCw, LuRotateCcw, LuUpload } from 'react-icons/lu';
 import { useStore, validateState } from '../store';
 import { useIntent } from '../intent';
 import { useSync } from '../sync';
@@ -11,6 +11,8 @@ import { buildCsv, buildZip, CSV_LIST, textToB64, type CsvId } from '../export';
 import { hashPin, loadLock, PinPad, saveLock } from '../components/Lock';
 import { LuArrowDown, LuArrowUp, LuEye, LuEyeOff, LuTrash2 } from 'react-icons/lu';
 import { modOn, nf, overallStreak } from '../utils';
+import { macrosOn } from '../food';
+import { MacroGoalsModal } from '../components/Macros';
 import { Button, Card, cx, Field, Input, Modal, NumInput, PageHeader, TextArea } from '../components/ui';
 
 type Tab = 'conta' | 'perfil' | 'metas' | 'modulos' | 'aparencia' | 'lembretes' | 'seguranca' | 'dados';
@@ -47,7 +49,7 @@ export default function Settings({ go }: { go?: (t: TabId) => void }) {
       <div className="max-w-2xl space-y-4">
         {tab === 'conta' && <AccountTab />}
         {tab === 'perfil' && <ProfileTab />}
-        {tab === 'metas' && <><GoalsTab /><StreakSection /></>}
+        {tab === 'metas' && <><GoalsTab /><MacroGoalsSection /><StreakSection /></>}
         {tab === 'modulos' && <ModulesTab />}
         {tab === 'aparencia' && <AppearanceTab go={go} />}
         {tab === 'lembretes' && <RemindersTab />}
@@ -493,6 +495,28 @@ function AppearanceTab({ go }: { go?: (t: TabId) => void }) {
   );
 }
 
+/* ── Calorias e macros ─────────────────────────────────────── */
+function MacroGoalsSection() {
+  const { state } = useStore();
+  const [open, setOpen] = useState(false);
+  if (!macrosOn(state)) return null;
+  const g = state.goals;
+  return (
+    <Section title="Calorias e macros" sub={g.plan ? 'Calculadas pela sua rotina e objetivo.' : 'Metas usadas na Alimentação e no score.'}>
+      {g.kcal ? (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {[['Calorias', `${nf(g.kcal, 0)} kcal`], ['Proteína', `${g.protein} g`], ['Carboidratos', `${g.carbs} g`], ['Gorduras', `${g.fat} g`]].map(([l, v]) => (
+            <div key={l} className="rounded-2xl bg-cream px-3.5 py-2.5"><p className="text-[12px] text-muted">{l}</p><p className="text-[16px] font-semibold text-ink tabular-nums">{v}</p></div>
+          ))}
+        </div>
+      ) : <p className="text-[14px] text-muted">Ainda sem metas.</p>}
+      {g.trainBonus ? <p className="text-[12.5px] text-muted mt-2">Dias de treino: +{g.trainBonus} kcal em carboidratos.</p> : null}
+      <Button variant="soft" className="mt-3" onClick={() => setOpen(true)}><LuCalculator size={15} /> {g.kcal ? 'Ajustar metas' : 'Calcular minhas metas'}</Button>
+      <MacroGoalsModal open={open} onClose={() => setOpen(false)} />
+    </Section>
+  );
+}
+
 /* ── Sequências ────────────────────────────────────────────── */
 function StreakSection() {
   const { state, actions } = useStore();
@@ -509,6 +533,7 @@ function StreakSection() {
 export const MODULES: { id: ModuleId; label: string; sub: string }[] = [
   { id: 'treino', label: 'Treino', sub: 'fichas, séries, cardio e recordes' },
   { id: 'nutricao', label: 'Refeições', sub: 'diário de refeições com foto' },
+  { id: 'macros', label: 'Calorias e macros', sub: 'alimentos com quantidade, metas e médias' },
   { id: 'habitos', label: 'Hábitos', sub: 'hábitos, sequências e lembretes' },
   { id: 'agua', label: 'Água', sub: 'copos, meta e lembretes de água' },
   { id: 'sono', label: 'Sono', sub: 'noites, qualidade e horários' },
