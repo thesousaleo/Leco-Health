@@ -6,6 +6,7 @@ import { useSync } from '../sync';
 import AuthForm from '../components/AuthForm';
 import type { Accent, Goals, HomeBlockId, ModuleId, Prefs, TabId } from '../types';
 import { ACCENTS, DEFAULT_HOME } from '../prefs';
+import { AvatarPicker } from '../components/Avatar';
 import { biometricAvailable, notificationsAllowed, isNative, shareFile } from '../native';
 import { buildCsv, buildZip, CSV_LIST, textToB64, type CsvId } from '../export';
 import { hashPin, loadLock, PinPad, saveLock } from '../components/Lock';
@@ -36,15 +37,18 @@ export default function Settings({ go }: { go?: (t: TabId) => void }) {
   return (
     <div>
       <PageHeader title="Ajustes" />
+      <div className="min-[1100px]:grid min-[1100px]:grid-cols-[260px_minmax(0,1fr)] min-[1100px]:gap-8 min-[1100px]:items-start">
+      <div className="min-[1100px]:sticky min-[1100px]:top-6">
       <ProfileHeader onEdit={() => setTab('perfil')} />
-      <div className="grid grid-cols-3 min-[360px]:grid-cols-4 gap-1 p-1 rounded-[24px] glass mb-5 md:flex md:w-fit md:rounded-full">
+      <div className="grid grid-cols-3 min-[360px]:grid-cols-4 gap-1 p-1 rounded-[24px] glass mb-5 md:flex md:w-fit md:rounded-full min-[1100px]:!flex-col min-[1100px]:!w-full min-[1100px]:!rounded-[24px] min-[1100px]:p-2">
         {TABS.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={cx('press min-w-0 h-10 px-1 md:px-4 rounded-full text-[13px] md:text-[14px] font-medium transition-colors whitespace-nowrap truncate',
-              tab === t.id ? 'bg-ink text-on-ink shadow-[var(--shadow-1)]' : 'text-ink/55')}>
+          <button key={t.id} onClick={() => setTab(t.id)} aria-current={tab === t.id ? 'page' : undefined}
+            className={cx('press min-w-0 h-10 px-1 md:px-4 rounded-full text-[13px] md:text-[14px] font-medium transition-colors whitespace-nowrap truncate min-[1100px]:text-left min-[1100px]:h-11 min-[1100px]:rounded-2xl',
+              tab === t.id ? 'bg-ink text-on-ink shadow-[var(--shadow-1)]' : 'text-ink/55 min-[1100px]:hover:bg-cream')}>
             {t.label}
           </button>
         ))}
+      </div>
       </div>
       <div className="max-w-2xl space-y-4">
         {tab === 'conta' && <AccountTab />}
@@ -55,6 +59,7 @@ export default function Settings({ go }: { go?: (t: TabId) => void }) {
         {tab === 'lembretes' && <RemindersTab />}
         {tab === 'seguranca' && <SecurityTab />}
         {tab === 'dados' && <DataTab />}
+      </div>
       </div>
     </div>
   );
@@ -75,7 +80,7 @@ function ProfileHeader({ onEdit }: { onEdit: () => void }) {
   return (
     <button onClick={onEdit} className="press w-full glass rounded-[28px] p-4 mb-4 flex items-center gap-4 text-left">
       <span className="relative grid place-items-center size-16 rounded-full bg-orange text-white text-[24px] font-semibold shrink-0 shadow-[var(--shadow-2)]">
-        {name.trim().charAt(0).toUpperCase()}
+        {state.profile.avatar ? <img src={state.profile.avatar} alt="" className="size-16 rounded-full object-cover" /> : name.trim().charAt(0).toUpperCase()}
         <span className="absolute -bottom-1 -right-1 h-6 min-w-6 px-1.5 rounded-full bg-ink text-on-ink text-[11px] font-bold grid place-items-center ring-2 ring-surface">{level}</span>
       </span>
       <span className="flex-1 min-w-0">
@@ -177,6 +182,9 @@ function ProfileTab() {
   };
   return (
     <>
+    <Section title="Foto" sub={sync.session ? 'Aparece para os seus amigos e no Início.' : 'Aparece no Início e no seu perfil.'}>
+      <AvatarPicker name={current || 'Você'} value={state.profile.avatar} onChange={(v) => { actions.setAvatar(v); toast(v ? 'Foto salva' : 'Foto removida'); }} />
+    </Section>
     <Section title="Seu nome" sub={sync.session ? 'Aparece na saudação do Início e para seus amigos.' : 'Aparece na saudação do Início.'}>
       <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); save(); }}>
         <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Como quer ser chamado" />

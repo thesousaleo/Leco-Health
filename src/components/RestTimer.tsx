@@ -1,14 +1,18 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { LuMinus, LuPause, LuPlay, LuPlus, LuTimer, LuX } from 'react-icons/lu';
 import { cx, ProgressRing } from './ui';
-import { haptic } from '../native';
+import { haptic, restTimerBackground, restTimerForeground } from '../native';
 
 /* Timer de descanso flutuante — global, sobrevive à troca de abas. */
 
 interface TimerCtx {
-  start: (sec?: number) => void;
+  start: (sec?: number, next?: string) => void;
   preset: number;
   setPreset: (s: number) => void;
+  left: number; total: number; active: boolean; running: boolean; flash: boolean;
+  stop: () => void; adjust: (d: number) => void; pause: () => void; resume: () => void;
+  /** esconde o botão flutuante (o modo foco mostra o descanso na própria tela) */
+  setHidden: (h: boolean) => void;
 }
 const Ctx = createContext<TimerCtx | null>(null);
 export const useRestTimer = () => useContext(Ctx)!;
@@ -42,6 +46,7 @@ export function RestTimerProvider({ children, visible }: { children: React.React
   const [now, setNow] = useState(Date.now());
   const [open, setOpen] = useState(false);
   const [flash, setFlash] = useState(false);
+  const [hidden, setHidden] = useState(false);
   const fired = useRef(false);
 
   const running = endAt != null;
@@ -65,7 +70,9 @@ export function RestTimerProvider({ children, visible }: { children: React.React
     }
   }, [running, left]);
 
-  const start = useCallback((sec?: number) => {
+  const nextLabel = useRef<string | undefined>(undefined);
+  const start = useCallback((sec?: number, next?: string) => {
+    nextLabel.current = next;
     const s = sec ?? preset;
     fired.current = false;
     setTotal(s);
@@ -82,15 +89,27 @@ export function RestTimerProvider({ children, visible }: { children: React.React
     else if (pausedLeft != null) setPausedLeft((p) => Math.max(1, p! + d));
   };
 
+  // app em segundo plano (tela bloqueada): contagem na notificação e aviso no fim
+  const endRef = useRef<number | null>(null); endRef.current = endAt;
+  useEffect(() => {
+    const on = () => {
+      if (document.visibilityState === 'hidden' && endRef.current && endRef.current > Date.now() + 1500) restTimerBackground(endRef.current, nextLabel.current);
+      else restTimerForeground();
+    };
+    document.addEventListener('visibilitychange', on);
+    return () => document.removeEventListener('visibilitychange', on);
+  }, []);
+  useEffect(() => { if (!running) restTimerForeground(); }, [running]);
+
   const mm = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
   const urgent = running && left > 0 && left <= 10;
   // vibração leve nos 3 últimos segundos
   useEffect(() => { if (running && left > 0 && left <= 3) void haptic(); }, [running, left]);
 
   return (
-    <Ctx.Provider value={{ start, preset, setPreset }}>
+    <Ctx.Provider value={{ start, preset, setPreset, left, total, active, running, flash, stop, adjust, pause, resume, setHidden }}>
       {children}
-      {(visible || active || flash) && (
+      {(visible || active || flash) && !hidden && (
         <div className="fixed z-50 right-4 md:right-8 bottom-[calc(5.5rem+var(--sab))] md:bottom-8 flex flex-col items-end gap-2">
           {open && (
             <div className="w-[284px] rounded-[28px] bg-[#1C1B1A] text-white p-5 shadow-2xl animate-pop">
@@ -139,4 +158,15 @@ export function RestTimerProvider({ children, visible }: { children: React.React
       )}
     </Ctx.Provider>
   );
+}
+
+/** Texto do "próximo" para a notificação do descanso. */
+export function nextAfter(session: { entries: { exerciseId: string; name: string; sets: { id: string; done: boolean }[] }[] }, exId: string, setId: string) {
+  const e = session.entries.find((x) => x.exerciseId === exId);
+  if (e) {
+    const rest = e.sets.filter((x) => !x.done && x.id !== setId);
+    if (rest.length) return `${e.name} · série ${e.sets.findIndex((x) => x.id === rest[0].id) + 1}`;
+  }
+  const n = session.entries.find((x) => x.exerciseId !== exId && x.sets.some((y) => !y.done));
+  return n?.name;
 }

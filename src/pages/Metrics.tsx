@@ -12,6 +12,7 @@ import { useSync } from '../sync';
 import { useStore } from '../store';
 import type { NoteEntry, NoteKind, SleepLog } from '../types';
 import { addDays, fmtShort, lastNDays, modOn, nf, radarWeek, relDay, round1, todayKey, fmtWeekdayShort, weightTrend } from '../utils';
+import { Kpi, useIsDesktop } from '../desktop/kit';
 import {
   Button, Card, Chip, cx, DeleteButton, Empty, Field, IconButton, Input, Modal, NumInput, PageHeader, Segmented, Select, Stars, Tag, TextArea,
 } from '../components/ui';
@@ -29,12 +30,14 @@ export default function Metrics() {
     return mP ? 'peso' : mS ? 'sono' : 'diario';
   });
   const shown: View = (view === 'peso' && !mP) || (view === 'sono' && !mS) ? 'diario' : view;
+  const desk = useIsDesktop();
   // ações rápidas do botão ＋
   const [focus, setFocus] = useState<{ i: Intent; k: number } | null>(null);
   useIntent('registros', (i) => { setView(i === 'weight' ? 'peso' : i === 'sleep' ? 'sono' : i === 'resumo' ? 'resumo' : 'diario'); setFocus({ i, k: Date.now() }); });
   return (
     <div>
       <PageHeader title="Registros" sub={[mP && 'Peso', mS && 'sono', 'diário de saúde'].filter(Boolean).join(', ').replace(/^./, (c) => c.toUpperCase())} />
+      {desk && <MetricsKpis go={setView} />}
       <div className="mb-4">
         <Segmented value={shown} onChange={setView} options={[
           ...(mP ? [{ value: 'peso' as View, label: <><LuScale size={15} /> Peso</> }] : []),
@@ -47,6 +50,37 @@ export default function Metrics() {
       {shown === 'sono' && <Sleep />}
       {shown === 'diario' && <Journal newKey={focus?.i === 'note' ? focus.k : 0} />}
       {shown === 'resumo' && <ReportView />}
+    </div>
+  );
+}
+
+/* ── painel do computador ─────────────────────────────────── */
+function MetricsKpis({ go }: { go: (v: View) => void }) {
+  const { state } = useStore();
+  const mP = modOn(state, 'peso'), mS = modOn(state, 'sono');
+  const today = todayKey();
+  const ws = state.body.filter((b) => b.weight != null).sort((a, b) => (a.date < b.date ? -1 : 1));
+  const last = ws[ws.length - 1];
+  const ago = ws.filter((b) => b.date <= addDays(today, -30)).pop() ?? ws[0];
+  const d30 = last && ago && last !== ago ? last.weight! - ago.weight! : null;
+  const sl = state.sleep.filter((x) => x.date > addDays(today, -7));
+  const sAvg = sl.length ? sl.reduce((a, x) => a + x.hours, 0) / sl.length : null;
+  const eAvg = sl.length ? sl.reduce((a, x) => a + x.energy, 0) / sl.length : null;
+  const h = state.prefs.height;
+  const bmi = last?.weight && h ? last.weight / (h / 100) ** 2 : null;
+  const notes = state.notes.filter((n) => n.date > addDays(today, -30)).length;
+  const tone = (v: number | null, goodDown: boolean) => (v == null || Math.abs(v) < 0.05 ? undefined : (v < 0) === goodDown ? 'var(--color-good)' : 'var(--color-warn)');
+  return (
+    <div className="grid grid-cols-5 gap-3 mb-5">
+      {mP && <Kpi label="Peso" icon={<LuScale size={12} />} value={last ? nf(last.weight!, 1) : '—'} unit={last ? 'kg' : undefined} onClick={() => go('peso')}
+        foot={last ? `registrado ${relDay(last.date).toLowerCase()}` : 'sem registros'} />}
+      {mP && <Kpi label="Em 30 dias" value={d30 == null ? '—' : `${d30 > 0 ? '+' : d30 < 0 ? '−' : ''}${nf(Math.abs(d30), 1)}`} unit={d30 == null ? undefined : 'kg'} onClick={() => go('peso')}
+        accent={tone(d30, (state.goals.weight ?? 0) < (last?.weight ?? 0))} foot={state.goals.weight ? `meta ${nf(state.goals.weight, 1)} kg` : 'sem meta de peso'} />}
+      {mS && <Kpi label="Sono · 7 dias" icon={<LuMoon size={12} />} value={sAvg == null ? '—' : nf(sAvg, 1)} unit={sAvg == null ? undefined : 'h'} accent="var(--color-sleep)" onClick={() => go('sono')}
+        foot={`meta ${state.goals.sleep ?? 8} h · ${sl.length} noites`} />}
+      {mS && <Kpi label="Disposição" value={eAvg == null ? '—' : nf(eAvg, 1)} unit={eAvg == null ? undefined : 'de 5'} onClick={() => go('sono')} foot="média dos últimos 7 dias" />}
+      {mP && bmi ? <Kpi label="IMC" value={nf(bmi, 1)} foot={bmi < 18.5 ? 'abaixo do peso' : bmi < 25 ? 'peso normal' : bmi < 30 ? 'sobrepeso' : 'obesidade'} /> :
+        <Kpi label="Diário" icon={<LuNotebookPen size={12} />} value={notes} unit={notes === 1 ? 'nota' : 'notas'} onClick={() => go('diario')} foot="nos últimos 30 dias" />}
     </div>
   );
 }

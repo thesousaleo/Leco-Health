@@ -3,6 +3,7 @@ import { LuCheck, LuCopy, LuCrown, LuDumbbell, LuEye, LuFlag, LuFlame, LuPlus, L
 import { useStore } from '../store';
 import { useSync } from '../sync';
 import { useDuo } from '../duo';
+import { UserAvatar } from '../components/Avatar';
 import { setIntent } from '../intent';
 import * as cloud from '../cloud';
 import type { Challenge, Friend, Reaction } from '../cloud';
@@ -77,7 +78,7 @@ export default function Friends() {
     return (
       <div>
         <PageHeader title="Amigos" sub="Acompanhem o progresso juntos, cada um com sua conta" />
-        <div className="grid lg:grid-cols-2 gap-4 md:gap-5 items-start">
+        <div className="grid lg:grid-cols-2 gap-4 md:gap-5 items-start max-w-[1100px]">
           <Card className="p-6 md:p-8"><AuthForm /></Card>
           <div className="rounded-[28px] p-6 md:p-8 bg-orange text-white">
             <LuUsers size={28} />
@@ -87,6 +88,7 @@ export default function Friends() {
               <li>• Vocês trocam um código de 6 letras para virar amigos.</li>
               <li>• Você escolhe o que cada amigo vê. Diário, exames, refeições e fotos ficam privados.</li>
               <li>• Reações, ranking da semana e desafios entre amigos.</li>
+              <li>• Treino em dupla: as mesmas fichas e dias, e as cargas do amigo em cada exercício.</li>
             </ul>
           </div>
         </div>
@@ -180,7 +182,7 @@ export default function Friends() {
               <div className="mt-5 space-y-2">
                 {incoming.map((f) => (
                   <Tile key={f.friendshipId} className="flex items-center gap-3 px-4 py-3">
-                    <Avatar name={f.name} />
+                    <Avatar name={f.name} uid={f.userId} />
                     <p className="flex-1 text-[14.5px] text-ink min-w-0 truncate"><b className="font-medium">{f.name}</b> quer ser seu amigo</p>
                     <button aria-label="Recusar" onClick={() => sync.removeFriend(f.friendshipId)} className="press size-10 rounded-full border border-orange text-orange grid place-items-center"><LuX size={16} /></button>
                     <button aria-label="Aceitar" onClick={async () => { await sync.acceptFriend(f.friendshipId); toast(`Você e ${f.name} agora são amigos`); }} className="press size-10 rounded-full bg-orange text-white grid place-items-center"><LuCheck size={17} /></button>
@@ -188,7 +190,7 @@ export default function Friends() {
                 ))}
                 {outgoing.map((f) => (
                   <Tile key={f.friendshipId} className="flex items-center gap-3 px-4 py-3">
-                    <Avatar name={f.name} muted />
+                    <Avatar name={f.name} uid={f.userId} muted />
                     <p className="flex-1 text-[14px] text-muted min-w-0 truncate">Aguardando {f.name} aceitar</p>
                     <DeleteButton label="Cancelar pedido" onConfirm={() => sync.removeFriend(f.friendshipId)} />
                   </Tile>
@@ -197,7 +199,7 @@ export default function Friends() {
             )}
           </Card>
           {!loaded && accepted.length === 0 ? (
-            <div className="grid md:grid-cols-2 gap-4" aria-label="Carregando amigos">
+            <div className="grid md:grid-cols-2 min-[1400px]:grid-cols-3 gap-4" aria-label="Carregando amigos">
               {[0, 1].map((i) => (
                 <Card key={i} className="p-5">
                   <div className="flex items-center gap-3"><div className="skeleton size-11 !rounded-full" /><div className="flex-1 space-y-2"><div className="skeleton h-4 w-2/5" /><div className="skeleton h-3 w-1/4" /></div></div>
@@ -208,7 +210,7 @@ export default function Friends() {
           ) : accepted.length === 0 ? (
             <Card className="p-5"><Empty art="amigos" title="Nenhum amigo ainda" text="Troque códigos com alguém. Quando ele aceitar, o progresso de vocês aparece aqui." /></Card>
           ) : (
-            <div className="grid md:grid-cols-2 gap-4 md:gap-5">
+            <div className="grid md:grid-cols-2 min-[1400px]:grid-cols-3 gap-4 md:gap-5">
               {accepted.map((f) => (
                 <FriendCard key={f.userId} f={f} sent={reactions.filter((r) => r.from_user === myId && r.to_user === f.userId && r.day === todayKey())}
                   onReact={async (emoji, existing) => {
@@ -238,14 +240,12 @@ const AV_COLORS = ['#F26B3A', '#12A594', '#8E4EC6', '#2563EB', '#E5484D', '#E2A3
 const avColor = (name: string) => AV_COLORS[[...name].reduce((a, c) => a + c.charCodeAt(0), 0) % AV_COLORS.length];
 
 /** Avatar com iniciais coloridas e, opcionalmente, o anel do score do dia em volta. */
-function Avatar({ name, me, muted, ring, size = 40 }: { name: string; me?: boolean; muted?: boolean; ring?: number | null; size?: number }) {
+function Avatar({ name, me, muted, ring, size = 40, uid }: { name: string; me?: boolean; muted?: boolean; ring?: number | null; size?: number; uid?: string }) {
+  const { state } = useStore();
+  const { friends } = useSync();
+  const src = me ? state.profile.avatar : uid ? friends.find((f) => f.userId === uid)?.avatar : undefined;
   const col = me ? 'var(--color-orange)' : avColor(name);
-  const inner = (
-    <span className="grid place-items-center rounded-full font-semibold shrink-0 text-white"
-      style={{ width: size, height: size, fontSize: size * 0.36, background: muted ? 'var(--color-cream)' : col, color: muted ? 'var(--color-muted)' : undefined }}>
-      {initials(name)}
-    </span>
-  );
+  const inner = <UserAvatar name={name} src={src} size={size} color={col} muted={muted} />;
   if (ring == null) return inner;
   return <ProgressRing value={ring / 100} size={size + 10} stroke={3} color={col}>{inner}</ProgressRing>;
 }
@@ -266,7 +266,7 @@ function FriendCard({ f, sent, onReact, onRemove, onSharesSaved }: {
   return (
     <Card className="p-5 md:p-6">
       <div className="flex items-center gap-3">
-        <Avatar name={f.name} ring={s?.score?.today ?? null} size={42} />
+        <Avatar name={f.name} uid={f.userId} ring={s?.score?.today ?? null} size={42} />
         <div className="flex-1 min-w-0">
           <p className="text-[17px] font-medium text-ink truncate">{f.name}</p>
           <p className="text-[12.5px] text-muted">atualizado {ago(f.updatedAt)}</p>
@@ -413,7 +413,7 @@ function Ranking({ me, friends, myName }: { me: any; friends: Friend[]; myName: 
             return (
               <div key={r.id} className="w-[30%] flex flex-col items-center min-w-0">
                 {idx === 0 && <LuCrown size={20} className="text-orange mb-1 check-pop" />}
-                <Avatar name={r.name} me={r.me} size={idx === 0 ? 50 : 42} />
+                <Avatar name={r.name} me={r.me} uid={r.id} size={idx === 0 ? 50 : 42} />
                 <p className="text-[12.5px] font-medium text-ink truncate max-w-full mt-1.5">{r.me ? 'Você' : r.name.split(' ')[0]}</p>
                 <p className="text-[11.5px] text-muted tabular-nums">{c.fmt(r.v!)}</p>
                 <div className={cx('w-full mt-2 rounded-t-2xl grid place-items-start justify-center pt-2 rise', idx === 0 ? 'bg-orange text-white' : 'bg-cream text-ink')}
@@ -431,7 +431,7 @@ function Ranking({ me, friends, myName }: { me: any; friends: Friend[]; myName: 
             <span className={cx('w-6 text-center text-[15px] font-semibold tabular-nums', i === 0 ? 'text-orange' : 'text-muted')}>
               {i === 0 && rows.length > 1 ? <LuCrown size={17} className="mx-auto" /> : i + 1}
             </span>
-            <Avatar name={r.name} me={r.me} />
+            <Avatar name={r.name} me={r.me} uid={r.id} />
             <div className="flex-1 min-w-0">
               <div className="flex justify-between gap-2 mb-1.5">
                 <p className={cx('text-[14.5px] truncate', r.me ? 'text-ink font-medium' : 'text-ink/80')}>{r.name}{r.me ? ' (você)' : ''}</p>
@@ -499,7 +499,7 @@ function ChallengeCard({ c, myId, onChange }: { c: Challenge; myId: string; onCh
         {rows.map((r, i) => (
           <li key={r.user_id} className="flex items-center gap-3">
             <span className={cx('w-5 text-center text-[14px] font-semibold', i === 0 && r.met > 0 ? 'text-orange' : 'text-muted')}>{i === 0 && r.met > 0 ? (ended ? '🏆' : <LuCrown size={16} className="mx-auto" />) : i + 1}</span>
-            <Avatar name={r.name} me={r.user_id === myId} />
+            <Avatar name={r.name} me={r.user_id === myId} uid={r.user_id} />
             <div className="flex-1 min-w-0">
               <div className="flex justify-between text-[14px] mb-1.5"><span className="truncate text-ink">{r.name}{r.user_id === myId ? ' (você)' : ''}</span><span className="tabular-nums text-ink font-medium">{r.met}/{total}</span></div>
               <div className="h-2 rounded-full bg-cream overflow-hidden"><div className={cx('h-full rounded-full', r.user_id === myId ? 'bg-orange' : 'hatch')} style={{ width: `${(r.met / total) * 100}%` }} /></div>
@@ -551,7 +551,7 @@ function NewChallenge({ open, friends, onClose, onCreate }: {
           return (
             <button key={f.userId} onClick={() => setMembers(on ? members.filter((x) => x !== f.userId) : [...members, f.userId])}
               className={cx('w-full flex items-center gap-3 rounded-2xl px-3 py-2.5 text-left', on ? 'bg-ink text-on-ink' : 'bg-cream text-ink')}>
-              <Avatar name={f.name} /> <span className="flex-1 text-[15px]">{f.name}</span>{on && <LuCheck size={17} />}
+              <Avatar name={f.name} uid={f.userId} /> <span className="flex-1 text-[15px]">{f.name}</span>{on && <LuCheck size={17} />}
             </button>
           );
         })}

@@ -7,7 +7,7 @@
   --color-cream: #F4F2EF;
   --color-line: #ECE8E3;
   --color-ink: #1C1B1A;
-  --color-muted: #77726B;
+  --color-muted: #67625B; /* contraste ≥ 4,5:1 sobre o fundo */
   --color-orange: #F26B3A;
   --color-peach: #F59A74;
   --color-blush: #FBE3D8;
@@ -452,3 +452,34 @@ button > svg, a > svg { flex-shrink: 0; }
 .setup-in-r { animation: setup-in-r .42s cubic-bezier(.22,.8,.26,1) both; }
 .setup-in-l { animation: setup-in-l .42s cubic-bezier(.22,.8,.26,1) both; }
 @media (prefers-reduced-motion: reduce) { .setup-in-r, .setup-in-l { animation: none; } }
+
+/* modo foco */
+@keyframes focus-in { from { opacity: 0; transform: scale(.985); } to { opacity: 1; transform: none; } }
+.focus-in { animation: focus-in .32s cubic-bezier(.22,.8,.26,1) both; }
+@keyframes pr-pop { 0% { opacity: 0; transform: scale(.6) rotate(-6deg); } 35% { opacity: 1; transform: scale(1.08) rotate(2deg); } 55% { transform: scale(.98); } 80% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1) translateY(-14px); } }
+.pr-pop { animation: pr-pop 2.6s cubic-bezier(.22,.8,.26,1) both; box-shadow: 0 20px 60px -20px rgba(0,0,0,.6); }
+@media (prefers-reduced-motion: reduce) { .focus-in, .pr-pop { animation-duration: .01s; } }
+
+/* recorde e medalha */
+@keyframes pr-card { 0% { opacity: 0; transform: translateY(-24px) scale(.92); } 60% { opacity: 1; transform: translateY(4px) scale(1.02); } 100% { transform: none; } }
+.pr-card { animation: pr-card .55s cubic-bezier(.22,.8,.26,1) both; }
+@keyframes burst { 0% { opacity: 1; transform: translate(-50%,-50%) scale(1); } 100% { opacity: 0; transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(.4); } }
+.burst-dot { animation: burst .9s cubic-bezier(.2,.7,.3,1) both; }
+@keyframes medal-spin { 0% { transform: rotateY(90deg) scale(.6); } 60% { transform: rotateY(-12deg) scale(1.06); } 100% { transform: none; } }
+.medal-spin { animation: medal-spin .9s cubic-bezier(.22,.8,.26,1) both; }
+@media (prefers-reduced-motion: reduce) { .pr-card, .burst-dot, .medal-spin { animation: none; } }
+
+/* ── acessibilidade ─────────────────────────────────────────── */
+/* texto na cor de destaque fica um pouco mais escuro no tema claro (contraste ≥ 4,5:1) */
+:root:not(.dark) .text-orange { color: color-mix(in srgb, var(--color-orange) 76%, #1C1B1A); }
+/* foco visível ao navegar pelo teclado */
+button:focus-visible, a:focus-visible, select:focus-visible, [role="switch"]:focus-visible, [role="radio"]:focus-visible, [tabindex]:focus-visible {
+  outline: 2.5px solid var(--color-orange); outline-offset: 2px;
+}
+/* área de toque de pelo menos 44 px nos botões pequenos de ícone */
+.hit44 { position: relative; }
+.hit44::after { content: ''; position: absolute; inset: -4px; border-radius: inherit; }
+/* "reduzir movimento" do celular: sem animações e transições longas */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}

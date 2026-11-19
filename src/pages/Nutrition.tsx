@@ -2,12 +2,15 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { pushBack } from '../back';
 import { useIntent } from '../intent';
 import {
-  LuApple, LuCamera, LuChartColumn, LuCheck, LuRepeat, LuChevronLeft, LuChevronRight, LuImage, LuImageOff, LuImages, LuLoaderCircle, LuMinus, LuNotebookPen, LuPencil, LuPlus, LuX,
+  LuApple, LuCamera, LuChartColumn, LuCheck, LuDroplets, LuFlame, LuRepeat, LuChevronLeft, LuChevronRight, LuImage, LuImageOff, LuImages, LuLoaderCircle, LuMinus, LuNotebookPen, LuPencil, LuPlus, LuX,
 } from 'react-icons/lu';
 import { useStore } from '../store';
 import type { MealKind, MealLog } from '../types';
-import { addDays, fmtLong, kindForHour, MEAL_KINDS, mealLabel, mealsOn, nf, relDay, todayKey, fmtDayMonth, uid } from '../utils';
-import { macrosOn } from '../food';
+import { addDays, fmtLong, kindForHour, MEAL_KINDS, mealLabel, mealsOn, nf, relDay, todayKey, fmtDayMonth, uid, lastNDays } from '../utils';
+import { dayGoals, dayItems, dayMacros, MACRO_COLORS, macrosOn } from '../food';
+import { useIsDesktop, Kpi } from '../desktop/kit';
+import { KcalRing } from '../components/Macros';
+import { BarChart } from '../components/charts';
 import { FoodPicker, MacroGoalsModal, MacroSummary, MealItems, SaveMealModal, type PickerTarget } from '../components/Macros';
 import { FoodLibrary, MacroWeek } from '../components/MacroWeek';
 import { deletePhoto, savePhoto, usePhoto } from '../photos';
@@ -43,6 +46,7 @@ export default function Nutrition() {
   const [goalsOpen, setGoalsOpen] = useState(false);
   const [saveMeal, setSaveMeal] = useState<MealLog | null>(null);
   const macros = macrosOn(state);
+  const desk = useIsDesktop();
   const ic = macros ? 'max-[420px]:hidden' : undefined; // quatro abas: sem ícones em telas estreitas
   useIntent('nutricao', (i) => {
     if (i === 'meal') { setDay(todayKey()); setView('diario'); setModal({}); }
@@ -63,6 +67,7 @@ export default function Nutrition() {
           <Button variant={macros ? 'soft' : 'primary'} size="lg" onClick={() => setModal({})}><LuCamera size={18} /> Registrar refeição</Button>
         </div>} />
 
+      {desk && <NutritionKpis onGoals={() => setGoalsOpen(true)} />}
       <div className="mb-5">
         <Segmented value={view} onChange={setView} options={[
           { value: 'diario', label: <><LuNotebookPen size={15} className={ic} /> Diário</> },
@@ -92,7 +97,8 @@ export default function Nutrition() {
             <button aria-label="Próximo dia" disabled={isToday} onClick={() => setDay(addDays(day, 1))} className="press size-11 rounded-full bg-surface grid place-items-center text-ink disabled:opacity-30"><LuChevronRight size={19} /></button>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] gap-4 md:gap-5 mb-4 md:mb-5">
+          <div className="min-[1100px]:grid min-[1100px]:grid-cols-12 min-[1100px]:gap-5 min-[1100px]:items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] min-[1100px]:!grid-cols-1 gap-4 md:gap-5 mb-4 md:mb-5 min-[1100px]:mb-0 min-[1100px]:col-start-8 min-[1100px]:col-span-5 min-[1100px]:row-start-1 min-[1100px]:sticky min-[1100px]:top-6">
             {macros ? (
               <div className="min-w-0">
                 <MacroSummary day={day} onGoals={() => setGoalsOpen(true)} />
@@ -123,8 +129,10 @@ export default function Nutrition() {
             )}
 
             <WaterCard day={day} />
+            {desk && macros && <WeekKcal day={day} onPick={setDay} />}
           </div>
 
+          <div className="min-[1100px]:col-start-1 min-[1100px]:col-span-7 min-[1100px]:row-start-1 min-w-0">
           {meals.length === 0 ? (
             <Card className="p-5">
               <Empty art="nutricao" title={isToday ? 'Nada registrado ainda hoje' : 'Nenhuma refeição neste dia'}
@@ -143,6 +151,8 @@ export default function Nutrition() {
               ))}
             </ol>
           )}
+          </div>
+          </div>
         </>
       )}
 
@@ -165,6 +175,56 @@ export default function Nutrition() {
         <SaveMealModal meal={saveMeal} onClose={() => setSaveMeal(null)} />
       </>}
     </div>
+  );
+}
+
+/* ── painel do computador ─────────────────────────────────── */
+function NutritionKpis({ onGoals }: { onGoals: () => void }) {
+  const { state } = useStore();
+  const today = todayKey();
+  const macros = macrosOn(state);
+  const t = dayMacros(state, today), g = dayGoals(state, today);
+  const days = lastNDays(7, addDays(today, -1)).filter((d) => dayItems(state, d).length);
+  const avg = days.length ? days.reduce((a, d) => a + dayMacros(state, d).kcal, 0) / days.length : 0;
+  const inK = days.filter((d) => { const k = dayMacros(state, d).kcal, gk = dayGoals(state, d).kcal; return gk && Math.abs(k - gk) <= gk * 0.1; }).length;
+  const water = state.water[today] || 0;
+  const meals = mealsOn(state, today).length;
+  return (
+    <div className={cx('grid gap-3 mb-5', macros ? 'grid-cols-5' : 'grid-cols-3')}>
+      {macros ? <>
+        <Kpi label="Calorias hoje" icon={<LuFlame size={12} />} value={nf(t.kcal, 0)} unit="kcal" onClick={onGoals}
+          chart={<KcalRing value={t.kcal} goal={g.kcal} size={42} />} foot={g.kcal ? `de ${nf(g.kcal, 0)} · faltam ${nf(Math.max(0, g.kcal - t.kcal), 0)}` : 'sem meta'} />
+        <Kpi label="Proteína" value={nf(t.protein, 0)} unit="g" accent={MACRO_COLORS.protein} foot={`meta ${g.protein} g`}
+          delta={<MiniBar v={t.protein} g={g.protein} c={MACRO_COLORS.protein} />} />
+        <Kpi label="Carbo · Gordura" value={`${nf(t.carbs, 0)} · ${nf(t.fat, 0)}`} unit="g" foot={`${g.carbs} · ${g.fat} g`}
+          delta={<span className="flex gap-1 w-full max-w-[140px]"><MiniBar v={t.carbs} g={g.carbs} c={MACRO_COLORS.carbs} /><MiniBar v={t.fat} g={g.fat} c={MACRO_COLORS.fat} /></span>} />
+        <Kpi label="Média 7 dias" icon={<LuChartColumn size={12} />} value={days.length ? nf(avg, 0) : '—'} unit={days.length ? 'kcal' : undefined}
+          foot={days.length ? `${inK} de ${days.length} dias na meta (±10%)` : 'registre alguns dias'} />
+      </> : <>
+        <Kpi label="Refeições hoje" value={meals} unit={`de ${state.goals.meals || 4}`} foot="registradas" />
+        <Kpi label="Fotos" icon={<LuImages size={12} />} value={state.meals.filter((m) => m.photos.length).length} foot="na galeria" />
+      </>}
+      <Kpi label="Água hoje" icon={<LuDroplets size={12} />} value={nf(water / 1000, 2)} unit="L" accent="var(--color-sleep)"
+        delta={<MiniBar v={water} g={state.goals.water || 1} c="var(--color-sleep)" />} foot={`meta ${nf((state.goals.water || 0) / 1000, 1)} L`} />
+    </div>
+  );
+}
+const MiniBar = ({ v, g, c }: { v: number; g: number; c: string }) => (
+  <span className="flex-1 block h-1.5 rounded-full bg-cream overflow-hidden min-w-[40px]"><span className="block h-full rounded-full" style={{ width: `${Math.min(100, (v / (g || 1)) * 100)}%`, background: c }} /></span>
+);
+function WeekKcal({ day, onPick }: { day: string; onPick: (d: string) => void }) {
+  const { state } = useStore();
+  const days = lastNDays(7, todayKey());
+  const g = dayGoals(state, todayKey());
+  return (
+    <Card className="p-5">
+      <p className="t-section text-ink">Últimos 7 dias</p>
+      <p className="t-caption mb-2">Calorias por dia · toque num dia para abrir</p>
+      <BarChart data={days.map((d) => ({ label: d === todayKey() ? 'hoje' : ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][new Date(d + 'T12:00').getDay()], value: dayMacros(state, d).kcal }))} unit=" kcal" height={150} goal={g.kcal || undefined} band />
+      <div className="grid grid-cols-7 gap-1 mt-1">
+        {days.map((d) => <button key={d} onClick={() => onPick(d)} aria-label={`Abrir ${relDay(d)}`} className={cx('press h-7 rounded-lg text-[11px]', d === day ? 'bg-ink text-on-ink' : 'text-muted hover:bg-cream')}>{+d.slice(8)}</button>)}
+      </div>
+    </Card>
   );
 }
 

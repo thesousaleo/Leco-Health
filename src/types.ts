@@ -24,6 +24,7 @@ export interface Split {
   letter: string; // A, B, C, Push...
   name: string; // ex: "Peito/Tríceps"
   exercises: Exercise[];
+  color?: string; // cor da ficha (hex)
 }
 
 export interface SetLog {
@@ -177,6 +178,8 @@ export interface Habit {
   timer?: boolean; // quantidade em minutos, marcada com cronômetro
   avoid?: boolean; // hábito de evitar: feito por padrão, você marca quando falhar
   auto?: HabitAuto; // marca sozinho a partir dos seus registros
+  emoji?: string; // ícone escolhido
+  color?: string; // cor escolhida (hex)
 }
 
 export type HabitAuto = 'treino' | 'agua' | 'sono' | 'refeicoes';
@@ -269,7 +272,7 @@ export interface PlanBackup { splits: Split[]; schedule: WeekSchedule; at: strin
 
 export interface AppState {
   meta: { version: number; createdAt: string; updatedAt: string };
-  profile: { name: string; shareBody?: boolean };
+  profile: { name: string; shareBody?: boolean; avatar?: string };
   goals: Goals;
   splits: Split[];
   schedule: WeekSchedule;

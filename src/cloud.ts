@@ -12,7 +12,7 @@ export interface Session {
   user: { id: string; email: string; user_metadata?: { name?: string } };
 }
 
-export interface Profile { id: string; display_name: string; friend_code: string }
+export interface Profile { id: string; display_name: string; friend_code: string; avatar?: string | null }
 
 export interface ProgressStats {
   name: string;
@@ -39,6 +39,7 @@ export interface Friend {
   myShares: string[]; // o que EU mostro para este amigo
   stats?: any; // resumo do amigo (já filtrado pelo que ele me mostra)
   updatedAt?: string;
+  avatar?: string; // foto (data URL), só para amigos aceitos
 }
 
 const SKEY = 'leco-health:session';
@@ -145,6 +146,10 @@ export async function updateName(s: Session, display_name: string) {
   await req(`/rest/v1/profiles?id=eq.${s.user.id}`, { method: 'PATCH', token: s.access_token, body: JSON.stringify({ display_name }) });
 }
 
+export async function updateAvatar(s: Session, avatar: string | null) {
+  await req(`/rest/v1/profiles?id=eq.${s.user.id}`, { method: 'PATCH', token: s.access_token, body: JSON.stringify({ avatar }) });
+}
+
 export async function pullState(s: Session) {
   const r = await req<{ state: AppState; updated_at: string }[]>(`/rest/v1/user_state?user_id=eq.${s.user.id}&select=state,updated_at`, { token: s.access_token });
   return r[0] ?? null;
@@ -182,11 +187,11 @@ export async function removeFriend(s: Session, id: number) {
 }
 
 export async function listFriends(s: Session): Promise<Friend[]> {
-  const rows = await req<{ friendship_id: number; user_id: string; name: string; status: 'pending' | 'accepted'; incoming: boolean; my_shares: string[]; stats: any; updated_at: string | null }[]>(
+  const rows = await req<{ friendship_id: number; user_id: string; name: string; status: 'pending' | 'accepted'; incoming: boolean; my_shares: string[]; stats: any; updated_at: string | null; avatar?: string | null }[]>(
     '/rest/v1/rpc/get_friends_progress', { method: 'POST', token: s.access_token, body: '{}' });
   return rows.map((r) => ({
     friendshipId: r.friendship_id, userId: r.user_id, name: r.name, status: r.status, incoming: r.incoming,
-    myShares: r.my_shares ?? [], stats: r.stats ?? undefined, updatedAt: r.updated_at ?? undefined,
+    myShares: r.my_shares ?? [], stats: r.stats ?? undefined, updatedAt: r.updated_at ?? undefined, avatar: r.avatar ?? undefined,
   }));
 }
 

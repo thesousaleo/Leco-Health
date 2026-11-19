@@ -114,7 +114,7 @@ export function Button({ variant = 'soft', accent, size = 'md', className, child
 export function IconButton({ className, label, children, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
   return (
     <button type="button" aria-label={label} title={label}
-      className={cx('press grid place-items-center size-9 rounded-full text-ink/45 hover:text-ink hover:bg-cream transition-colors', className)} {...rest}>
+      className={cx('press hit44 grid place-items-center size-9 rounded-full text-ink/55 hover:text-ink hover:bg-cream transition-colors', className)} {...rest}>
       {children}
     </button>
   );

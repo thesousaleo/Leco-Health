@@ -53,6 +53,7 @@ export function LineChart({ data, color = 'var(--color-orange)', unit = '', heig
   const P = { l: 40, r: 14, t: 16, b: 26 };
   const [hover, setHover] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  const holdRef = useRef<number>(0);
   const gid = useMemo(() => 'lg' + Math.random().toString(36).slice(2, 7), []);
 
   if (data.length < 2)
@@ -87,15 +88,17 @@ export function LineChart({ data, color = 'var(--color-orange)', unit = '', heig
     const r = svgRef.current!.getBoundingClientRect();
     const px = ((e.clientX - r.left) / r.width) * W;
     const i = Math.round(((px - P.l) / (W - P.l - P.r)) * (data.length - 1));
+    clearTimeout(holdRef.current);
     setHover(Math.max(0, Math.min(data.length - 1, i)));
   };
   const h = hover != null ? data[hover] : null;
   const labelEvery = Math.ceil(data.length / 7);
+  function leave(t: string) { if (t === 'touch') { clearTimeout(holdRef.current); holdRef.current = window.setTimeout(() => setHover(null), 2400); } else setHover(null); }
 
   return (
     <div className="relative" ref={boxRef}>
       <svg ref={svgRef} data-noswipe viewBox={`0 0 ${W} ${H}`} className="w-full touch-pan-y select-none" style={{ height: 'auto', aspectRatio: `${W}/${H}` }}
-        onPointerMove={onMove} onPointerDown={onMove} onPointerLeave={() => setHover(null)}>
+        onPointerMove={onMove} onPointerDown={onMove} onPointerLeave={(e) => leave(e.pointerType)}>
         <defs>
           <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" style={{ stopColor: color, stopOpacity: 0.32 }} />
@@ -163,29 +166,44 @@ export function BarChart({ data, color = 'var(--color-orange)', unit = '', heigh
   const [boxRef, W] = useWidth(); const H = height;
   const P = { l: 10, r: 10, t: 22, b: 26 };
   const [hover, setHover] = useState<number | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const holdRef = useRef<number>(0);
   if (!data.length) return <div className="h-32 grid place-items-center text-[13px] text-muted">Sem dados ainda.</div>;
   const max = Math.max(...data.map((d) => d.value), goal ?? 0) * 1.1 || 1;
   const bw = (W - P.l - P.r) / data.length;
   const y = (v: number) => P.t + (1 - v / max) * (H - P.t - P.b);
+  function scrub(e: React.PointerEvent) {
+    if (e.pointerType !== 'mouse') (e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
+    const r = svgRef.current!.getBoundingClientRect();
+    const px = ((e.clientX - r.left) / r.width) * W;
+    clearTimeout(holdRef.current);
+    setHover(Math.max(0, Math.min(data.length - 1, Math.floor((px - P.l) / bw))));
+  }
   return (
     <div ref={boxRef}>
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full select-none" style={{ height: 'auto', aspectRatio: `${W}/${H}` }} onPointerLeave={() => setHover(null)}>
+    <svg ref={svgRef} data-noswipe viewBox={`0 0 ${W} ${H}`} className="w-full select-none touch-pan-y" style={{ height: 'auto', aspectRatio: `${W}/${H}` }}
+      onPointerDown={(e) => scrub(e)} onPointerMove={(e) => scrub(e)}
+      onPointerLeave={(e) => { if (e.pointerType === 'touch') { clearTimeout(holdRef.current); holdRef.current = window.setTimeout(() => setHover(null), 2400); } else setHover(null); }}>
       {data.map((d, i) => {
         const bx = P.l + i * bw + bw * 0.2;
         const w = bw * 0.6;
         const by = y(d.value);
         const met = goal == null || (band ? Math.abs(d.value - goal) <= goal * 0.1 : d.value >= goal * 0.9);
         return (
-          <g key={i} onPointerEnter={() => setHover(i)} onPointerDown={() => setHover(i)}>
+          <g key={i}>
             <rect x={P.l + i * bw} y={P.t} width={bw} height={H - P.t - P.b} fill="transparent" />
             <rect x={bx} y={P.t} width={w} height={H - P.t - P.b} rx={Math.min(8, w / 2)} style={{ fill: 'var(--color-cream)' }} />
             <rect x={bx} y={by} width={w} height={Math.max(0, H - P.b - by)} rx={Math.min(8, w / 2)} className="rise"
               style={{ fill: color, fillOpacity: hover === i ? 1 : met ? 0.92 : 0.45, animationDelay: `${i * 40}ms`, transition: 'fill-opacity .2s' }} />
-            {hover === i && (
-              <text x={bx + w / 2} y={Math.max(12, by - 8)} textAnchor="middle" fontSize="12" fontWeight="600" style={{ fill: 'var(--color-ink)' }}>
-                {nf(d.value, decimals)}{unit}
-              </text>
-            )}
+            {hover === i && (() => {
+              const label = `${nf(d.value, decimals)}${unit}`, tw = label.length * 7 + 16, tx = Math.min(W - P.r - tw / 2, Math.max(P.l + tw / 2, bx + w / 2)), ty = Math.max(4, by - 30);
+              return (
+                <g className="animate-fade" style={{ pointerEvents: 'none' }}>
+                  <rect x={tx - tw / 2} y={ty} width={tw} height={22} rx={11} style={{ fill: 'var(--color-ink)' }} />
+                  <text x={tx} y={ty + 15} textAnchor="middle" fontSize="12" fontWeight="600" style={{ fill: 'var(--color-on-ink)' }}>{label}</text>
+                </g>
+              );
+            })()}
             <text x={bx + w / 2} y={H - 7} textAnchor="middle" fontSize="11" style={{ fill: hover === i ? 'var(--color-ink)' : INK(45) }}>{d.label}</text>
           </g>
         );

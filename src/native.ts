@@ -137,6 +137,24 @@ export function takeShortcutAction(): string | null {
   try { const a = (window as any).LecoInsets?.takeAction?.(); return a ? String(a) : null; } catch { return null; }
 }
 
+/* ── descanso na tela de bloqueio e widget (ponte nativa própria) ── */
+const bridge = () => (window as any).LecoNative as undefined | { restTimer(endAt: number, title: string, text: string): void; restTimerCancel(): void; setWidget(json: string): void };
+const REST_END = 4201;
+/** Com o app em segundo plano: contagem do descanso na notificação e aviso quando acabar. */
+export function restTimerBackground(endAt: number, next?: string) {
+  const b = bridge();
+  try { b?.restTimer(endAt, 'Descanso', next ? `Próximo: ${next}` : 'Toque para voltar ao treino'); } catch { /* */ }
+  void scheduleAt(REST_END, 'Descanso acabou 💪', next ? `Bora: ${next}` : 'Hora da próxima série', new Date(endAt), { kind: 'rest' });
+}
+export function restTimerForeground() {
+  try { bridge()?.restTimerCancel(); } catch { /* */ }
+  void cancelNotification(REST_END);
+}
+/** Atualiza o widget da tela inicial (só no app Android). */
+export function updateWidget(data: Record<string, string | number>) {
+  try { bridge()?.setWidget(JSON.stringify(data)); } catch { /* */ }
+}
+
 /* ── arquivos ──────────────────────────────────────────────── */
 /** Salva e abre o menu de compartilhar (app) ou baixa o arquivo (navegador). */
 export async function shareFile(name: string, base64: string, mime: string, title: string) {

@@ -48,13 +48,20 @@ function MobileDashboard({ go }: { go: (t: TabId) => void }) {
 
   return (
     <div className="space-y-4 md:space-y-5">
-      <header className="pt-1">
-        <p className="eyebrow flex items-center gap-1.5">
-          <GreetIcon /> {fmtLong(today)}
-        </p>
-        <h1 className="text-[30px] md:text-[38px] font-[650] tracking-[-0.04em] leading-tight text-ink mt-1.5">
-          {greeting()}{name ? `, ${name}` : ''}
-        </h1>
+      <header className="pt-1 flex items-end gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="eyebrow flex items-center gap-1.5">
+            <GreetIcon /> {fmtLong(today)}
+          </p>
+          <h1 className="text-[30px] md:text-[38px] font-[650] tracking-[-0.04em] leading-tight text-ink mt-1.5 text-balance">
+            {greeting()}{name ? `, ${name}` : ''}
+          </h1>
+        </div>
+        {state.profile.avatar && (
+          <button onClick={() => { setIntent('ajustes', 'ajustes:perfil'); go('ajustes'); }} aria-label="Seu perfil" className="press shrink-0 rounded-full mb-1">
+            <img src={state.profile.avatar} alt="" className="size-11 rounded-full object-cover ring-2 ring-[var(--color-surface)] shadow-[var(--shadow-1)]" />
+          </button>
+        )}
       </header>
 
       <DemoBanner />
@@ -95,7 +102,7 @@ function SectionTitle({ title, action, onAction }: { title: string; action?: str
     <div className="flex items-center justify-between mb-3">
       <h2 className="t-section text-ink">{title}</h2>
       {action && (
-        <button onClick={onAction} className="press flex items-center gap-0.5 text-[13.5px] text-muted hover:text-ink">
+        <button onClick={onAction} className="press flex items-center gap-0.5 text-[13.5px] text-muted hover:text-ink py-3 -my-3 pl-3 -ml-3">
           {action} <LuChevronRight size={15} />
         </button>
       )}

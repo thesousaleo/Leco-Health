@@ -59,7 +59,7 @@ export default function AuthForm({ onDone }: { onDone?: () => void }) {
         {mode === 'entrar' ? 'Entrar' : 'Criar minha conta'}
       </Button>
       {mode === 'entrar' && (
-        <button type="button" className="block mx-auto text-[13px] text-muted hover:text-ink"
+        <button type="button" className="block mx-auto text-[13px] text-muted hover:text-ink py-3 px-3 -my-2"
           onClick={async () => {
             if (!email.trim()) { setErr('Digite seu e-mail acima para recuperar a senha.'); return; }
             try { await sync.resetPassword(email.trim()); setInfo('Enviamos um link de recuperação para o seu e-mail.'); }

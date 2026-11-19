@@ -8,14 +8,15 @@ import AuthForm from './components/AuthForm';
 import Friends from './pages/Friends';
 import { StoreProvider, useStore } from './store';
 import type { ModuleId, TabId } from './types';
-import { dayScore, habitCount, isHabitDone, modOn, todayKey } from './utils';
+import { dayScore, dueHabits, habitCount, isHabitDone, modOn, todayKey } from './utils';
 import { macrosOn } from './food';
 import { RestTimerProvider } from './components/RestTimer';
 import { Button, cx, Modal, ProgressBar } from './components/ui';
 import { Celebration } from './components/Extras';
 import { SetupFlow } from './components/Setup';
+import { announceBadges, Celebrations } from './components/Celebrate';
 import { LockGate } from './components/Lock';
-import { haptic, leaveApp, onBackButton, onNotificationAction, setSystemBars, snoozeNotification, syncReminders, takeShortcutAction } from './native';
+import { haptic, leaveApp, onBackButton, onNotificationAction, setSystemBars, snoozeNotification, syncReminders, takeShortcutAction, updateWidget } from './native';
 import { popBack } from './back';
 import Dashboard from './pages/Dashboard';
 import Workout from './pages/Workout';
@@ -107,7 +108,33 @@ function Effects() {
   useAppearance();
   useReminders();
   useBadgeWatch();
+  useWidgetSync();
   return null;
+}
+
+/** Mantém o widget da tela inicial (Android) com o dia atual. */
+function useWidgetSync() {
+  const { state } = useStore();
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const today = todayKey();
+      const sc = dayScore(state, today).total;
+      const split = state.splits.find((x) => x.id === state.schedule[new Date().getDay()]);
+      const ses = state.sessions.find((x) => x.date === today);
+      const sp = ses ? state.splits.find((x) => x.id === ses.splitId) : split;
+      const workout = !modOn(state, 'treino') ? '' : ses?.completed ? `✓ Treino ${sp?.letter ?? ''} concluído` : ses ? `▶ Treino ${sp?.letter ?? ''} em andamento` : split ? `🏋 Hoje: Treino ${split.letter} · ${split.name}` : '😌 Hoje é dia de descanso';
+      const due = modOn(state, 'habitos') ? dueHabits(state, today) : [];
+      const doneH = due.filter((h) => isHabitDone(state, h.id, today)).length;
+      const water = state.water[today] || 0, wg = state.goals.water || 0;
+      updateWidget({
+        day: today, dateLabel: new Intl.DateTimeFormat('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date()).replace(/\./g, ''),
+        score: `${sc}%`, scorePct: sc, workout,
+        habits: due.length ? `✅ ${doneH} de ${due.length} hábitos` : '',
+        water: modOn(state, 'agua') ? `💧 ${(water / 1000).toFixed(2).replace('.', ',')} de ${(wg / 1000).toFixed(1).replace('.', ',')} L` : '', waterPct: wg ? Math.min(100, Math.round((water / wg) * 100)) : 0,
+      });
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [state]);
 }
 
 /** Avisa quando um selo novo é conquistado (só depois da primeira vez, para não avisar o que já existia). */
@@ -121,8 +148,7 @@ function useBadgeWatch() {
       const got = computeBadges(state).filter((b) => b.got);
       const fresh = seen ? got.filter((b) => !seen!.includes(b.id)) : [];
       try { localStorage.setItem(KEY, JSON.stringify(got.map((b) => b.id))); } catch { /* */ }
-      if (fresh.length === 1) toast(`Nova conquista: ${fresh[0].title}`);
-      else if (fresh.length > 1) toast(`Novas conquistas: ${fresh[0].title} e mais ${fresh.length - 1}`);
+      if (fresh.length) announceBadges(fresh);
     }, 1800);
     return () => clearTimeout(t);
   }, [state, toast]);
@@ -131,9 +157,29 @@ function useBadgeWatch() {
 function Logo() {
   return (
     <div className="flex items-center gap-2.5">
-      <LogoMark className="size-9 shrink-0" />
+      <span className="relative shrink-0"><LogoMark className="size-9" /><SyncDot /></span>
       <p className="font-semibold text-ink tracking-[-0.02em] text-[16px] min-[360px]:text-[17px] whitespace-nowrap">Leco Health</p>
     </div>
+  );
+}
+
+/** Pontinho discreto no logo: sincronizando (pulsa), com erro (vermelho) ou recém-salvo (verde por um instante). */
+function SyncDot() {
+  const { session, status, lastSync, error } = useSync();
+  const [justSaved, setJustSaved] = useState(false);
+  const prev = useRef(lastSync);
+  useEffect(() => {
+    if (lastSync && lastSync !== prev.current && status === 'idle') { setJustSaved(true); const t = setTimeout(() => setJustSaved(false), 1600); prev.current = lastSync; return () => clearTimeout(t); }
+    prev.current = lastSync;
+  }, [lastSync, status]);
+  if (!session) return null;
+  const kind = status === 'syncing' ? 'sync' : status === 'error' ? 'err' : justSaved ? 'ok' : null;
+  if (!kind) return null;
+  const color = kind === 'err' ? 'var(--color-bad)' : kind === 'ok' ? 'var(--color-good)' : 'var(--color-sleep)';
+  const label = kind === 'err' ? `Erro ao sincronizar${error ? `: ${error}` : ''}` : kind === 'ok' ? 'Salvo na nuvem' : 'Sincronizando';
+  return (
+    <span role="status" aria-label={label} title={label} className={cx('absolute -right-1 -bottom-1 size-3.5 rounded-full ring-2 ring-[var(--color-canvas)]', kind === 'sync' && 'animate-pulse')}
+      style={{ background: color }} />
   );
 }
 
@@ -353,7 +399,7 @@ function Shell() {
         {live.map((id) => (
           <Activity key={id} mode={id === tab ? 'visible' : 'hidden'}>
             <div ref={id === tab ? mainRef : undefined} data-page={id}
-              className={cx('mx-auto px-4 md:px-8 pt-3 md:pt-8 md:pb-12', id === 'inicio' || id === 'treino' ? 'max-w-[1280px] min-[1100px]:max-w-[1720px]' : 'max-w-[1280px]', id === 'treino' ? 'pb-[calc(11rem+var(--sab))]' : FAB_TABS.includes(id) ? 'pb-[calc(10rem+var(--sab))]' : 'pb-[calc(6.5rem+var(--sab))]')}>
+              className={cx('mx-auto px-4 md:px-8 pt-3 md:pt-8 md:pb-12', id !== 'ajustes' ? 'max-w-[1280px] min-[1100px]:max-w-[1720px]' : 'max-w-[1280px]', id === 'treino' ? 'pb-[calc(11rem+var(--sab))]' : FAB_TABS.includes(id) ? 'pb-[calc(10rem+var(--sab))]' : 'pb-[calc(6.5rem+var(--sab))]')}>
               {pages[id]}
             </div>
           </Activity>
@@ -408,6 +454,7 @@ function Shell() {
         <LuChevronLeft size={16} className="sh-l" /><span data-label /><LuChevronRight size={16} className="sh-r" />
       </div>
       <SearchSheet open={search} onClose={() => setSearch(false)} go={go} />
+      <Celebrations />
       <Splash />
     </RestTimerProvider>
   );

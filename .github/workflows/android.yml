@@ -168,6 +168,7 @@ jobs:
                   if (wv == null) return;
                   wv.getSettings().setTextZoom(100);
                   wv.addJavascriptInterface(new Insets_(), "LecoInsets");
+                  wv.addJavascriptInterface(new LecoBridge(this), "LecoNative");
 
                   final View content = findViewById(android.R.id.content);
                   ViewCompat.setOnApplyWindowInsetsListener(content, (v, insets) -> {
@@ -202,6 +203,13 @@ jobs:
           appid=$(grep -oE "appId: *'[^']+'" capacitor.config.ts | sed -E "s/appId: *'([^']+)'/\1/")
           echo "appId=$appid pacote=$jpkg"
           python3 android-res/shortcuts/make.py "$appid" "$jpkg"
+
+      - name: Widget e contagem do descanso (nativo)
+        run: |
+          f=$(find android/app/src/main/java -name MainActivity.java | head -1)
+          jpkg=$(grep -m1 '^package' "$f" | sed -E 's/package +([^;]+);/\1/')
+          appid=$(grep -oE "appId: *'[^']+'" capacitor.config.ts | sed -E "s/appId: *'([^']+)'/\1/")
+          python3 android-res/native/make.py "$appid" "$jpkg"
 
       - name: Compilar APK
         working-directory: android

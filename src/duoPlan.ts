@@ -14,7 +14,7 @@ export function planOf(s: Pick<AppState, 'splits' | 'schedule'>): SharedPlan {
   return {
     v: 1,
     splits: s.splits.map((sp) => ({
-      id: String(sp.id), letter: String(sp.letter ?? ''), name: String(sp.name ?? ''),
+      id: String(sp.id), letter: String(sp.letter ?? ''), name: String(sp.name ?? ''), ...(sp.color ? { color: String(sp.color) } : {}),
       exercises: (sp.exercises || []).map((e) => ({
         id: String(e.id), name: String(e.name ?? ''), muscle: String(e.muscle ?? ''),
         targetSets: Number(e.targetSets) || 0, targetReps: String(e.targetReps ?? ''),

@@ -156,7 +156,7 @@ function Board({ setView, onEdit, MuscleMap, Calendar }: Props) {
                 return (
                   <button key={s.id} onClick={() => { setSplitSel(s.id); setExSel(null); }}
                     className={cx('w-full flex items-center gap-3 rounded-2xl px-3 py-2.5 text-left desk-hover', s.id === sp?.id ? 'bg-cream ring-1 ring-ink/10' : '')}>
-                    <span className={cx('grid place-items-center size-9 rounded-xl text-[14px] font-semibold shrink-0', s.id === sp?.id ? 'bg-orange text-white' : 'bg-ink text-on-ink')}>{s.letter}</span>
+                    <span className={cx('grid place-items-center size-9 rounded-xl text-[14px] font-semibold shrink-0', s.id === sp?.id ? 'bg-orange text-white' : !s.color && 'bg-ink text-on-ink')} style={s.color && s.id !== sp?.id ? { background: s.color, color: '#fff' } : undefined}>{s.letter}</span>
                     <span className="flex-1 min-w-0">
                       <span className="block text-[14px] text-ink truncate">{s.name}</span>
                       <span className="block text-[12px] text-muted truncate">{s.exercises.length} exercícios · {muscles}</span>

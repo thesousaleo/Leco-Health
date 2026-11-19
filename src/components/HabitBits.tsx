@@ -26,7 +26,7 @@ export function habitState(state: AppState, h: Habit, day: DateKey) {
 /** Círculo do hábito: cor e ícone mudam com o tipo e o nível alcançado. */
 export function HabitDot({ h, st, size = 28, fx }: { h: Habit; st: ReturnType<typeof habitState>; size?: number; fx?: boolean }) {
   const { on, failed, auto, level } = st;
-  const bg = failed ? 'var(--color-bad)' : !on ? undefined : h.avoid ? 'var(--color-good)' : level ? LEVEL_COLOR[level] : 'var(--color-orange)';
+  const bg = failed ? 'var(--color-bad)' : !on ? undefined : h.avoid ? 'var(--color-good)' : level ? LEVEL_COLOR[level] : h.color || 'var(--color-orange)';
   const ic = Math.round(size * 0.57);
   return (
     <span className="relative grid place-items-center">

@@ -2,15 +2,17 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { haptic } from '../native';
 import {
   LuArchive, LuArchiveRestore, LuArrowDown, LuArrowUp, LuBell, LuBrain, LuCheck, LuChevronLeft, LuChevronRight, LuFlame, LuHeartPulse,
-  LuMinus, LuCirclePause, LuX, LuPencil, LuPill, LuPlus, LuShield, LuSun, LuZap,
+  LuMinus, LuListChecks, LuCirclePause, LuX, LuPencil, LuPill, LuPlus, LuShield, LuSun, LuZap,
 } from 'react-icons/lu';
 import { useStore } from '../store';
+import { HABIT_EMOJIS, PALETTE } from '../prefs';
 import type { Habit, HabitAuto, HabitCategory, HabitFreq } from '../types';
 import {
   activeHabits, addDays, AUTO_LABEL, dueHabits, fmtWeekdayShort, freqLabel, fromKey, habitCount, habitStreak, habitStreakInfo, isHabitDone, isHabitScheduled, isPaused, lastNDays,
   mealsOn, overallStreak, pauseOn, todayKey, toKey, weekDoneCount, weekStart,
 } from '../utils';
 import { habitState, HabitDot, LEVEL_COLOR, LEVEL_LABEL, PauseBanner, PauseModal, TimerButton } from '../components/HabitBits';
+import { Kpi, useIsDesktop } from '../desktop/kit';
 import { Button, Card, cx, DeleteButton, Empty, Field, heatColor, HeatLegend, IconButton, Input, Modal, NumInput, PageHeader, ProgressBar, ProgressRing, Segmented } from '../components/ui';
 
 const CATS: { id: HabitCategory; icon: React.ReactNode }[] = [
@@ -83,6 +85,7 @@ export default function Habits() {
   const due = dueHabits(state, today);
   const done = due.filter((h) => isHabitDone(state, h.id, today)).length;
   const streak = overallStreak(state);
+  const desk = useIsDesktop();
 
   return (
     <div>
@@ -102,6 +105,9 @@ export default function Habits() {
         </Card>
       ) : (
         <>
+          {desk && <HabitKpis />}
+          <div className="min-[1100px]:grid min-[1100px]:grid-cols-12 min-[1100px]:gap-5 min-[1100px]:items-start">
+          <div className="min-[1100px]:col-span-7 min-w-0">
           <div className="mb-4">
             <Segmented value={view} onChange={setView} options={[{ value: 'hoje', label: 'Hoje' }, { value: 'semana', label: 'Últimos 7 dias' }]} />
           </div>
@@ -130,7 +136,11 @@ export default function Habits() {
           ) : (
             <WeekView onMonth={setMonth} />
           )}
-          <MonthHeatmap habits={habits} />
+          </div>
+          <div className="min-[1100px]:col-span-5 min-[1100px]:sticky min-[1100px]:top-6 min-w-0">
+            <MonthHeatmap habits={habits} />
+          </div>
+          </div>
         </>
       )}
 
@@ -157,6 +167,29 @@ export default function Habits() {
         onArchive={modal?.habit ? () => { actions.updateHabit(modal.habit!.id, { archived: true }); setModal(null); toast('Hábito arquivado'); } : undefined}
         onDelete={modal?.habit ? () => { actions.deleteHabit(modal.habit!.id); setModal(null); toast('Hábito excluído'); } : undefined} />
       {month && <MonthModal habit={month} onClose={() => setMonth(null)} />}
+    </div>
+  );
+}
+
+/* ── painel do computador ─────────────────────────────────── */
+function HabitKpis() {
+  const { state } = useStore();
+  const today = todayKey();
+  const due = dueHabits(state, today), done = due.filter((h) => isHabitDone(state, h.id, today)).length;
+  const days = lastNDays(30, addDays(today, -1));
+  const rates = days.map((d) => { const dd = dueHabits(state, d); return dd.length ? dd.filter((h) => isHabitDone(state, h.id, d)).length / dd.length : null; }).filter((x): x is number => x != null);
+  const avg = rates.length ? rates.reduce((a, b) => a + b, 0) / rates.length : 0;
+  const full = rates.filter((x) => x >= 1).length;
+  const best = activeHabits(state).map((h) => ({ h, n: habitStreakInfo(state, h.id).n })).sort((a, b) => b.n - a.n)[0];
+  const streak = overallStreak(state);
+  return (
+    <div className="grid grid-cols-5 gap-3 mb-5">
+      <Kpi label="Hoje" icon={<LuListChecks size={12} />} value={`${done}/${due.length}`} foot={due.length && done === due.length ? 'tudo feito ✓' : `${due.length - done} para fazer`}
+        delta={<span className="flex-1 block h-1.5 rounded-full bg-cream overflow-hidden min-w-[60px]"><span className="block h-full rounded-full bg-orange" style={{ width: `${due.length ? (done / due.length) * 100 : 0}%` }} /></span>} />
+      <Kpi label="Sequência" icon={<LuFlame size={12} />} value={streak} unit={streak === 1 ? 'dia' : 'dias'} foot="dias seguidos no geral" />
+      <Kpi label="Média 30 dias" value={Math.round(avg * 100)} unit="%" foot="dos hábitos do dia feitos" />
+      <Kpi label="Dias 100%" value={full} foot="nos últimos 30 dias" accent="var(--color-good)" />
+      <Kpi label="Melhor sequência" value={best?.n ?? 0} unit="dias" foot={best ? best.h.name : '—'} />
     </div>
   );
 }
@@ -231,9 +264,11 @@ function HabitRow({ h, organize, onEdit, onMonth, onUp, onDown }: {
         </div>
       )}
       <button onClick={onMonth} className="flex-1 min-w-0 text-left py-2">
-        <span className={cx('block text-[15.5px] truncate', on && !h.avoid ? 'text-muted line-through decoration-ink/25' : failed ? 'text-[color:var(--color-bad)]' : 'text-ink')}>{h.name}</span>
+        <span className={cx('block text-[15.5px] truncate', on && !h.avoid ? 'text-muted line-through decoration-ink/25' : failed ? 'text-[color:var(--color-bad)]' : 'text-ink')}>
+          {h.emoji && <span className="mr-1.5 no-underline inline-block" aria-hidden>{h.emoji}</span>}{h.name}
+        </span>
         <span className="flex items-center gap-1.5 text-[12.5px] text-muted min-w-0">
-          <span className="shrink-0 grid place-items-center size-[18px] rounded-md" style={{ background: `color-mix(in srgb, ${cat.color} 15%, transparent)`, color: cat.color }}><cat.Icon size={11} /></span>
+          {!h.emoji && <span className="shrink-0 grid place-items-center size-[18px] rounded-md" style={{ background: `color-mix(in srgb, ${h.color || cat.color} 15%, transparent)`, color: h.color || cat.color }}><cat.Icon size={11} /></span>}
           {h.avoid && <span className="shrink-0 font-medium" style={{ color: 'var(--color-good)' }}>Evitar</span>}
           {h.auto && <LuZap size={11} className="shrink-0" style={{ color: 'var(--color-warn)' }} />}
           <span className="truncate">{sub}</span>{h.reminder && <span className="shrink-0 flex items-center gap-1"><LuBell size={11} /> {h.reminder}</span>}
@@ -508,8 +543,8 @@ function HabitModal({ open, habit, onClose, onSave, onArchive, onDelete }: {
   open: boolean; habit?: Habit; onClose: () => void; onSave: (v: Partial<Habit>) => void; onArchive?: () => void; onDelete?: () => void;
 }) {
   type Kind = 'check' | 'qty' | 'timer' | 'avoid';
-  const [f, setF] = useState<{ name: string; category: HabitCategory; freq: HabitFreq; kind: Kind; target: number; min: number; extra: number; unit: string; reminder: string; auto: HabitAuto | '' }>({
-    name: '', category: 'Saúde', freq: { type: 'daily' }, kind: 'check', target: 10, min: 0, extra: 0, unit: '', reminder: '', auto: '',
+  const [f, setF] = useState<{ name: string; category: HabitCategory; freq: HabitFreq; kind: Kind; target: number; min: number; extra: number; unit: string; reminder: string; auto: HabitAuto | ''; emoji: string; color: string }>({
+    name: '', category: 'Saúde', freq: { type: 'daily' }, kind: 'check', target: 10, min: 0, extra: 0, unit: '', reminder: '', auto: '', emoji: '', color: '',
   });
   const key = open ? habit?.id ?? 'new' : '';
   const [last, setLast] = useState('');
@@ -519,6 +554,7 @@ function HabitModal({ open, habit, onClose, onSave, onArchive, onDelete }: {
       name: habit?.name ?? '', category: habit?.category ?? 'Saúde', freq: habit?.freq ?? { type: 'daily' },
       kind: habit?.avoid ? 'avoid' : habit?.timer ? 'timer' : habit?.target ? 'qty' : 'check',
       target: habit?.target ?? 10, min: habit?.min ?? 0, extra: habit?.extra ?? 0, unit: habit?.unit ?? '', reminder: habit?.reminder ?? '', auto: habit?.auto ?? '',
+      emoji: habit?.emoji ?? '', color: habit?.color ?? '',
     });
   }
   const suggestions: { n: string; k?: Partial<typeof f> }[] = [
@@ -536,6 +572,7 @@ function HabitModal({ open, habit, onClose, onSave, onArchive, onDelete }: {
     min: qty && f.min ? f.min : undefined, extra: qty && f.extra ? f.extra : undefined,
     timer: f.kind === 'timer' || undefined, avoid: f.kind === 'avoid' || undefined,
     auto: f.kind === 'check' && f.auto ? f.auto : undefined, reminder: f.reminder || undefined,
+    emoji: f.emoji || undefined, color: f.color || undefined,
   });
   const KINDS: { id: Kind; l: string; sub: string }[] = [
     { id: 'check', l: 'Simples', sub: 'feito ou não feito' },
@@ -640,6 +677,28 @@ function HabitModal({ open, habit, onClose, onSave, onArchive, onDelete }: {
               <button key={c.id} type="button" onClick={() => setF({ ...f, category: c.id })}
                 className={cx('press h-11 rounded-2xl flex items-center gap-2 px-4 text-[14px] transition-colors', f.category === c.id ? 'bg-ink text-on-ink' : 'bg-cream text-ink/70')}>
                 {c.icon}{c.id}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-[13px] text-muted mb-2">Ícone e cor</p>
+          <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1">
+            <button type="button" onClick={() => setF({ ...f, emoji: '' })} aria-pressed={!f.emoji}
+              className={cx('press size-11 shrink-0 rounded-2xl grid place-items-center text-[12px]', !f.emoji ? 'bg-ink text-on-ink' : 'bg-cream text-ink/60')}>Nenhum</button>
+            {HABIT_EMOJIS.map((e) => (
+              <button key={e} type="button" onClick={() => setF({ ...f, emoji: e })} aria-label={`Ícone ${e}`} aria-pressed={f.emoji === e}
+                className={cx('press size-11 shrink-0 rounded-2xl grid place-items-center text-[21px]', f.emoji === e ? 'ring-2 ring-ink bg-surface' : 'bg-cream')}>{e}</button>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2.5 mt-3">
+            <button type="button" onClick={() => setF({ ...f, color: '' })} aria-label="Cor da categoria" aria-pressed={!f.color}
+              className={cx('press size-9 rounded-full grid place-items-center bg-cream text-[11px] text-ink/60', !f.color && 'ring-2 ring-ink')}>auto</button>
+            {PALETTE.map((c) => (
+              <button key={c} type="button" onClick={() => setF({ ...f, color: c })} aria-label={`Cor ${c}`} aria-pressed={f.color === c}
+                className={cx('press size-9 rounded-full grid place-items-center', f.color === c && 'ring-2 ring-offset-2 ring-ink ring-offset-[var(--color-surface)]')} style={{ background: c }}>
+                {f.color === c && <LuCheck size={15} color="#fff" strokeWidth={3} />}
               </button>
             ))}
           </div>

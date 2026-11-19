@@ -11,7 +11,8 @@ import { Button, Card, cx, Modal } from './ui';
 
 export const DUO_COLOR = 'var(--color-mind)';
 
-export function Initial({ name, size = 22, className }: { name?: string; size?: number; className?: string }) {
+export function Initial({ name, size = 22, className, src }: { name?: string; size?: number; className?: string; src?: string | null }) {
+  if (src) return <img src={src} alt="" aria-hidden className={cx('rounded-full object-cover shrink-0', className)} style={{ width: size, height: size }} />;
   return (
     <span className={cx('grid place-items-center rounded-full text-white font-semibold shrink-0', className)}
       style={{ width: size, height: size, fontSize: size * 0.48, background: DUO_COLOR }} aria-hidden>
@@ -145,7 +146,7 @@ export function DuoCard() {
           {accepted.map((f) => (
             <button key={f.userId} onClick={() => setSel(f)} aria-pressed={sel?.userId === f.userId}
               className={cx('press w-full flex items-center gap-3 rounded-2xl px-3.5 py-3 text-left', sel?.userId === f.userId ? 'bg-ink text-on-ink' : 'bg-cream text-ink')}>
-              <Initial name={f.name} size={30} />
+              <Initial name={f.name} size={30} src={f.avatar} />
               <span className="flex-1 text-[15px] font-medium truncate">{f.name}</span>
               {sel?.userId === f.userId && <LuCheck size={17} />}
             </button>
@@ -173,14 +174,14 @@ export function DuoCard() {
 
 /** "Fulano está treinando agora / já fez o Treino C hoje". */
 export function PartnerTodayStrip({ className }: { className?: string }) {
-  const { duo, partnerTreino } = useDuo();
+  const { duo, partnerTreino, partner } = useDuo();
   const t = partnerTreino?.today;
   if (!duo || duo.pending) return null;
   const today = todayKey();
   const fresh = !!t && !!t.at && toKey(new Date(t.at)) === today && Date.now() - t.at < 16 * 3600_000;
   return (
     <div className={cx('flex items-center gap-2.5 rounded-2xl px-3.5 py-2.5 text-[13.5px]', className)} style={{ background: 'color-mix(in srgb, var(--color-mind) 10%, transparent)' }}>
-      <Initial name={duo.partnerName} size={24} />
+      <Initial name={duo.partnerName} size={24} src={partner?.avatar} />
       <span className="flex-1 min-w-0 text-ink leading-snug">
         {fresh && t ? (t.status === 'treinando'
           ? <><b className="font-semibold">{first(duo.partnerName)}</b> está treinando agora · Treino {t.letter} · {t.done} de {t.total} séries</>
@@ -194,7 +195,7 @@ export function PartnerTodayStrip({ className }: { className?: string }) {
 
 /** Cargas do amigo num exercício. */
 export function PartnerLiftLine({ exerciseId, name, className, inline, compact }: { exerciseId: string; name: string; className?: string; inline?: boolean; compact?: boolean }) {
-  const { duo, partnerTreino } = useDuo();
+  const { duo, partnerTreino, partner } = useDuo();
   if (!duo || duo.pending) return null;
   const l = findLift(partnerTreino?.lifts, exerciseId, name);
   if (!l) return null;
@@ -203,7 +204,7 @@ export function PartnerLiftLine({ exerciseId, name, className, inline, compact }
     const top = l.s.reduce((b, x) => (x[0] > b[0] || (x[0] === b[0] && x[1] > b[1]) ? x : b), l.s[0]);
     return (
       <div className={cx('flex items-center gap-1.5 text-[12px] min-w-0', className)}>
-        <Initial name={duo.partnerName} size={16} />
+        <Initial name={duo.partnerName} size={16} src={partner?.avatar} />
         <span className="min-w-0 truncate tabular-nums text-ink/75"><b className="font-semibold" style={{ color: DUO_COLOR }}>{first(duo.partnerName)}</b> {fmtSets([top], 1)} · {shortDay(l.d)}</span>
       </div>
     );
@@ -211,7 +212,7 @@ export function PartnerLiftLine({ exerciseId, name, className, inline, compact }
   if (inline) return <span className={cx('tabular-nums', className)} style={{ color: DUO_COLOR }}>{first(duo.partnerName)}: {fmtSets(l.s.slice(0, 1), 1)}</span>;
   return (
     <div className={cx('flex items-center gap-2 text-[12.5px] min-w-0', className)}>
-      <Initial name={duo.partnerName} size={18} />
+      <Initial name={duo.partnerName} size={18} src={partner?.avatar} />
       <span className="min-w-0 truncate tabular-nums text-ink/80">
         <b className="font-semibold" style={{ color: DUO_COLOR }}>{first(duo.partnerName)}</b> · {when}: {fmtSets(l.s)}
       </span>

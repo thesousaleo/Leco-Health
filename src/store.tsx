@@ -89,6 +89,7 @@ function makeActions(mutate: (fn: (d: AppState) => void) => void, get: () => App
     // perfil & metas
     setName: (name: string) => mutate((d) => { d.profile.name = name; }),
     setShareBody: (v: boolean) => mutate((d) => { d.profile.shareBody = v; }),
+    setAvatar: (url: string | undefined) => mutate((d) => { if (url) d.profile.avatar = url; else delete d.profile.avatar; }),
     setPrefs: (patch: Partial<Prefs>) => mutate((d) => { d.prefs = { ...d.prefs, ...patch }; }),
     setGoals: (g: Goals) => mutate((d) => { d.goals = g; }),
     setSchedule: (day: number, splitId: ID | null) => mutate((d) => { d.schedule[day] = splitId; }),
@@ -117,7 +118,7 @@ function makeActions(mutate: (fn: (d: AppState) => void) => void, get: () => App
       mutate((d) => { d.splits.push({ id, letter, name, exercises: [] }); });
       return id;
     },
-    updateSplit: (id: ID, patch: Partial<Pick<Split, 'letter' | 'name'>>) =>
+    updateSplit: (id: ID, patch: Partial<Pick<Split, 'letter' | 'name' | 'color'>>) =>
       mutate((d) => { Object.assign(d.splits.find((s) => s.id === id)!, patch); }),
     deleteSplit: (id: ID) => mutate((d) => {
       d.splits = d.splits.filter((s) => s.id !== id);

@@ -2,25 +2,30 @@ import { useIntent } from '../intent';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   LuBike, LuCalendarDays, LuCheck, LuChevronDown, LuChevronLeft, LuChevronRight, LuChevronUp, LuClipboardList, LuClock, LuDumbbell,
-  LuFootprints, LuHistory, LuLayoutDashboard, LuNotebookPen, LuPencil, LuPlay, LuPlus, LuRotateCcw, LuSearch, LuShare2, LuTimer, LuTrendingUp, LuTrophy, LuWaves, LuX,
+  LuFootprints, LuHistory, LuLayoutDashboard, LuMaximize2, LuNotebookPen, LuPencil, LuPlay, LuPlus, LuRotateCcw, LuSearch, LuShare2, LuTimer, LuTrendingUp, LuTrophy, LuWaves, LuX,
 } from 'react-icons/lu';
 import { useStore } from '../store';
 import type { CardioKind, CardioLog, Exercise, ExerciseLog, SetLog, Split, WorkoutSession } from '../types';
 import {
-  addDays, fmtDayMonth, fmtShort, fromKey, lastPerformance, nf, relDay, round1, sessionProgress, sessionVolume, todayKey, toKey, weekday, WEEKDAYS,
+  addDays, fmtDayMonth, fmtShort, fromKey, lastPerformance, nf, overallStreak, relDay, round1, sessionProgress, sessionVolume, todayKey, toKey, weekday, WEEKDAYS,
 } from '../utils';
 import { MUSCLES, oneRM, oneRMRange, searchExercises } from '../exercises';
 import {
   Button, Card, Chip, cx, DeleteButton, Empty, Field, IconButton, Input, Modal, NumInput, PageHeader, ProgressBar, Segmented, Select, Tag, TextArea, useCountUp,
 } from '../components/ui';
 import { BarChart, LineChart } from '../components/charts';
-import { useRestTimer } from '../components/RestTimer';
+import { nextAfter, useRestTimer } from '../components/RestTimer';
 import { BodyMap, muscleStats, recoveryZone, REGION_LABEL, volumeZone, type Region } from '../components/BodyMap';
 import { haptic, shareFile } from '../native';
 import { useIsDesktop } from '../desktop/kit';
 import DesktopWorkout from '../desktop/DesktopWorkout';
 import { DuoCard, DuoInvites, PartnerLiftLine, PartnerTodayStrip } from '../components/Duo';
 import { usePartnerLive } from '../duo';
+import { FocusMode } from '../components/FocusMode';
+import { PALETTE } from '../prefs';
+import { ShareCardModal, type CardData } from '../components/ShareCard';
+import { announcePR } from '../components/Celebrate';
+import { useDuo } from '../duo';
 
 type View = 'painel' | 'sessao' | 'cardio' | 'fichas' | 'historico';
 
@@ -95,7 +100,7 @@ function TodayView({ goFichas }: { goFichas: () => void }) {
       <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4 md:mx-0 md:px-0 pb-1 mb-4">
         {state.splits.map((s) => (
           <Chip key={s.id} active={s.id === splitId} onClick={() => setSplitId(s.id)}>
-            <span className="font-semibold mr-1.5">{s.letter}</span><span className="opacity-60 font-normal">{s.name}</span>
+            <span className="font-semibold mr-1.5" style={s.color && s.id !== splitId ? { color: s.color } : undefined}>{s.letter}</span><span className="opacity-60 font-normal">{s.name}</span>
             {s.id === scheduled && <span className="ml-2 size-1.5 rounded-full bg-orange inline-block align-middle" />}
           </Chip>
         ))}
@@ -153,6 +158,8 @@ function SessionEditor({ session, past }: { session: WorkoutSession; past?: bool
   // próxima série a fazer (modo foco)
   const nextEntry = live ? session.entries.find((e) => e.sets.some((x) => !x.done)) : undefined;
   const nextSetId = nextEntry?.sets.find((x) => !x.done)?.id;
+  const [focusMode, setFocusMode] = useState(false);
+  const finish = () => { actions.finishSession(session.id); toast('Treino finalizado! 🏆'); setFocusMode(false); };
 
   return (
     <div className="space-y-3 md:space-y-4">
@@ -176,7 +183,10 @@ function SessionEditor({ session, past }: { session: WorkoutSession; past?: bool
             <div className="mt-4 h-1.5 rounded-full bg-white/10 overflow-hidden">
               <div className="h-full rounded-full bg-orange" style={{ width: `${sessionProgress(session) * 100}%`, transition: 'width .8s var(--spring)' }} />
             </div>
-            {nextEntry && <p className="text-[13px] text-white/70 mt-3">Próximo: <b className="text-white font-semibold">{nextEntry.name}</b></p>}
+            <div className="flex items-center gap-3 mt-3">
+              {nextEntry ? <p className="flex-1 min-w-0 text-[13px] text-white/70 truncate">Próximo: <b className="text-white font-semibold">{nextEntry.name}</b></p> : <span className="flex-1" />}
+              <button onClick={() => setFocusMode(true)} className="press h-10 pl-3.5 pr-4 rounded-full bg-white text-[#1C1B1A] text-[13.5px] font-semibold flex items-center gap-1.5 shrink-0"><LuMaximize2 size={14} /> Modo foco</button>
+            </div>
           </div>
         </section>
       ) : session.completed && !past ? (
@@ -201,6 +211,7 @@ function SessionEditor({ session, past }: { session: WorkoutSession; past?: bool
       </Card>
       )}
 
+      {focusMode && live && <FocusMode session={session} onClose={() => setFocusMode(false)} onFinish={finish} />}
       {session.entries.map((entry) => <ExerciseCard key={entry.exerciseId} session={session} entry={entry} locked={locked} nextSetId={nextSetId} focus={live} />)}
 
       <div className="flex flex-wrap gap-2 justify-between pt-1">
@@ -210,7 +221,7 @@ function SessionEditor({ session, past }: { session: WorkoutSession; past?: bool
         ) : session.completed ? (
           <Button variant="outline" onClick={() => actions.reopenSession(session.id)}><LuRotateCcw size={15} /> Reabrir para editar</Button>
         ) : (
-          <Button variant="primary" onClick={() => { actions.finishSession(session.id); toast('Treino finalizado! 🏆'); }}><LuCheck size={16} /> Finalizar treino</Button>
+          <Button variant="primary" onClick={finish}><LuCheck size={16} /> Finalizar treino</Button>
         )}
       </div>
     </div>
@@ -242,10 +253,7 @@ function ExerciseCard({ session, entry, locked, nextSetId, focus }: { session: W
     setFx(s.id);
     const e = oneRM(s.weight, s.reps);
     const before = Math.max(histBest, ...entry.sets.filter((x) => x.done && x.id !== s.id).map((x) => oneRM(x.weight, x.reps)));
-    if (histBest > 0 && e > before + 0.05) {
-      void haptic('success'); setTimeout(() => void haptic('success'), 220);
-      toast(`Novo recorde: ${nf(s.weight, s.weight % 1 ? 1 : 0)} kg × ${s.reps} (1RM est. ${nf(e, 1)} kg)`);
-    }
+    if (histBest > 0 && e > before + 0.05) announcePR({ name: entry.name, weight: s.weight, reps: s.reps, e1rm: e, prev: last ? `${nf(last.best.weight, 1)} kg × ${last.best.reps}` : undefined });
   };
   const allDone = entry.sets.length > 0 && done.length === entry.sets.length;
   const rest = exDef?.rest;
@@ -310,7 +318,7 @@ function ExerciseCard({ session, entry, locked, nextSetId, focus }: { session: W
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
             <button disabled={locked} aria-label={`Concluir série ${i + 1}`} aria-pressed={s.done}
-              onClick={() => { if (!s.done) completeSet(s); actions.updateSet(session.id, entry.exerciseId, s.id, { done: !s.done }); if (!s.done && !session.completed) timer.start(rest); }}
+              onClick={() => { if (!s.done) completeSet(s); actions.updateSet(session.id, entry.exerciseId, s.id, { done: !s.done }); if (!s.done && !session.completed) timer.start(rest, nextAfter(session, entry.exerciseId, s.id)); }}
               className={cx('press relative size-11 rounded-full grid place-items-center transition-colors disabled:opacity-60', s.done ? 'bg-orange text-white' : s.id === nextSetId ? 'bg-orange/15 text-orange' : 'bg-cream text-ink/30')}>
               {s.done && fx === s.id && <span className="check-burst" aria-hidden />}
               <LuCheck size={18} strokeWidth={3} className={cx('relative', s.done && fx === s.id && 'check-pop')} key={String(s.done) + (fx === s.id ? 'fx' : '')} />
@@ -399,52 +407,22 @@ function workoutStats(state: ReturnType<typeof useStore>['state'], session: Work
   return { sets: sets.length, mins, volume: sessionVolume(session), prs: prs.length, tops };
 }
 
-async function workoutImage(title: string, date: string, st: ReturnType<typeof workoutStats>) {
-  const W = 1080, H = 1350;
-  const c = document.createElement('canvas'); c.width = W; c.height = H;
-  const g = c.getContext('2d')!;
-  const css = getComputedStyle(document.documentElement);
-  const accent = css.getPropertyValue('--color-orange').trim() || '#F26B3A';
-  g.fillStyle = '#1C1B1A'; g.fillRect(0, 0, W, H);
-  const grd = g.createRadialGradient(W - 120, 120, 40, W - 120, 120, 700);
-  grd.addColorStop(0, accent + '66'); grd.addColorStop(1, 'transparent');
-  g.fillStyle = grd; g.fillRect(0, 0, W, H);
-  // logo
-  g.fillStyle = accent; g.beginPath(); g.roundRect(80, 80, 96, 96, 26); g.fill();
-  g.strokeStyle = '#fff'; g.lineWidth = 9; g.lineCap = 'round'; g.lineJoin = 'round';
-  g.beginPath(); const L = (x: number, y: number) => [80 + x * 0.96, 80 + y * 0.96] as const;
-  g.moveTo(...L(28, 22)); [[28, 68], [42, 68], [48, 56], [56, 78], [62, 62], [72, 62]].forEach(([x, y]) => g.lineTo(...L(x, y))); g.stroke();
-  const font = (w: number, s: number) => `${w} ${s}px Inter, system-ui, sans-serif`;
-  g.fillStyle = '#fff'; g.font = font(600, 40); g.fillText('Leco Health', 200, 142);
-  g.fillStyle = 'rgba(255,255,255,.55)'; g.font = font(500, 34); g.fillText(date.toUpperCase(), 80, 300);
-  g.fillStyle = '#fff'; g.font = font(700, 84); g.fillText(title, 80, 395);
-  const stats: [string, string][] = [['Duração', `${st.mins} min`], ['Volume', `${nf(st.volume / 1000, 1)} t`], ['Séries', `${st.sets}`], ['Recordes', `${st.prs}`]];
-  stats.forEach(([l, v], i) => {
-    const x = 80 + (i % 2) * 470, y = 470 + Math.floor(i / 2) * 210;
-    g.fillStyle = 'rgba(255,255,255,.07)'; g.beginPath(); g.roundRect(x, y, 450, 180, 36); g.fill();
-    g.fillStyle = 'rgba(255,255,255,.55)'; g.font = font(500, 32); g.fillText(l, x + 36, y + 62);
-    g.fillStyle = i === 3 && st.prs ? accent : '#fff'; g.font = font(700, 72); g.fillText(v, x + 36, y + 145);
-  });
-  g.font = font(500, 34);
-  st.tops.slice(0, 5).forEach((t, i) => {
-    const y = 960 + i * 64;
-    g.fillStyle = 'rgba(255,255,255,.85)'; g.fillText(t.name.length > 26 ? t.name.slice(0, 25) + '…' : t.name, 80, y);
-    g.fillStyle = t.pr ? accent : 'rgba(255,255,255,.55)'; g.textAlign = 'right';
-    g.fillText(`${nf(t.best!.weight, 1)} kg × ${t.best!.reps}${t.pr ? '  ★' : ''}`, W - 80, y); g.textAlign = 'left';
-  });
-  return c.toDataURL('image/png').split(',')[1];
-}
-
 function WorkoutSummary({ session }: { session: WorkoutSession }) {
   const { state, toast } = useStore();
   const split = state.splits.find((x) => x.id === session.splitId);
   const st = workoutStats(state, session);
   const title = `Treino ${split?.letter ?? ''}${split?.name ? ' · ' + split.name : ''}`;
-  const share = async () => {
-    try {
-      const b64 = await workoutImage(title, new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).format(fromKey(session.date)), st);
-      await shareFile(`treino-${session.date}.png`, b64, 'image/png', title);
-    } catch { toast('Não foi possível compartilhar'); }
+  const { duo, partnerTreino } = useDuo();
+  const [card, setCard] = useState<CardData | null>(null);
+  const share = () => {
+    const maxW = Math.max(1, ...st.tops.map((t) => t.best!.weight));
+    const together = duo && !duo.pending && partnerTreino?.today && partnerTreino.today.letter === split?.letter ? duo.partnerName : undefined;
+    setCard({
+      kind: 'treino', title, name: state.profile.name, partner: together, streak: overallStreak(state),
+      date: new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).format(fromKey(session.date)),
+      stats: [['Duração', `${st.mins} min`], ['Volume', `${nf(st.volume / 1000, 1)} t`], ['Séries', `${st.sets}`], ['Recordes', `${st.prs}`]],
+      rows: st.tops.map((t) => ({ name: t.name, value: `${nf(t.best!.weight, 1)} kg × ${t.best!.reps}`, pr: t.pr, bar: t.best!.weight / maxW })),
+    });
   };
   return (
     <section className="rounded-[28px] bg-[#1C1B1A] text-white ring-1 ring-white/10 p-5 shadow-[var(--shadow-3)] relative overflow-hidden">
@@ -473,6 +451,7 @@ function WorkoutSummary({ session }: { session: WorkoutSession }) {
         <button onClick={share} className="press mt-5 h-11 px-5 rounded-full bg-orange text-white text-[14.5px] font-medium flex items-center gap-2">
           <LuShare2 size={16} /> Compartilhar resumo
         </button>
+        <ShareCardModal data={card} onClose={() => setCard(null)} />
       </div>
     </section>
   );
@@ -622,12 +601,23 @@ function SplitEditor({ split }: { split: Split }) {
   return (
     <Card className="p-4 md:p-5">
       <div className="flex items-center gap-3">
-        <span className="grid place-items-center size-11 rounded-full bg-ink text-on-ink font-semibold shrink-0">{split.letter}</span>
+        <span className={cx('grid place-items-center size-11 rounded-full font-semibold shrink-0', !split.color && 'bg-ink text-on-ink')} style={split.color ? { background: split.color, color: '#fff' } : undefined}>{split.letter}</span>
         {editHead ? (
-          <div className="flex-1 flex gap-2">
-            <Input className="w-16" value={head.letter} onChange={(e) => setHead({ ...head, letter: e.target.value })} />
-            <Input value={head.name} onChange={(e) => setHead({ ...head, name: e.target.value })} />
-            <IconButton label="Salvar" onClick={() => { actions.updateSplit(split.id, head); setEditHead(false); }}><LuCheck size={17} /></IconButton>
+          <div className="flex-1 min-w-0">
+            <div className="flex gap-2">
+              <Input className="w-16" value={head.letter} onChange={(e) => setHead({ ...head, letter: e.target.value })} />
+              <Input value={head.name} onChange={(e) => setHead({ ...head, name: e.target.value })} />
+              <IconButton label="Salvar" onClick={() => { actions.updateSplit(split.id, head); setEditHead(false); }}><LuCheck size={17} /></IconButton>
+            </div>
+            <div className="flex flex-wrap gap-2 mt-2.5" role="radiogroup" aria-label="Cor da ficha">
+              {['', ...PALETTE].map((c) => (
+                <button key={c || 'x'} type="button" role="radio" aria-checked={(split.color ?? '') === c} aria-label={c ? `Cor ${c}` : 'Sem cor'}
+                  onClick={() => actions.updateSplit(split.id, { color: c || undefined })}
+                  className={cx('press size-8 rounded-full grid place-items-center', (split.color ?? '') === c && 'ring-2 ring-offset-2 ring-ink ring-offset-[var(--color-surface)]', !c && 'bg-ink')} style={c ? { background: c } : undefined}>
+                  {(split.color ?? '') === c && <LuCheck size={13} color="#fff" strokeWidth={3} />}
+                </button>
+              ))}
+            </div>
           </div>
         ) : (
           <button className="flex-1 min-w-0 text-left" onClick={() => setOpen(!open)}>

@@ -138,6 +138,18 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     return () => { document.removeEventListener('visibilitychange', on); window.removeEventListener('focus', on); };
   }, []);
 
+  // foto de perfil: a do app vai para o perfil da conta (que os amigos veem)
+  useEffect(() => {
+    if (!session || !ready || !profile) return;
+    const mine = state.profile.avatar ?? null;
+    if ((profile.avatar ?? null) === mine) return;
+    const t = setTimeout(async () => {
+      const s = await fresh(); if (!s) return;
+      try { await cloud.updateAvatar(s, mine); setProfile((p) => (p ? { ...p, avatar: mine } : p)); } catch { /* tenta de novo na próxima mudança */ }
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [state.profile.avatar, session, ready, profile]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // envia alterações (debounce)
   useEffect(() => {
     if (skipPush.current) { skipPush.current = false; return; }
